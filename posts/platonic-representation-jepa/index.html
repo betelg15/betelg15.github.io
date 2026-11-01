@@ -1,0 +1,344 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>1억 파라미터가 720억을 이겼다? LeCun·Balestriero의 &#x27;플라토닉 표현 정리&#x27; 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-02 · <span class="chip">#AI</span><span class="chip">#표현학습</span><span class="chip">#JEPA</span><span class="chip">#논문리뷰</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">1억 파라미터가 720억을 이겼다? LeCun·Balestriero의 &#x27;플라토닉 표현 정리&#x27; 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 이 논문이 화제인가</a></li>
+<li><a href="#prh">배경: 플라토닉 표현 가설(PRH)</a></li>
+<li><a href="#_2">이번 논문의 핵심 주장</a><ul>
+<li><a href="#1-jepa">1) JEPA는 "양성 쌍 그래프의 스펙트럴 임베딩"을 배운다</a></li>
+<li><a href="#2-platonic-representation-theorem">2) 플라토닉 표현 정리 (Platonic Representation Theorem)</a></li>
+<li><a href="#3-good-view-vs-bad-view">3) Good view vs Bad view</a></li>
+<li><a href="#4-bad-view-jepa">4) 다음 토큰 예측은 "bad-view JEPA"</a></li>
+</ul>
+</li>
+<li><a href="#_3">손으로 확인해 보기: 회전 하나로 겹치는 두 모델</a></li>
+<li><a href="#_4">실험 결과 요약</a><ul>
+<li><a href="#_5">저자들이 직접 밝힌 한계 (중요!)</a></li>
+</ul>
+</li>
+<li><a href="#_6">팩트 체크</a><ul>
+<li><a href="#heyshrutimishra">@heyshrutimishra 포스트</a></li>
+<li><a href="#kresnik_00">@Kresnik_00 포스트</a></li>
+</ul>
+</li>
+<li><a href="#_7">개발자로서 가져갈 점</a></li>
+<li><a href="#_8">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/heyshrutimishra/status/2116931531000156348">@heyshrutimishra의 포스트</a>와 <a href="https://x.com/Kresnik_00/status/2116873975989236113">@Kresnik_00(박호성 님)의 포스트</a>를 계기로, 원 논문 <a href="https://arxiv.org/abs/2610.39302">arXiv:2610.39302</a>를 직접 읽고 정리한 것입니다.</p>
+</blockquote>
+<h2 id="_1">왜 이 논문이 화제인가</h2>
+<p>지난주 X 타임라인에 이런 문구가 돌았습니다.</p>
+<blockquote>
+<p>"Yann LeCun was right … 109 million parameters beat 72 billion. … 660 times smaller."</p>
+</blockquote>
+<p>자극적인 요약이지만, 개발자 입장에서 진짜 궁금한 건 이겁니다.</p>
+<ul>
+<li><strong>무엇을</strong> 이겼다는 건가? (벤치마크 점수? "세상에 대한 이해"?)</li>
+<li>"크기는 아무 일도 안 했다"는 게 정말 논문의 결론인가?</li>
+<li>우리가 임베딩 모델이나 멀티모달 파이프라인을 만들 때 가져갈 교훈이 있나?</li>
+</ul>
+<p>결론부터 말하면, <strong>숫자들은 대부분 논문에 실제로 있는 값</strong>입니다. 다만 그 숫자가 측정하는 것은 "이해"가 아니라 <strong>이미지 모델과의 표현 정렬(alignment) 점수 한 가지</strong>이고, 증명은 <strong>이상화된 가정</strong> 위에 서 있습니다. 바이럴 버전은 이 두 가지를 지웠습니다.</p>
+<h2 id="prh">배경: 플라토닉 표현 가설(PRH)</h2>
+<p>2024년 MIT의 Huh, Cheung, Wang, Isola는 ICML 포지션 페이퍼 <a href="https://arxiv.org/abs/2405.07987"><em>The Platonic Representation Hypothesis</em></a>에서 이런 관찰을 내놓았습니다.</p>
+<ul>
+<li>비전 모델과 언어 모델이 <strong>커질수록</strong>, 데이터 포인트 간 거리를 재는 방식이 점점 비슷해진다.</li>
+<li>그렇다면 서로 다른 모달리티로 학습한 모델들이 결국 <strong>같은 "현실의 통계적 모델"</strong> 로 수렴하는 게 아닐까?</li>
+</ul>
+<p>플라톤의 동굴 비유처럼, 이미지와 텍스트는 같은 세계가 벽에 비친 서로 다른 그림자라는 거죠. 측정에는 두 모델의 임베딩 공간에서 <strong>이웃(k-NN)이 얼마나 겹치는가</strong>(mutual k-NN)를 썼습니다. 다만 이건 어디까지나 <em>관찰과 가설</em>이었고, "언제 성립하는지"에 대한 증명은 없었습니다.</p>
+<h2 id="_2">이번 논문의 핵심 주장</h2>
+<p>Randall Balestriero(Brown University, AMI Labs)와 Yann LeCun(NYU, AMI Labs)은 2026년 10월 29일 arXiv에 <a href="https://arxiv.org/abs/2610.39302"><em>Proving and Improving the Platonic Representation Hypothesis with JEPAs</em></a>를 올렸습니다. (아직 동료 심사 전 프리프린트입니다.)</p>
+<h3 id="1-jepa">1) JEPA는 "양성 쌍 그래프의 스펙트럴 임베딩"을 배운다</h3>
+<p>JEPA(Joint-Embedding Predictive Architecture)는 "같은 것의 두 관측(view)"을 임베딩 공간에서 서로 예측하도록 학습하고, 모든 걸 한 점으로 뭉개는 붕괴(collapse)를 막는 항을 더한 구조입니다. 저자들의 이전 작업인 <a href="https://arxiv.org/abs/2511.08544">LeJEPA</a>는 이 붕괴 방지 항으로 임베딩 분포를 등방성 가우시안으로 끌어당기는 <strong>SIGReg</strong>를 씁니다.</p>
+<p>논문은 기존 결과를 이용해, 화이트닝(2차 모멘트 기반 anti-collapse)을 쓰는 JEPA의 최적해가 <strong>"어떤 입력끼리 양성 쌍으로 묶었는가"가 만드는 그래프(커널)의 상위 고유벡터</strong>, 즉 스펙트럴 임베딩이라는 점에서 출발합니다.</p>
+<h3 id="2-platonic-representation-theorem">2) 플라토닉 표현 정리 (Platonic Representation Theorem)</h3>
+<p>여기서 아이디어는 아주 짧습니다.</p>
+<ul>
+<li>여러 모달리티가 <strong>같은 세계</strong>를 (정보 손실 없이) 렌더링하고,</li>
+<li>각 모달리티의 양성 쌍이 <strong>같은 세계 상태들끼리</strong> 묶여 있다면,</li>
+<li>각 모달리티의 학습 문제는 사실 <strong>좌표계만 다른 같은 문제</strong>이므로, 해는 <strong>직교 회전 하나 차이</strong>로 일치한다.</li>
+</ul>
+<p>즉 이미지 모델과 텍스트 모델을 서로 전혀 모르게 따로 학습해도, <strong>회전 행렬 하나</strong>면 두 임베딩 공간이 겹친다는 겁니다. 양성 쌍이 서로 어긋나는 경우에는 그 어긋남(커널 차이)을 스펙트럴 갭으로 나눈 만큼으로 <strong>오정렬의 상한</strong>을 줍니다(Theorem 2).</p>
+<h3 id="3-good-view-vs-bad-view">3) Good view vs Bad view</h3>
+<p>정리가 말하는 핵심 변수는 모델 크기가 아니라 <strong>양성 쌍을 어떻게 정의하느냐</strong>입니다.</p>
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th>양성 쌍 예시</th>
+<th>무엇을 배우나</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Good view</strong></td>
+<td>한 이미지에 달린 <em>서로 다른 두 캡션</em>, 같은 장면의 두 사진</td>
+<td>세계 상태 자체 (모달리티 고유 잡음은 버림)</td>
+</tr>
+<tr>
+<td><strong>Bad view</strong></td>
+<td><em>한 캡션</em>을 두 번 마스킹, <em>한 사진</em>의 두 크롭</td>
+<td>세계 + 그 관측 고유의 "말투/시점" 같은 nuisance</td>
+</tr>
+<tr>
+<td><strong>다음 토큰 예측</strong></td>
+<td>한 문서 안의 <em>prefix와 그 continuation</em></td>
+<td>논문은 이것도 bad view의 일종으로 봄</td>
+</tr>
+</tbody>
+</table>
+<div class="highlight"><pre><span></span><code>good view : "a dog runs on the beach"  &lt;-&gt;  "a puppy plays by the sea"   (같은 장면, 다른 문장)
+bad view  : "a dog [M] on the beach"   &lt;-&gt;  "a dog runs [M] the beach"   (같은 문장, 다른 마스킹)
+NTP       : "a dog digs in the"        -&gt;   "sand"                      (같은 문서의 앞/뒤)
+</code></pre></div>
+
+<p>Bad view는 두 관측이 <strong>같은 문장의 단어 선택</strong> 같은 모달리티 고유 정보(nuisance)를 공유하기 때문에, 인코더가 임베딩 차원의 일부를 그 nuisance에 씁니다. 그리고 그 차원은 다른 모달리티와 <strong>어떤 회전으로도 맞출 수 없습니다</strong>(Theorem 3, Proposition 3).</p>
+<h3 id="4-bad-view-jepa">4) 다음 토큰 예측은 "bad-view JEPA"</h3>
+<p>Proposition 4에서 저자들은 softmax 다음 토큰 손실을 이렇게 쪼갭니다.</p>
+<div class="highlight"><pre><span></span><code>-log softmax(&lt;h(c), w_y&gt;) = -&lt;h(c), w_y&gt;            # prediction 항
+                          + log Σ_v exp(&lt;h(c), w_v&gt;) # anti-collapse 항 (log-partition)
+</code></pre></div>
+
+<p>컨텍스트 인코더 <code>h</code>, 타깃 인코더 <code>y ↦ w_y</code>, 양성 쌍은 "한 시퀀스 안의 (컨텍스트, 다음 토큰)". 형태상 JEPA이고, 양성 쌍이 같은 문서 안에서 나오니 bad view라는 해석입니다. 여기서 중요한 단서: 저자들도 "NTP가 good-view JEPA보다 비전과 덜 정렬될 것"은 <strong>증명된 따름정리가 아니라 검증할 예측</strong>이라고 적었습니다. 또 NTP의 최적해는 회전이 아니라 <strong>임의의 가역 선형변환</strong>까지만 식별된다는 점도 함께 보입니다.</p>
+<h2 id="_3">손으로 확인해 보기: 회전 하나로 겹치는 두 모델</h2>
+<p>정리의 직관을 작은 NumPy 장난감으로 확인해 볼 수 있습니다. (논문 코드가 아니라, 정리의 "스펙트럴 임베딩 + 직교 Procrustes" 구조만 흉내 낸 예제입니다. 전체 파일: <a href="../../static/prh_toy.py">prh_toy.py</a>)</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="n">rng</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">default_rng</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+<span class="n">N</span><span class="p">,</span> <span class="n">k</span> <span class="o">=</span> <span class="mi">30</span><span class="p">,</span> <span class="mi">4</span>                       <span class="c1"># 유한한 세계: 상태 30개, 임베딩 차원 4</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">random_kernel</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""대칭·비음수 '양성 쌍' 커널 (어떤 상태끼리 같은 것으로 묶이는가)"""</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="n">rng</span><span class="o">.</span><span class="n">random</span><span class="p">((</span><span class="n">n</span><span class="p">,</span> <span class="n">n</span><span class="p">))</span> <span class="o">**</span> <span class="mi">4</span>
+    <span class="n">A</span> <span class="o">=</span> <span class="p">(</span><span class="n">A</span> <span class="o">+</span> <span class="n">A</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span>
+    <span class="k">return</span> <span class="n">A</span> <span class="o">/</span> <span class="n">A</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">keepdims</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span><span class="o">.</span><span class="n">mean</span><span class="p">()</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">spectral_embedding</span><span class="p">(</span><span class="n">K</span><span class="p">,</span> <span class="n">k</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""화이트닝된 JEPA의 해 = 양성 쌍 커널의 상위 k개 고유벡터"""</span>
+    <span class="n">w</span><span class="p">,</span> <span class="n">V</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">eigh</span><span class="p">((</span><span class="n">K</span> <span class="o">+</span> <span class="n">K</span><span class="o">.</span><span class="n">T</span><span class="p">)</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">V</span> <span class="o">=</span> <span class="n">V</span><span class="p">[:,</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">w</span><span class="p">)[::</span><span class="o">-</span><span class="mi">1</span><span class="p">][:</span><span class="n">k</span><span class="p">]]</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">K</span><span class="p">))</span>   <span class="c1"># 화이트닝</span>
+    <span class="n">Q</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">qr</span><span class="p">(</span><span class="n">rng</span><span class="o">.</span><span class="n">normal</span><span class="p">(</span><span class="n">size</span><span class="o">=</span><span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">k</span><span class="p">)))</span>           <span class="c1"># 모델마다 임의의 좌표계</span>
+    <span class="k">return</span> <span class="n">V</span> <span class="o">@</span> <span class="n">Q</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">procrustes_error</span><span class="p">(</span><span class="n">A</span><span class="p">,</span> <span class="n">B</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""A ≈ B R 이 되는 최적 직교행렬 R을 찾고 남는 RMS 오차"""</span>
+    <span class="n">U</span><span class="p">,</span> <span class="n">_</span><span class="p">,</span> <span class="n">Vt</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">svd</span><span class="p">(</span><span class="n">B</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">A</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">((</span><span class="n">A</span> <span class="o">-</span> <span class="n">B</span> <span class="o">@</span> <span class="p">(</span><span class="n">U</span> <span class="o">@</span> <span class="n">Vt</span><span class="p">))</span> <span class="o">**</span> <span class="mi">2</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)))</span>
+
+<span class="n">world</span> <span class="o">=</span> <span class="n">random_kernel</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>
+<span class="n">img</span> <span class="o">=</span> <span class="n">spectral_embedding</span><span class="p">(</span><span class="n">world</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>                       <span class="c1"># '이미지 모델'</span>
+<span class="k">for</span> <span class="n">eps</span> <span class="ow">in</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">0.1</span><span class="p">,</span> <span class="mf">0.3</span><span class="p">,</span> <span class="mf">0.6</span><span class="p">]:</span>
+    <span class="n">mixed</span> <span class="o">=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="n">eps</span><span class="p">)</span> <span class="o">*</span> <span class="n">world</span> <span class="o">+</span> <span class="n">eps</span> <span class="o">*</span> <span class="n">random_kernel</span><span class="p">(</span><span class="n">N</span><span class="p">)</span>   <span class="c1"># 양성 쌍이 어긋난 '텍스트 모델'</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"eps=</span><span class="si">{</span><span class="n">eps</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> -&gt; 회전 후 RMS 오차 = "</span>
+          <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">procrustes_error</span><span class="p">(</span><span class="n">img</span><span class="p">,</span><span class="w"> </span><span class="n">spectral_embedding</span><span class="p">(</span><span class="n">mixed</span><span class="p">,</span><span class="w"> </span><span class="n">k</span><span class="p">))</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>제 환경에서 실행한 결과입니다.</p>
+<div class="highlight"><pre><span></span><code>kernel mismatch eps=0.0 -&gt; rotation 후 RMS 오차 = 0.000
+kernel mismatch eps=0.1 -&gt; rotation 후 RMS 오차 = 0.344
+kernel mismatch eps=0.3 -&gt; rotation 후 RMS 오차 = 0.847
+kernel mismatch eps=0.6 -&gt; rotation 후 RMS 오차 = 1.746
+</code></pre></div>
+
+<p>양성 쌍 커널이 같으면(eps=0) 각자 임의의 좌표계를 골랐어도 <strong>회전 하나로 완벽히 겹치고</strong>, 양성 쌍이 어긋날수록 어떤 회전으로도 메울 수 없는 오차가 커집니다. 논문의 Theorem 1·2가 말하는 그림이 정확히 이것입니다. 참고로 Proposition 2에 따르면 그 회전을 찾는 데는 일반 위치의 쌍 <code>k</code>개면 충분합니다.</p>
+<h2 id="_4">실험 결과 요약</h2>
+<p>논문 Table 3과 4.2절 기준입니다. 정렬 지표는 PRH 원 논문의 벤치마크(WIT-1024, DINOv2 ViT-B와의 mutual 10-NN)입니다.</p>
+<table>
+<thead>
+<tr>
+<th>텍스트 인코더</th>
+<th>파라미터</th>
+<th>WIT 10-NN (DINOv2-B)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Good-view JEPA</strong> (BERT-B, 900M 샘플)</td>
+<td>109M</td>
+<td><strong>.184</strong></td>
+</tr>
+<tr>
+<td>Qwen2.5-72B</td>
+<td>72B</td>
+<td>.154</td>
+</tr>
+<tr>
+<td>Llama-3-70B</td>
+<td>70B</td>
+<td>.151</td>
+</tr>
+<tr>
+<td>CLIP B/32 텍스트 인코더</td>
+<td>–</td>
+<td>.124</td>
+</tr>
+<tr>
+<td>다음 토큰 예측 (같은 BERT-B, 같은 텍스트)</td>
+<td>109M</td>
+<td>.111</td>
+</tr>
+<tr>
+<td>Bad-view JEPA (같은 BERT-B, 같은 텍스트)</td>
+<td>109M</td>
+<td>.088</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>42배</strong>: good-view JEPA는 <strong>21.6M 샘플</strong>에서 .109에 도달했고, 같은 코퍼스의 다음 토큰 예측은 <strong>900M 샘플</strong>에서 .111이었습니다. 900/21.6 ≈ 41.7 → "42배". 텍스트 토큰 기준으로는 <strong>14배</strong>입니다(good-view 샘플 하나가 텍스트 3개를 읽기 때문).</li>
+<li>회전 하나로 따로 학습한 인코더를 이어 붙여 <strong>이미지 캡셔너</strong>(COCO CIDEr .838)를 만들었고, 쌍 없이 정렬하는 벤치마크에서는 ImageNet-100 top-5 64%(8B까지의 LM 최고 56%)를 보고했습니다.</li>
+</ul>
+<h3 id="_5">저자들이 직접 밝힌 한계 (중요!)</h3>
+<p>논문 "Known limitations" 문단을 그대로 요약하면:</p>
+<ol>
+<li>정리는 <strong>유한한 세계, 단사(injective) 렌더링, 모집단 최적해</strong> 가정 위의 진술이고, "실제 모달리티는 손실이 있다".</li>
+<li>실험은 LeJEPA(SIGReg)를 쓰는데, 유일성은 <strong>2차 anti-collapse에 대해서만</strong> 증명됐다. <strong>어떤 실험도 정리의 가정을 정확히 만족하지 않는다.</strong></li>
+<li><strong>가장 큰 단서: good view를 어디서 구하나.</strong> 웹 규모 실험(Recap-DataComp)에서 이미지당 텍스트 3개 중 2개는 <strong>LLaVA(비전 인코더가 CLIP)가 생성한 캡션</strong>이라, 이미지–텍스트 학습에서 증류된 정보를 담고 있다. 캡셔너 없이 alt-text와 그 패러프레이즈만 쓰면 WIT 점수는 .060으로 떨어진다.</li>
+<li>하이퍼파라미터는 <strong>good-view JEPA에 대해서만</strong> 튜닝됐다.</li>
+<li>42배 비교에서 NTP는 <strong>더 이른 체크포인트를 채점하지 않았다.</strong></li>
+</ol>
+<p>즉 "109M이 72B를 이겼다"는 결과는 사실이지만, <strong>같은 조건의 공정한 체급전이라기보다</strong> "정렬이라는 한 지표에서, 캡셔너가 만든 '같은 장면의 다른 설명'이라는 데이터 설계가 얼마나 강력한가"를 보여주는 결과로 읽는 게 정확합니다.</p>
+<h2 id="_6">팩트 체크</h2>
+<p>북마크한 두 포스트의 주장을 원문과 대조했습니다. ✅ 사실 / ⚠️ 부분적으로 사실·과장 / ❌ 사실 아님</p>
+<h3 id="heyshrutimishra">@heyshrutimishra 포스트</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"109M 파라미터가 72B를 이겼다"</td>
+<td>⚠️</td>
+<td>수치는 사실(.184 vs Qwen2.5-72B .154). 단, <strong>이미지 모델과의 정렬 지표 하나</strong>에서의 비교이며 일반적인 성능·이해력 비교가 아님. <a href="https://arxiv.org/html/2610.39302v1">arXiv Table 3</a></td>
+</tr>
+<tr>
+<td>"660배 작다"</td>
+<td>✅</td>
+<td>72B / 109M ≈ 660. 산술은 맞음.</td>
+</tr>
+<tr>
+<td>LeCun이 11월에 Meta를 떠나 파리에 자기 연구소를 차렸다</td>
+<td>✅</td>
+<td>2025년 11월 19일 퇴사 계획 발표, 연말 퇴사. AMI Labs는 파리 본사(LeCun은 Executive Chairman, CEO는 Alex LeBrun). <a href="https://www.reuters.com/technology/yann-lecun-leave-meta-launch-ai-startup-focused-advanced-machine-intelligence-2025-11-19/">Reuters</a>, <a href="https://techcrunch.com/2025/12/19/yann-lecun-confirms-his-new-world-model-startup-reportedly-seeks-5b-valuation/">TechCrunch</a>, <a href="https://www.technologyreview.com/2026/01/22/1131661/yann-lecuns-new-venture-ami-labs/">MIT Tech Review</a></td>
+</tr>
+<tr>
+<td>"지난 목요일에 증명을 발표했다"</td>
+<td>✅</td>
+<td>arXiv v1 2026-10-29(목). <a href="https://arxiv.org/abs/2610.39302">arXiv</a></td>
+</tr>
+<tr>
+<td>2024년 이후 "크면 모든 모달리티가 같은 현실 그림을 갖게 된다"는 이론이 있었고, 증명된 적은 없었다</td>
+<td>✅</td>
+<td>Huh et al., ICML 2024 PRH. 이번 논문도 "PRH remains an observation"이라고 서술. <a href="https://proceedings.mlr.press/v235/huh24a">PMLR</a></td>
+</tr>
+<tr>
+<td>"증명은 크기가 애초에 일을 한 게 아니라고 말한다"</td>
+<td>⚠️</td>
+<td>과장. 논문 결론은 "<strong>not scale alone</strong>"(크기<em>만</em>이 아니다). 증명은 이상화된 JEPA 설정에 한정되며, 오히려 LM이 "scale을 통해" 정렬된다는 설명을 제공함.</td>
+</tr>
+<tr>
+<td>사진–캡션 같은 "한 대상의 두 관측"으로 학습하면 빠르게 도달</td>
+<td>⚠️</td>
+<td>방향은 맞지만 논문의 good view는 <strong>사진–캡션 쌍이 아니라</strong> "같은 이미지의 서로 다른 캡션끼리"(텍스트–텍스트) 쌍. 크로스모달 손실은 쓰지 않음.</td>
+</tr>
+<tr>
+<td>다음 단어 예측은 "같은 문서의 두 조각" 쪽이다</td>
+<td>✅</td>
+<td>Proposition 4: NTP = prefix와 continuation을 양성으로 쓰는 bad-view JEPA 형태. 단, "더 나쁘게 정렬된다"는 건 저자 표현으로 "a prediction to test rather than a corollary".</td>
+</tr>
+<tr>
+<td>21.6M 예시 vs 900M 예시로 "같은 이해"에 도달</td>
+<td>⚠️</td>
+<td>숫자는 정확(4.2절). 다만 "이해"가 아니라 <strong>WIT 정렬 점수 .109 vs .111</strong>이며, NTP의 더 이른 체크포인트는 채점하지 않음.</td>
+</tr>
+<tr>
+<td>Meta는 반대(스케일)에 베팅했다</td>
+<td>⚠️</td>
+<td>논문이 다루는 내용이 아닌 해석/의견. 검증 대상 아님.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="kresnik_00">@Kresnik_00 포스트</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PRH는 지금까지 "키우면 그렇게 되더라"는 관찰이었다</td>
+<td>✅</td>
+<td><a href="https://arxiv.org/abs/2405.07987">PRH 원 논문</a></td>
+</tr>
+<tr>
+<td>조건을 단 정리로 바꿨다; 같은 장면의 다른 관측을 묶으면 서로 본 적 없는 모델이 <strong>회전 한 번</strong>으로 맞는다</td>
+<td>✅</td>
+<td>Platonic Representation Theorem (2.1절)</td>
+</tr>
+<tr>
+<td>가리거나 잘라서 만든 쌍은 문장의 말투까지 외운다; NTP도 이쪽</td>
+<td>✅</td>
+<td>Proposition 3(nuisance), Proposition 4(NTP)</td>
+</tr>
+<tr>
+<td>같은 데이터에서 NTP보다 42배 적은 샘플</td>
+<td>✅</td>
+<td>4.2절 (토큰 기준으론 14배라는 점은 생략됨)</td>
+</tr>
+<tr>
+<td>1억 남짓 글 모델이 720억 LM보다 이미지 모델과 정렬이 높다</td>
+<td>✅</td>
+<td>Table 3</td>
+</tr>
+<tr>
+<td>증명은 유한 세계·무손실 관측 같은 이상적 가정 위</td>
+<td>✅</td>
+<td>Known limitations</td>
+</tr>
+<tr>
+<td>비교 지표가 "이미지 모델과 얼마나 맞느냐" 하나</td>
+<td>⚠️</td>
+<td>대체로 맞음. 주 지표는 정렬이지만 linear CKA, COCO 벤치마크, Flickr 검색, 캡셔닝, 쌍 없는 분류도 보고함(모두 정렬 계열). 또 <strong>캡셔너 생성 텍스트 의존성</strong>이라는 가장 큰 단서는 언급되지 않음.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 한국어 포스트는 상당히 정확하고 절제된 요약이고, 영어 바이럴 포스트는 숫자는 맞지만 <em>무엇을 측정했는지</em>와 <em>가정</em>을 지워서 "크기는 의미 없다"는 과장으로 흘렀습니다. ❌(명백한 거짓)으로 판정할 주장은 없었습니다.</p>
+<h2 id="_7">개발자로서 가져갈 점</h2>
+<ol>
+<li><strong>임베딩 모델을 만들거나 파인튜닝할 때, 양성 쌍 설계가 1순위 하이퍼파라미터다.</strong> 같은 문장을 증강한 쌍보다 "같은 대상을 다르게 설명한 쌍"(같은 상품의 다른 리뷰, 같은 이슈의 다른 리포트 등)이 모달리티 고유 잡음을 덜 배운다.</li>
+<li><strong>크로스모달 정렬은 "회전 하나" 문제로 볼 수 있다.</strong> 이미 따로 학습된 두 인코더라도, 소량의 쌍으로 직교 Procrustes를 풀어 붙여볼 가치가 있다(논문은 이걸로 캡셔너까지 만들었다).</li>
+<li><strong>바이럴 숫자를 볼 때는 "어떤 지표에서?"를 먼저 묻자.</strong> 이번 "109M &gt; 72B"도 사실이지만, 그 지표 하나에서의 이야기다.</li>
+</ol>
+<h2 id="_8">참고 자료</h2>
+<ul>
+<li>Balestriero &amp; LeCun, <em>Proving and Improving the Platonic Representation Hypothesis with JEPAs</em>, arXiv:2610.39302 (2026-10-29) — <a href="https://arxiv.org/abs/2610.39302">abs</a> · <a href="https://arxiv.org/html/2610.39302v1">HTML</a> · <a href="https://huggingface.co/papers/2610.39302">Hugging Face Papers</a> · <a href="https://github.com/galilai-group/prh-proof">코드</a> · <a href="https://huggingface.co/spaces/galilai-group/prh_demo">데모</a></li>
+<li>Huh, Cheung, Wang, Isola, <em>Position: The Platonic Representation Hypothesis</em>, ICML 2024 — <a href="https://proceedings.mlr.press/v235/huh24a">PMLR</a> · <a href="https://arxiv.org/abs/2405.07987">arXiv:2405.07987</a></li>
+<li>Balestriero &amp; LeCun, <em>LeJEPA: Provable and Scalable Self-Supervised Learning Without the Heuristics</em>, arXiv:2511.08544 — <a href="https://arxiv.org/abs/2511.08544">arXiv</a> · <a href="https://github.com/galilai-group/lejepa">GitHub</a></li>
+<li>Reuters, "Yann LeCun to leave Meta, launch AI startup…" (2025-11-19) — <a href="https://www.reuters.com/technology/yann-lecun-leave-meta-launch-ai-startup-focused-advanced-machine-intelligence-2025-11-19/">링크</a></li>
+<li>TechCrunch, "Yann LeCun confirms his new 'world model' startup" (2025-12-19) — <a href="https://techcrunch.com/2025/12/19/yann-lecun-confirms-his-new-world-model-startup-reportedly-seeks-5b-valuation/">링크</a></li>
+<li>MIT Technology Review, "Yann LeCun's new venture is a contrarian bet against large language models" (2026-01-22) — <a href="https://www.technologyreview.com/2026/01/22/1131661/yann-lecuns-new-venture-ami-labs/">링크</a></li>
+<li>원본 X 포스트: <a href="https://x.com/heyshrutimishra/status/2116931531000156348">@heyshrutimishra</a> · <a href="https://x.com/Kresnik_00/status/2116873975989236113">@Kresnik_00</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
