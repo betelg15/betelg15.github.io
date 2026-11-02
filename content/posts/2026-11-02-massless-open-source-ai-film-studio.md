@@ -1,6 +1,7 @@
 ---
 title: "유료 AI 영화 스튜디오를 공개 가중치만으로? Massless(지금은 Chucksi) 팩트 체크"
 date: 2026-11-02
+time: "17:12"
 slug: massless-open-source-ai-film-studio
 tags: [AI, 영상, WebGL, ComfyUI, 오픈소스, 팩트체크]
 summary: "카메라·렌즈·필름을 프롬프트로 바꾸고, 정지 화면 위에서 28가지 카메라 무브를 MP4로 뽑는다는 주장을 ChuckGPTX/massless 코드로 대조했습니다. 그 경로는 저장소에 있지만, 제품 이름은 이미 Chucksi이고 계정·호스트 GPU 경로가 따로 있습니다."

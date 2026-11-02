@@ -1,6 +1,7 @@
 ---
 title: "손가락으로 펴 바르는 파운데이션, 그 밑엔 1999년 논문이 있다: Stable Fluids로 만든 WebGL 액체 효과 팩트 체크"
 date: 2026-11-02
+time: "09:42"
 slug: stable-fluids-liquid-effect
 tags: [WebGL, GLSL, 유체시뮬레이션, StableFluids, three.js, 팩트체크]
 summary: "Misaki Nakano(@misaki_mofu)가 5년 전 만든 '펴 바르는 액체' 효과를 공개했습니다. 그 바탕인 Jos Stam의 Stable Fluids(SIGGRAPH 1999)를 개발자 관점에서 정리하고, 글과 포스트의 주장을 원 논문·GPU Gems·소스 코드로 검증했습니다."

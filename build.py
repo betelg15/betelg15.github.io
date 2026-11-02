@@ -52,7 +52,7 @@ def build():
     (OUT / "assets" / "code.css").write_text(
         HtmlFormatter(style="github-dark").get_style_defs(".highlight"), encoding="utf-8")
     if (ROOT / "static").exists(): shutil.copytree(ROOT / "static", OUT / "static")
-    posts = sorted((parse(p) for p in SRC.glob("*.md")), key=lambda p: p["date"], reverse=True)
+    posts = sorted((parse(p) for p in SRC.glob("*.md")), key=lambda p: (p["date"], p.get("time", "00:00")), reverse=True)
     for p in posts:
         d = OUT / "posts" / p["slug"]; d.mkdir(parents=True)
         tags = "".join(f'<span class="chip">#{html.escape(t)}</span>' for t in p.get("tags", []))

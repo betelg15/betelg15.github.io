@@ -1,6 +1,7 @@
 ---
 title: "로컬 서버만 켜면 유료 검색 API가 필요 없다? RustXNG 팩트 체크"
 date: 2026-11-02
+time: "14:43"
 slug: rustxng-agent-search
 tags: [Rust, 메타검색, AI에이전트, SearXNG, 셀프호스트, 팩트체크]
 summary: "SearXNG를 Rust로 다시 쓴 RustXNG는 키 없이 로컬에서 JSON 검색과 페이지 본문을 돌려줍니다. 10대 개발자, 유료 API와 같은 성능, 무제한 수집은 저장소와 문서로 확인되지 않거나 범위가 더 좁습니다."

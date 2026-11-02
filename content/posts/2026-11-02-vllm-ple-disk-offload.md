@@ -1,6 +1,7 @@
 ---
 title: "51B 룩업 표를 VRAM에 안 올려도 된다? vLLM의 Qwen PLE 디스크 오프로드 팩트 체크"
 date: 2026-11-02
+time: "10:08"
 slug: vllm-ple-disk-offload
 tags: [vLLM, Qwen, PLE, 추론, 팩트체크]
 summary: "Qwen3.8-Flash-Next의 51B n-gram 표를 safetensors에 둔 채 필요한 행만 읽는 vLLM disk_offload를, 모델 카드·기술 보고서·머지된 PR과 한 줄씩 대조했습니다."

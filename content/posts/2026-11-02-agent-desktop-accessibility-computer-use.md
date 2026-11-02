@@ -1,6 +1,7 @@
 ---
 title: "Vercel Labs가 오픈소스했다? 접근성 트리로 데스크탑을 다루는 agent-desktop 팩트 체크"
 date: 2026-11-02
+time: "10:39"
 slug: agent-desktop-accessibility-computer-use
 tags: [AI, 에이전트, Computer Use, 접근성, 팩트체크]
 summary: "스크린샷 대신 OS 접근성 트리를 읽고, 마우스를 뺏지 않은 채 에이전트마다 커서를 쓴다는 주장을 저장소·npm·문서 기준으로 대조했습니다. 도구는 실재하지만, 이번 주에 처음 공개된 오픈소스는 아닙니다."

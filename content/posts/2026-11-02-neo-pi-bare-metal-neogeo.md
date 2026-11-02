@@ -1,6 +1,7 @@
 ---
 title: "리눅스 없이 네오지오: Raspberry Pi 베어메탈 에뮬레이터 neo-pi 팩트 체크"
 date: 2026-11-02
+time: "15:42"
 slug: neo-pi-bare-metal-neogeo
 tags: [RaspberryPi, 베어메탈, 에뮬레이션, NeoGeo, Geolith, 팩트체크]
 summary: "OS 없이 Pi 3 B+/4에서 네오지오를 켠다는 neo-pi를 저장소·Geolith·Circle·Raspberry Pi 부팅 문서와 대조했습니다. 1ms USB 폴링과 2코어 분업은 소스에 있고, 풀스피드와 CRT급 반응은 버전에 따라 말이 갈립니다."

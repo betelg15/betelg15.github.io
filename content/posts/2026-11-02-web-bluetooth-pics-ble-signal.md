@@ -1,6 +1,7 @@
 ---
 title: "브라우저로 신호등 BLE를 듣는다: 고도화 PICS와 Web Bluetooth 스캔 팩트 체크"
 date: 2026-11-02
+time: "16:38"
 slug: web-bluetooth-pics-ble-signal
 tags: [WebBluetooth, BLE, PICS, Chrome, 팩트체크]
 summary: "일본 보행자 신호(고도화 PICS)의 BLE 광고를 Web Bluetooth로 그리는 ble-pics-viewer를 경찰청 문서·W3C 커뮤니티 초안·Chrome 구현 현황과 대조했습니다. 수신 API는 기본으로 켜진 GATT가 아니고, 0x01CE는 SIG에 PICS로 등록된 번호가 아닙니다."

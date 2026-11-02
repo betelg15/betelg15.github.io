@@ -1,6 +1,7 @@
 ---
 title: "1억 파라미터가 720억을 이겼다? LeCun·Balestriero의 '플라토닉 표현 정리' 팩트 체크"
 date: 2026-11-02
+time: "08:47"
 slug: platonic-representation-jepa
 tags: [AI, 표현학습, JEPA, 논문리뷰, 팩트체크]
 summary: "'모델 크기가 아니라 무엇을 같은 것으로 묶느냐가 중요하다' — X에서 화제가 된 LeCun·Balestriero 논문을 원문 기준으로 정리하고, 바이럴 포스트의 주장을 하나씩 검증했습니다."

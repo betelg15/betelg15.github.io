@@ -1,6 +1,7 @@
 ---
 title: "DeepSeek이 '슈퍼 에이전트' 설계도를 MIT로 공개했다? 공식은 맞지만 '공식 제품'은 아니다: dsh-superagent 팩트 체크"
 date: 2026-11-02
+time: "12:44"
 slug: deepseek-superagent-design
 tags: [AI에이전트, DeepSeek, 멀티에이전트, 아키텍처, 오픈소스, 팩트체크]
 summary: "DeepSeek Harness 팀이 '프롬프트 없이 채팅·GitHub·CI를 지켜보다 알아서 PR을 올리는' Super-agent 설계 글과 MIT 프로토타입을 공개했습니다. 출처는 진짜 deepseek-ai 조직이지만, 저장소 스스로 '공식 제품이 아닌 연구용 프로토타입'이라 밝히고, 글의 설계 일부(Watchdog 등)는 코드에 없습니다."

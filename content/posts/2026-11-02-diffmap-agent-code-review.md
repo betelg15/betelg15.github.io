@@ -1,6 +1,7 @@
 ---
 title: "AI가 한 번에 1000줄을 바꾸면 사람은 도장만 찍나? diffmap 팩트 체크"
 date: 2026-11-02
+time: "15:11"
 slug: diffmap-agent-code-review
 tags: [AI, 코드리뷰, 에이전트, diffmap, 팩트체크]
 summary: "에이전트 diff를 줄 단위로 읽지 말고, 의도·흐름·우선 볼 파일을 한 스펙으로 보게 하자는 diffmap을 저장소·스킬·발표 포스트와 대조해 정리했습니다."

@@ -1,6 +1,7 @@
 ---
 title: "Ternary Bonsai 2가 ik_llama.cpp에서 완전히 도나? QK·Hadamard·-ngl 팩트 체크"
 date: 2026-11-02
+time: "16:13"
 slug: ik-llama-cpp-ternary-bonsai-2
 tags: [llama.cpp, ik_llama.cpp, 양자화, Ternary, Bonsai, 팩트체크]
 summary: "ik_llama.cpp main의 PQ2_0·Q2_0 CUDA와 트릿 유지 리팩 스크립트는 저장소에 있습니다. -rtr 1은 파서가 받는 문법이 아니고, 더 작은 PTQ1_0의 CUDA 행렬곱 커널과 '수 초' 측정은 1차 자료에서 확인되지 않습니다."
