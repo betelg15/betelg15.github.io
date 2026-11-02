@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Infernix는 RTX 5090에서 활성화를 16비트로 지키나? Qwen3.8 TTFT 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-02 · <span class="chip">#Infernix</span><span class="chip">#CUDA</span><span class="chip">#Qwen</span><span class="chip">#RTX 5090</span><span class="chip">#추론</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">Infernix는 RTX 5090에서 활성화를 16비트로 지키나? Qwen3.8 TTFT 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#moe">왜 로컬에서 큰 MoE를 돌리는 사람에게 닿는 이야기인가</a></li>
+<li><a href="#16">체크포인트가 정한 비트와, 16비트가 아닌 기본값</a></li>
+<li><a href="#expert">라우팅된 expert를 빼는 일이 품질에 닿는 이유</a></li>
+<li><a href="#ttft">TTFT와 디코드가 갈리는 지점</a></li>
+<li><a href="#-lossless">--lossless가 재는 것</a></li>
+<li><a href="#_1">런처</a></li>
+<li><a href="#_2">비즈니스 인사이트</a></li>
+<li><a href="#_3">팩트 체크</a></li>
+<li><a href="#_4">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 북마크해 둔 <a href="https://x.com/ai_hakase_/status/2117031946643529762">@ai_hakase_의 포스트(일본어, 2026-11-01 23:12 UTC)</a>를 계기로 썼습니다. 포스트 문장은 검증할 주장으로만 다뤘습니다. 근거는 <a href="https://github.com/Wallawalla47/Infernix">Wallawalla47/Infernix</a> main <code>eda1eba6</code>(2026-11-02 11:13 UTC)의 README·CLI·런처 문서, <a href="https://huggingface.co/Qwen/Qwen3.8-Flash-Next">Qwen3.8-Flash-Next 모델 카드</a>, <a href="https://github.com/jesdga95/basalt">Basalt</a>와 <a href="https://github.com/Niko1221/Strata">Strata</a>의 정밀도 문서, NVIDIA의 <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/">RTX 5090 제품 페이지</a>와 <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/">50 시리즈 비교표</a>입니다. 속도 숫자는 Infernix가 자기 기계에서 적은 값이고, 이 글은 그 표를 다시 재지 않았습니다.</p>
+</blockquote>
+<h2 id="moe">왜 로컬에서 큰 MoE를 돌리는 사람에게 닿는 이야기인가</h2>
+<p>Qwen 모델 카드의 Qwen3.8-Flash-Next는 언어 모델 <strong>125B 중 토큰당 약 6B</strong>가 켜지고, 그 옆에 <strong>51B n-gram 임베딩</strong>과 <strong>4B MTP</strong>가 있습니다. 컨텍스트는 기본 262,144토큰, YaRN으로 1,000,000까지입니다. expert는 층마다 <strong>512개</strong>이고, 토큰마다 <strong>라우팅 10개와 공유 1개</strong>가 켜집니다. 층은 48개라서, 디스크에 있는 routed expert 텐서를 층마다 곱하면 48 × 512 = <strong>24,576</strong>입니다. Infernix README가 "24,576 routed experts, NVFP4에서 63 GiB"라고 적은 수는 이 총량으로 읽는 편이 맞습니다. 토큰마다 24,576개를 계산한다는 뜻은 아닙니다.</p>
+<p>NVIDIA 제품 페이지의 GeForce RTX 5090은 <strong>32 GB GDDR7</strong>, CUDA 코어 21,760, 부스트 2.41 GHz, TGP <strong>575 W</strong>, 권장 시스템 전원 1000 W, PCIe Gen 5입니다. 50 시리즈 비교표의 메모리 대역폭은 <strong>1792 GB/s</strong>입니다. 32 GB 안에 63 GiB expert와 카드가 말하는 51B 표를 같이 올리는 구성은 성립하지 않습니다. 그래서 이 급의 엔진은 expert를 호스트 RAM에 두고, 자주 쓰는 것만 VRAM에 캐시하며, n-gram 표는 NVMe에서 읽습니다. Infernix는 그 자리를 RTX 5090 한 장에 맞춘 C++/CUDA 엔진으로 자리 잡았다고 README가 말합니다. NInfer를 포크한 뒤 <code>.ninfer</code>와 자기 형식 <code>.infernix</code>를 둘 다 읽습니다. Windows 릴리스 태그 <a href="https://github.com/Wallawalla47/Infernix/releases/tag/windows-2026.11.01">windows-2026.11.01</a>은 2026-11-01 01:59 UTC에 게시되어, 포스트와 같은 날입니다.</p>
+<p>README 맨 위에는 작성 경위가 있습니다. NInfer에서 포크한 뒤 더한 글의 대부분, README 포함, 을 AI로 썼고 <strong>완전하지도 정확하지도 않을 수 있다</strong>는 문장입니다. 아래 숫자는 그 전제를 달고 읽습니다. 확인 시점은 2026-11-02, main <code>eda1eba6</code>입니다. 벤치마크 절은 기본 경로를 <code>fb491903</code>, IQ3_S·27B·<code>--a8-activations</code> 행을 <code>6b066a54</code>에서 재었고, 그 이후 빌드는 다시 재지 않았다고 적습니다.</p>
+<h2 id="16">체크포인트가 정한 비트와, 16비트가 아닌 기본값</h2>
+<p>포스트가 "활성화 함수를 16비트로 유지한다"고 한 자리부터 갈립니다. 일본어 원문의 活性化関数는 한국어의 <strong>활성화 함수</strong>(SiLU, sigmoid 같은 비선형)입니다. Infernix 문서가 비트 수로 말하는 대상은 그 함수가 아니라, 행렬곱에 들어가는 <strong>활성화 텐서</strong>입니다.</p>
+<p>CLI의 기본 경로는 체크포인트가 적은 정밀도를 따릅니다.</p>
+<table>
+<thead>
+<tr>
+<th>가중치</th>
+<th>기본 활성화</th>
+<th>옵션</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NVIDIA NVFP4 Flash-Next (Dense8와 비트 일치 변환)</td>
+<td>routed expert는 체크포인트가 정한 <strong>4비트</strong>(W4A4, NVIDIA 스케일). 그 밖은 16비트</td>
+<td><code>--a8-activations</code>는 expert 8비트. <code>--a16-activations</code>는 저장된 4비트 가중치 위에 expert 16비트</td>
+</tr>
+<tr>
+<td>NVIDIA FP4-Local</td>
+<td>16비트. NVIDIA가 서빙하는 폭</td>
+<td><code>--expert-a4-activations</code>, <code>--a8-activations</code></td>
+</tr>
+<tr>
+<td>Uncensored NVFP4</td>
+<td>16비트 (가중치만 NVFP4인 expert)</td>
+<td><code>--a8-activations</code></td>
+</tr>
+<tr>
+<td>IQ3_S GGUF</td>
+<td>전부 16비트</td>
+<td><code>--a8-activations</code>는 dense projection과 expert를 8비트로</td>
+</tr>
+<tr>
+<td>Qwen3.8-27B NVFP4</td>
+<td>NVFP4 층은 아티팩트가 정한 4비트. NInfer와 같다고 README가 적음</td>
+<td>없음</td>
+</tr>
+</tbody>
+</table>
+<p>헤드라인 벤치마크가 쓰는 추천 변환은 Dense8입니다. 모델 표는 NVIDIA NVFP4 expert와 FP8 n-gram 표는 비트 단위로 같고, dense projection은 8비트이며, 퍼플렉서티 4.654 대 비트 일치 변환 4.666이라고 합니다. 이 기본값에서 expert 활성화는 16비트가 아닙니다. 16비트 expert는 <code>--a16-activations</code>이고, CLI는 출력이 바뀌며 긴 프롬프트는 느려진다고 경고합니다. Dense8, RTX 5090, 2026-10-31 측정으로 128K 프롬프트가 12.2초에서 16.7초가 됩니다.</p>
+<p>8비트 옵션도 공짜 정확도가 아닙니다. README는 <code>--a8-activations</code>와 <code>--a16-activations</code> 둘 다 <strong>출력을 바꾸고, 품질은 아직 재지 않았다</strong>고 합니다. CLI는 <code>--a8-activations</code>를 Approximate로 두고, <code>--reproducible</code>과 <code>--lossless</code>가 이 플래그를 거부한다고 적습니다. GGUF import에서는 로드할 때 BF16 하이퍼커넥션 행렬을 8비트 가중치로 다시 씁니다.</p>
+<p>기본으로 켜지는 빠른 경로도 있습니다. <code>--reproducible</code> 설명은, 측정상 더 빠르고 품질 게이트를 통과한 커널이 기본으로 돌며 그 출력은 재현 경로와 비트가 같지 않다고 합니다. 재현 경로와 무손실 경로는 켜야 들어갑니다. "숏컷을 극력 배제하고 모델 본래의 품질을 지킨다"를 기본 서빙 모드의 설명으로 읽으면, 문서의 기본값과 어긋납니다.</p>
+<h2 id="expert">라우팅된 expert를 빼는 일이 품질에 닿는 이유</h2>
+<p>MoE 블록은 라우터가 고른 expert의 출력을 가중해서 더합니다. 모델 카드의 Flash-Next는 토큰마다 10개를 고릅니다. 그 중 하나를 계산하지 않으면, 그 토큰의 합에서 그 항이 빠집니다. Infernix CLI의 <code>--expert-tail-skip R</code>은 이렇게 동작합니다. 디코드와 검증 라운드에서, VRAM에 없는 expert가 그 라운드의 모든 토큰에서 순위 <code>R</code> 이하이면 복사도 계산도 하지 않고 0을 더합니다. 나머지 expert의 라우터 가중은 다시 정규화하지 않습니다. 출력은 바뀌고, 어느 expert가 캐시에 있었는지에 따라 달라지며, 프리필은 그대로입니다. 기본값은 <strong>off</strong>입니다.</p>
+<p>이 규칙이 기본인 쪽은 Strata 문서입니다. <a href="https://github.com/Niko1221/Strata/blob/main/docs/DETAILS.md">DETAILS.md</a>의 "On by default" 표에 <code>STRATA_ROUTE_TAIL_SKIP</code> (7)이 있고, 끄는 스위치는 <code>STRATA_ROUTE_TAIL_SKIP=0</code>입니다. 검증 창의 모든 토큰이 순위 7 이하로만 보낸, VRAM에 없는 expert를 계산하지 않습니다. expert가 모두 VRAM에 있거나, 캐시된 expert가 90% 이상이면 적용하지 않습니다. 같은 문서의 0.1.42 기록은 RTX 3060과 RTX A4000에서 이전 동작 대비 KL 0.0030–0.0058을 적습니다. Infernix가 Basalt·Strata와 비교한 표에서는 이 기본값을 껐습니다. 어느 expert가 도는지가 바뀌기 때문입니다.</p>
+<p>Basalt 정밀도 문서는 lossy 플래그 <code>--relaxed-drafting</code>, <code>--route-prior</code>, <code>--route-tail-skip</code>이 <strong>기본 off</strong>이고 출력을 바꾼다고 합니다. "다른 엔진은 expert를 건너뛴다"는 Strata의 조건부 기본값에는 닿고, Basalt의 기본 설정에는 닿지 않습니다.</p>
+<p>Basalt가 비트를 줄이는 지점은 따로 있습니다. <a href="https://github.com/jesdga95/basalt/blob/main/docs/precision/index.md">precision/index.md</a>는 NVIDIA NVFP4 팩의 dense projection을 BF16에서 <strong>Q6_K로 한 번</strong> 양자화하고, 양자화 행렬곱의 입력 활성화는 int8(<code>q8_1</code>)이며, 디코드는 하이퍼커넥션을 int8 사본에서 읽고, Q6_K 출력 헤드의 먼 로짓은 2비트 사본으로 거른다고 합니다. 잔차·노름·라우터·소프트맥스·로짓은 fp32입니다. <a href="https://github.com/jesdga95/basalt/blob/main/docs/precision/features.md">features.md</a>의 Q6_K 대 Q8_0 dense 비교는 짝지은 KLD 차이 +0.0063이고, 저자들은 이를 KLD의 약 10%, top-1 0.4점이라고 부릅니다. Infernix README가 "Basalt 자체 측정으로 KL +10%"라고 적은 문장과 같은 방향을 가리킵니다. 비교 프로토콜이 같은 실험인지는 두 저장소가 서로를 인용하지 않아 이 글에서 확인하지 못했습니다.</p>
+<h2 id="ttft">TTFT와 디코드가 갈리는 지점</h2>
+<p>첫 토큰 시간(TTFT)은 요청을 보낸 뒤 첫 스트리밍 토큰까지입니다. Infernix 측정 절차는 OpenAI API로 그 구간을 잽니다. 긴 프롬프트에서는 프리필이 거의 전부입니다. 디코드 tok/s는 그 다음, 토큰을 이어 쓰는 속도입니다.</p>
+<p>RTX 5090의 FP4 텐서 코어를 프롬프트에서 쓰는 경로는, README가 말한 대로 <strong>4비트 expert 활성화</strong>뿐입니다. 그래서 Dense8 기본값이 에이전트 워크로드에서 가장 빠르다고 합니다. <code>--a8-activations</code>는 같은 기계에서 디코드 라운드를 1–7% 늘리지만, 128K·250K 첫 토큰은 28% 늦어집니다. 8비트로 디코드를 조금 사는 대신 긴 프롬프트의 TTFT를 내놓는 교환입니다.</p>
+<p>호스트와 GPU 사이 대역도 TTFT 쪽에 기울어 있습니다. README의 PCIe Gen5 x8 대 x16 측정(Infernix <code>d8e52a85</code>, Dense8, INT8 KV)에서 호스트→디바이스 복사는 28.9 GB/s에서 57.8 GB/s로 2.00배이고, 프롬프트 <code>pp4096</code>는 1.76–1.99배입니다. 디코드는 1.02–1.07배입니다. expert와 n-gram 표가 GPU 밖에 있으면, 첫 토큰은 링크와 디스크를 기다리고 디코드는 라운드당 받아들여진 드래프트 수와 캐시 히트에 더 민감합니다.</p>
+<p>공식 가중치를 받는 서버와 이 엔진은 같은 표를 공유하지 않습니다. 모델 카드는 Hugging Face 형식 가중치가 Transformers, vLLM, SGLang, TokenSpeed와 맞는다고 합니다. Infernix <code>AGENTS.md</code>는 생성 모델이 GPU 하나, 상주 모델 하나, 시작 때 고정하는 실행 레인 1–8개이고, 대규모 continuous batching은 제품 결정이 따로 있어야 한다고 합니다. README의 비교 상대는 Strata v0.2.8, strata-nvfp4, Basalt <code>c08284cb</code>, 그리고 27B에서의 NInfer <code>1882c6adb</code>입니다. llama.cpp, vLLM, TensorRT-LLM과의 속도 표는 그 절에 없습니다. llama.cpp가 문서에 나오는 자리는 CLI가 <code>--a8-activations</code>의 int8 코드(값 32개당 FP32 스케일 하나)를 llama.cpp의 Q8_1과 같은 꼴이라고 부르는 곳, 그리고 Basalt가 같은 GGUF의 KLD를 llama.cpp <code>llama-perplexity</code>와 맞춘 곳입니다.</p>
+<p>Infernix가 공개한 NVFP4 Dense8 한 요청 표는 이렇습니다. 기계는 RTX 5090, PCIe Gen5 x8, Core i9-13900K, DDR5 96 GB 중 RAM 예산 84 GiB, Windows 11입니다.</p>
+<table>
+<thead>
+<tr>
+<th>컨텍스트</th>
+<th style="text-align: right;">TTFT Infernix</th>
+<th style="text-align: right;">Strata</th>
+<th style="text-align: right;">strata-nvfp4</th>
+<th style="text-align: right;">Basalt</th>
+<th style="text-align: right;">디코드 tok/s Infernix</th>
+<th style="text-align: right;">Strata</th>
+<th style="text-align: right;">strata-nvfp4</th>
+<th style="text-align: right;">Basalt</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>~8K</td>
+<td style="text-align: right;">1.88 s</td>
+<td style="text-align: right;">2.67 s</td>
+<td style="text-align: right;">2.48 s</td>
+<td style="text-align: right;">9.55 s</td>
+<td style="text-align: right;">183</td>
+<td style="text-align: right;">159</td>
+<td style="text-align: right;">177</td>
+<td style="text-align: right;">202</td>
+</tr>
+<tr>
+<td>~128K</td>
+<td style="text-align: right;">12.22 s</td>
+<td style="text-align: right;">18.83 s</td>
+<td style="text-align: right;">15.34 s</td>
+<td style="text-align: right;">92.94 s</td>
+<td style="text-align: right;">161</td>
+<td style="text-align: right;">146</td>
+<td style="text-align: right;">161</td>
+<td style="text-align: right;">173</td>
+</tr>
+<tr>
+<td>~250K</td>
+<td style="text-align: right;">23.90 s</td>
+<td style="text-align: right;">37.55 s</td>
+<td style="text-align: right;">31.78 s</td>
+<td style="text-align: right;">125.92 s</td>
+<td style="text-align: right;">175</td>
+<td style="text-align: right;">183</td>
+<td style="text-align: right;">172</td>
+<td style="text-align: right;">216</td>
+</tr>
+</tbody>
+</table>
+<p>Basalt TTFT를 Infernix로 나누면 약 <strong>5.08배, 7.61배, 5.27배</strong>입니다. README 헤드라인의 "5–8× sooner"는 이 세 칸입니다. 각주 1은 Basalt가 50.7 GiB n-gram 표를 SSD에서 읽었다고 합니다. RAM 예산 안에 expert와 표가 같이 들어가지 않았기 때문입니다. Strata와의 TTFT 비는 1.42배, 1.54배, 1.57배라 헤드라인의 1.4–1.6배와 맞습니다.</p>
+<p>IQ3_S 표에서는 방향이 바뀝니다. ~8K TTFT는 Infernix 1.40초, Basalt 1.35초입니다. ~128K는 18.10초 대 13.47초, ~250K는 35.59초 대 27.98초입니다. 디코드는 Basalt 380 / 298 / 339 tok/s, Infernix 229 / 201 / 250입니다. 에이전트 리플레이 벽시계는 Basalt 4.4분, Infernix 5.5분입니다.</p>
+<p><code>--a8-activations</code>를 얹은 NVFP4 디코드는 199 / 185 / 268 tok/s로, Basalt 202 / 173 / 216과 8K에서 비슷하고 128K·250K에서 앞섭니다. 같은 옵션의 TTFT는 1.88 / 15.53 / 30.58초라, Basalt 대비 약 5.1배, 6.0배, 4.1배이고 README는 이 구간을 4–6배라고 부릅니다. IQ3_S에 같은 옵션을 켜도 디코드는 224 / 211 / 278이라 Basalt보다 1.2–1.7배 느리고, README는 그 문장을 그대로 적습니다.</p>
+<p>27B는 Basalt가 아니라 같은 NVFP4 아티팩트의 NInfer와 비교합니다. TTFT는 8K에서 0.65초 대 0.71초(약 9%), 128K에서 18.61초 대 29.88초, 230K에서 47.04초 대 84.43초입니다. 4–8배가 아닙니다.</p>
+<p>품질 열은 비어 있습니다. README는 "Measured quality for every engine follows in a later update"라고 합니다. 변환끼리의 퍼플렉서티와, 27B에서 NInfer 4.479 대 Infernix 4.468(1.04M 토큰, 16K 컨텍스트, INT8 KV)은 있습니다. Basalt·Strata와의 KL 표는 없습니다.</p>
+<p>문서에 있는 실행 예는 이 한 줄입니다. Dense8, INT8 KV, DFlash2, 컨텍스트 262144, 동시 2입니다.</p>
+<div class="highlight"><pre><span></span><code>infernix-serve.exe Qwen3.8-Flash-Next-NVIDIA-NVFP4-Dense8-Infernix-00001-of-00003.infernix --ngram-volume Qwen3.8-Flash-Next-NVIDIA-NVFP4-Infernix.ngram --kv-dtype int8 --max-context 262144 --spec dflash2 --draft-model Qwen3.8-Flash-Next-DFlash2-Infernix.infernix --draft-tokens auto --lm-head-draft --max-concurrency 2 --vram-past-budget
+</code></pre></div>
+
+<h2 id="-lossless"><code>--lossless</code>가 재는 것</h2>
+<p>CLI는 <code>--lossless</code>를 이렇게 정의합니다. Hugging Face 포워드의 연산을 그 자료형의 값으로 한 번씩 올바르게 반올림하고, 가중치는 형식 그대로 디코드하며, 합은 정확합니다. 출력은 요청과 아티팩트만의 함수이고, 빌드·프리필 청크·프리필과 디코드의 차이·다른 요청·프리픽스 캐시·선점에 기대지 않습니다. 텍스트 요청은 <code>--kv-dtype bf16</code>(이 경로에서는 V도 BF16)이고 추측 디코딩은 꺼집니다. 빠른 경로는 돌지 않아 재현 경로보다 느립니다. 샘플링은 시드·위치·토큰으로 키된 Gumbel-max입니다. 기본값은 off입니다. <code>--a8-activations</code>와 <code>--a16-activations</code>는 이 플래그와 같이 쓰지 못합니다.</p>
+<p><a href="https://github.com/Wallawalla47/Infernix/blob/main/docs/maintainer/lossless-route.md">설계 문서</a>는 그 반올림의 기준을 Transformers의 <code>modeling_qwen3_5.py</code>와 Flash-Next의 <code>modeling_qwen4_exp.py</code>로 적습니다. 같은 파일의 상태 줄은 2026-10-21 기준 <strong>in development (branch <code>feat/lossless</code>)</strong> 로 남아 있습니다. 구현 파일과 CLI 표는 확인한 main 트리에 있습니다. 상태 줄이 낡은 머리말인지, 경로가 아직 설계 문서의 그 문장 아래에 있는지는 문서만으로 닫히지 않습니다. 어느 쪽이든 "실무 검증용으로 완비된 모드"라는 문장은 이 두 페이지에 없습니다.</p>
+<h2 id="_1">런처</h2>
+<p>README의 Infernix Launcher는 <strong>Beta</strong>이고, 아직 바뀐다고 적습니다. <code>infernix-launcher</code>는 추론을 하지 않습니다. <code>infernix-serve</code> 하나를 감독하고 HTTP를 중계합니다. Windows에서는 <code>infernix-serve.exe</code> 옆의 <code>infernix-launcher.exe</code>가 브라우저로 <code>http://127.0.0.1:1234</code>를 엽니다. 모델 찾기와 이어받기 다운로드, 이름 있는 설정, GPU·RAM에 들어가는지 확인, OpenAI <code>/v1</code>와 Anthropic <code>/v1/messages</code> 하나의 엔드포인트, 게이지와 채팅이 <a href="https://github.com/Wallawalla47/Infernix/blob/main/docs/launcher.md">launcher.md</a>에 있습니다. Linux 바이너리 <code>build/apps/infernix-launcher</code>도 같은 문서에 있습니다. "Windows 전용"은 아닙니다. "설치가 매우 순조롭다"는 측정이 없습니다.</p>
+<h2 id="_2">비즈니스 인사이트</h2>
+<p>2026년의 이 칸은 데이터센터 서빙 시장과 다른 선반입니다. 모델 카드가 공식 가중치의 상대로 적는 것은 Transformers, vLLM, SGLang, TokenSpeed이고, 관리형으로는 Qwen Cloud를 가리킵니다. Infernix·Strata·Basalt·NInfer가 다투는 자리는 <strong>워크스테이션 한 대</strong>에서 Flash-Next를 올리는 일입니다. Strata 저장소는 RTX 20/30/40/50, AMD, Intel, Apple Silicon, Strix Halo, DGX Spark를 안내합니다. Basalt README는 Linux와 Windows의 NVIDIA Blackwell(sm_120)입니다. Infernix <code>AGENTS.md</code>는 sm_120a, 튜닝 대상은 RTX 5090이고, 다른 PC에 실행 파일만 복사할 때의 조건도 RTX 50 시리즈와 드라이버 580 이상입니다.</p>
+<p>제품 페이지가 적는 전원은 TGP 575 W, 권장 시스템 전원 1000 W입니다. 메모리 요구는 그 옆에서 더 직접적입니다. NVFP4 expert 63 GiB와 FP8 n-gram 볼륨 52,429,058,048바이트는 32 GB VRAM 밖에 있습니다. Infernix 벤치마크 기계는 RAM 96 GB 중 84 GiB를 예산으로 두고, n-gram은 Samsung 990 PRO에 두었습니다. IQ3_S로 내려도 expert는 RAM에 있고, 표를 RAM에 넣으면 expert가 밀린다고 README가 적습니다. 카드를 산 뒤에 RAM과 NVMe가 남습니다.</p>
+<p><strong>분석/의견.</strong> 이 표를 제품 포지션으로 읽으면, Infernix가 앞서는 칸은 "NVIDIA NVFP4에서, 상대의 n-gram 표가 SSD로 밀려난 조건의 첫 토큰과 에이전트 벽시계"입니다. 디코드 최댓값을 사는 칸은 같은 프로젝트의 표에서 Basalt 쪽이고, IQ3_S에서는 TTFT까지 Basalt가 앞섭니다. 이득을 보는 사람은 5090과 넉넉한 RAM으로 에이전트 루프의 첫 토큰을 줄이고, expert 활성화 폭을 체크포인트에 맞추고 싶은 사람입니다. 손해를 보는 읽기는 두 가지입니다. 4–8배를 엔진 전반의 속도로 옮기면 IQ3_S와 Strata 열이 사라지고, <code>--a8-activations</code>를 정확도가 공짜인 디코드 스위치로 읽으면 문서가 적은 "출력이 바뀌고 품질은 미측정"이 사라집니다. 품질 열을 아직 공개하지 않은 엔진을 "고정밀"로 도입하는 결정은, 속도 표를 품질 표로 오인하는 결정입니다.</p>
+<p>개발자에게 바로 닫히는 선택은 가중치입니다. Dense8은 4비트 expert 활성화가 기본이고 FP4 텐서 코어로 프롬프트를 읽습니다. 비트 일치 NVFP4와 FP4-Local의 기본 활성화 폭은 표가 다릅니다. IQ3_S는 16비트 활성화가 기본이고 디코드는 Basalt가 빠릅니다. FP8 변환은 README가 가장 정확하고 가장 느리다고 하며, 112.6 GiB expert는 96 GB에서 SSD 계층이 필요합니다. 엔진을 고르기 전에 어느 파일을 올릴지 정하는 편이, 포스트의 한 문장으로 정하는 편보다 문서에 가깝습니다.</p>
+<h2 id="_3">팩트 체크</h2>
+<p>✅ 1차 자료와 맞음 / ⚠️ 방향은 맞거나 일부만 맞음 / ❌ 1차 자료와 어긋나거나, 그 내용이 1차 자료에 없음</p>
+<p>확인 시점은 2026-11-02, Infernix main <code>eda1eba6</code>입니다. 속도는 프로젝트 자체의 Windows 측정입니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTX 5090에서 Qwen 3.8을 돌리는 C++/CUDA 추론 엔진 Infernix가 릴리스되었다</td>
+<td>✅</td>
+<td>README: C++/CUDA, Qwen, RTX 5090 한 장, NInfer 포크. 태그 <a href="https://github.com/Wallawalla47/Infernix/releases/tag/windows-2026.11.01">windows-2026.11.01</a>는 2026-11-01 01:59 UTC. 포스트는 같은 날 23:12 UTC. main은 그 뒤로 2026-11-02에 더 움직였다.</td>
+</tr>
+<tr>
+<td>빠르고 품질이 높다</td>
+<td>⚠️</td>
+<td>NVFP4·IQ3_S·27B의 속도 표는 README에 있다. "고품질"을 상대 엔진과 비교한 열은 없고, "Measured quality for every engine follows in a later update"라고 적는다. README는 AI로 썼으며 완전하거나 정확하지 않을 수 있다고 경고한다. 이 글은 표를 재측정하지 않았다.</td>
+</tr>
+<tr>
+<td>속도를 위해 정확도를 깎는 숏컷을 극력 빼고, 모델 본래의 품질을 지킨다</td>
+<td>⚠️</td>
+<td>기본값은 체크포인트 정밀도이고 expert tail skip은 off다. 그러나 빠른 경로는 기본으로 켜지고 재현 경로와 비트가 다르다고 CLI가 적는다. Dense8 추천 변환은 dense를 8비트로 두고, NVFP4 expert 기본 활성화는 4비트다. 상대 엔진과의 품질 측정은 나중으로 미뤄져 있다.</td>
+</tr>
+<tr>
+<td>다른 엔진이 저비트화와 expert 스킵을 하는 동안, Infernix는 활성화 함수를 16비트로 유지한다</td>
+<td>❌</td>
+<td>活性化関数는 활성화 텐서가 아니다. 텐서로 읽어도 Dense8·비트 일치 NVFP4의 routed expert 기본값은 W4A4다. 16비트 expert는 <code>--a16-activations</code>이고 출력이 바뀐다. IQ3_S 기본값만 전부 16비트다. Basalt의 <code>--route-tail-skip</code>은 기본 off다. Strata의 tail skip은 조건부 기본값이다.</td>
+</tr>
+<tr>
+<td>라우팅된 expert를 모두 실행한다</td>
+<td>✅</td>
+<td>CLI <code>--expert-tail-skip</code> 기본값 off. README: "runs every routed expert (no expert tail skipping)". 옵션을 켜면 VRAM 미스 중 순위가 낮은 expert를 0으로 두고, 재현 경로는 그 옵션을 거부한다.</td>
+</tr>
+<tr>
+<td>첫 토큰이 Basalt 등 경쟁 엔진보다 4–8배 빠르다</td>
+<td>⚠️</td>
+<td>NVFP4 기본 표의 Basalt 대비 TTFT는 약 5.08 / 7.61 / 5.27배이고 헤드라인은 5–8배다. 4–6배는 <code>--a8-activations</code> 각주다. 두 경우 모두 Basalt의 50.7 GiB 표가 SSD에 있던 조건이다. Strata는 1.4–1.6배다. IQ3_S에서는 Basalt TTFT가 더 짧다. 27B 비교 상대는 NInfer이고 8K에서 약 9%, 긴 프롬프트에서 1.6–1.8배다.</td>
+</tr>
+<tr>
+<td><code>--a8-activations</code> 등으로 정확도를 유지한 채 디코드에서도 경쟁과 같거나 더 빠르다</td>
+<td>❌</td>
+<td>CLI는 Approximate이고 출력이 바뀌며 <code>--lossless</code>가 거부한다. README는 품질을 아직 재지 않았다고 한다. NVFP4 디코드 199 / 185 / 268은 Basalt 202 / 173 / 216과 8K에서 비슷하고 그 위 컨텍스트에서 앞선다. IQ3_S에서는 같은 옵션으로도 Basalt가 1.2–1.7배 빠르다.</td>
+</tr>
+<tr>
+<td>Windows용 WebUI 런처가 시험 도입되어 모델 관리와 API가 있고, 도입이 매우 순조롭다</td>
+<td>⚠️</td>
+<td>런처는 README가 Beta라고 부른다. 모델 검색·다운로드, 설정, <code>127.0.0.1:1234</code>의 웹 UI, OpenAI·Anthropic 엔드포인트는 <a href="https://github.com/Wallawalla47/Infernix/blob/main/docs/launcher.md">launcher.md</a>에 있다. Linux 바이너리도 있다. "매우 순조롭다"는 측정이 없고, 문서는 아직 바뀐다고 적는다.</td>
+</tr>
+<tr>
+<td><code>--lossless</code> 모드가 개발과 실무의 추론 품질 검증에 맞게 완비되어 있다</td>
+<td>⚠️</td>
+<td><a href="https://github.com/Wallawalla47/Infernix/blob/main/docs/cli.md">CLI</a>는 플래그를 HF 포워드의 올바른 반올림 경로로 정의하고 기본 off, 추측 없음, bf16 KV, 재현 경로보다 느리다고 한다. 설계 문서 상태 줄은 2026-10-21의 <code>feat/lossless</code> 개발 중으로 남아 있다. "실무에 최적·완비"는 두 문서에 없다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 엔진과 2026-11-01 Windows 릴리스, RTX 5090에서 Qwen3.8을 단일 GPU로 서빙한다는 뼈대, 기본값에서 routed expert를 건너뛰지 않는다는 점, 베타 웹 런처, <code>--lossless</code>라는 정확한 산술 경로는 저장소와 맞습니다. 포스트가 그 위에 얹은 "활성화 함수 16비트"와 "정확도를 유지하는 <code>--a8-activations</code>"는 기본값·CLI와 어긋납니다. 4–8배 TTFT는 NVFP4 대 Basalt라는 한 칸의 5–8배, 그리고 표가 SSD에 있던 조건을 엔진 전반의 배수로 늘린 문장입니다.</p>
+<h2 id="_4">참고 자료</h2>
+<ul>
+<li>Infernix README, CLI, 런처, 무손실 경로, AGENTS.md — <a href="https://github.com/Wallawalla47/Infernix">저장소</a> · main <code>eda1eba6</code>(2026-11-02) · <a href="https://github.com/Wallawalla47/Infernix/blob/eda1eba6c81f474d7bf58ee434bb2cd64f142cab/docs/cli.md">CLI <code>--lossless</code></a> · <a href="https://github.com/Wallawalla47/Infernix/blob/main/docs/maintainer/lossless-route.md">lossless-route.md</a> · <a href="https://github.com/Wallawalla47/Infernix/blob/main/docs/launcher.md">launcher.md</a> · <a href="https://github.com/Wallawalla47/Infernix/releases/tag/windows-2026.11.01">windows-2026.11.01</a></li>
+<li>Qwen3.8-Flash-Next 모델 카드 — <a href="https://huggingface.co/Qwen/Qwen3.8-Flash-Next">Hugging Face</a>. 125B / 활성 6B, 51B n-gram, 4B MTP, expert 512, 활성 10 routed + 1 shared, 층 48, 컨텍스트 262,144.</li>
+<li>Basalt — <a href="https://github.com/jesdga95/basalt">README</a> · <a href="https://github.com/jesdga95/basalt/blob/main/docs/precision/index.md">precision/index.md</a> · <a href="https://github.com/jesdga95/basalt/blob/main/docs/precision/features.md">features.md의 Q6_K dense</a></li>
+<li>Strata — <a href="https://github.com/Niko1221/Strata">저장소</a> · <a href="https://github.com/Niko1221/Strata/blob/main/docs/DETAILS.md"><code>STRATA_ROUTE_TAIL_SKIP</code></a></li>
+<li>NInfer — Infernix README가 포크 원본으로 적는 <a href="https://github.com/Neroued/ninfer">Neroued/ninfer</a></li>
+<li>NVIDIA GeForce RTX 5090 — <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/rtx-5090/">제품 페이지</a>(32 GB GDDR7, CUDA 21,760, TGP 575 W, PCIe Gen 5) · <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/50-series/">50 시리즈 대역폭 1792 GB/s</a> · <a href="https://images.nvidia.com/aem-dam/Solutions/geforce/blackwell/nvidia-rtx-blackwell-gpu-architecture.pdf">Blackwell 아키텍처 백서 PDF</a>(GB202, 512-bit, 28 Gbps, 1792 GB/s, FP4 텐서 처리량)</li>
+<li>원본 X 포스트: <a href="https://x.com/ai_hakase_/status/2117031946643529762">@ai_hakase_</a> · <a href="https://x.com/i/status/2117031946643529762">상태 주소</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
