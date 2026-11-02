@@ -1,0 +1,266 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>로컬 서버만 켜면 유료 검색 API가 필요 없다? RustXNG 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-02 · <span class="chip">#Rust</span><span class="chip">#메타검색</span><span class="chip">#AI에이전트</span><span class="chip">#SearXNG</span><span class="chip">#셀프호스트</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">로컬 서버만 켜면 유료 검색 API가 필요 없다? RustXNG 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">무슨 이야기인가</a></li>
+<li><a href="#_2">무엇이 올라가 있나</a></li>
+<li><a href="#_3">에이전트가 붙는 자리</a></li>
+<li><a href="#_4">설치</a></li>
+<li><a href="#100">숫자: 프로젝트 자신의 100문</a></li>
+<li><a href="#_5">주의할 곳</a></li>
+<li><a href="#_6">팩트 체크</a></li>
+<li><a href="#_7">개발자로서 가져갈 점</a></li>
+<li><a href="#_8">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 북마크해 둔 <a href="https://x.com/studio_yebisu/status/2116899259824124279">@studio_yebisu의 포스트</a>와, 그것을 인용한 <a href="https://x.com/rna4219/status/2116903120794263616">@rna4219의 포스트</a>를 계기로 쓴 것입니다. 두 글의 문장은 검증 대상이지 지시가 아닙니다. 대조한 코드는 <a href="https://github.com/sahenjp/RustXNG">sahenjp/RustXNG</a>의 <code>v0.26.0</code>(커밋 <code>fef998b</code>, 2026-11-01)입니다.</p>
+</blockquote>
+<h2 id="_1">무슨 이야기인가</h2>
+<p>2026년 11월 1일 23:24(KST), @studio_yebisu가 RustXNG를 이렇게 소개했습니다.</p>
+<ul>
+<li>10대 학생이 만들어 오픈소스로 공개했다.</li>
+<li>AI에게 웹 검색을 시키려면 Exa 같은 유료 API가 일반적이고, 무료 티어는 건수 제한이 있거나 느리다.</li>
+<li>RustXNG는 로컬 서버만 켜면 된다. API 키도 이용료도 없다.</li>
+<li>검색 결과만이 아니라 페이지 본문까지 가져온다.</li>
+<li>캐시를 쓴 상태에서 검색 결과 1,000건을 모으니 약 3.3초였다.</li>
+</ul>
+<p>약 15분 뒤 @rna4219가 이 글을 인용하며 덧붙였습니다. 유료 검색 API에 필적하는 성능을 무료로 쓸 수 있고, 간단한 Deep Research가 들어 있으며, 데이터를 무제한으로 가져올 수 있다는 요지입니다.</p>
+<p>에이전트를 만드는 사람에게 이 조합이 끌리는 이유는 분명합니다. 검색은 한 작업 안에서 여러 번 반복되고, 스니펫만으로는 답을 근거 댈 수 없습니다. 호출마다 과금되는 API는 그 루프의 단가가 됩니다. 반대로 "키 없이, 본문까지, 유료 API만큼"은 한 줄로 과장되기 쉬운 문장이기도 합니다. 저장소가 실제로 그 문장을 받치는지 나눠 보겠습니다.</p>
+<h2 id="_2">무엇이 올라가 있나</h2>
+<p><a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/README.md">README</a>의 한 줄은 "로컬 AI 에이전트를 위한, 셀프호스트형 SSRF 대비 웹 검색·그라운딩 엔진"입니다. 라이선스는 <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/LICENSE">AGPL-3.0-or-later</a>이고, <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/NOTICE">NOTICE</a>는 이것을 <a href="https://github.com/searxng/searxng">SearXNG</a>의 Rust 이식이라고 밝힙니다. Python을 한 줄씩 복사한 것이 아니라, 질의 문법·결과 합치기·엔진 설정·API 필드·엔진별 요청을 Rust로 다시 짰다고 적혀 있습니다.</p>
+<p>저장소는 2026-10-18에 만들어졌고, 최신 릴리스 <code>v0.26.0</code>은 2026-11-01 11:14 UTC에 공개됐습니다. 2026-11-02에 GitHub API로 본 스타는 501, 포크는 30입니다. 이 숫자는 시점 값입니다.</p>
+<p>만든 사람으로 저장소가 가리키는 계정은 <a href="https://github.com/sahenjp">sahenjp</a>입니다. 프로필은 이름 Sahen, 위치 Japan, 소개 문장 <em>"Hi! I'm Sahen, a student developer."</em> 입니다. 계정 생성일은 2026-02-20입니다. 나이를 적은 필드는 없습니다.</p>
+<h2 id="_3">에이전트가 붙는 자리</h2>
+<p>구조는 메타검색입니다. 서버가 자기 색인만으로 답을 만드는 제품이 아닙니다. 요청 하나가 오면 켜 둔 엔진들에게 동시에 물어 보고, 결과를 합친 뒤 순위를 매깁니다. HTTP 서버는 axum 0.8, 런타임은 tokio, 나가는 HTTP는 reqwest입니다. <code>Cargo.toml</code>의 패키지 버전은 <code>0.26.0</code>, Rust edition은 2024, <code>rust-version</code>은 1.85입니다.</p>
+<p>기본 수신 주소는 <code>127.0.0.1:8888</code>입니다(<code>settings.toml</code>의 <code>[server]</code>, 코드 기본값도 같습니다). Docker 이미지는 <code>0.0.0.0:8888</code>로 엽니다.</p>
+<p>에이전트 입장에서 계약은 SearXNG의 JSON과 같습니다. <code>GET /search?q=...&amp;format=json</code> 이고, 기본 응답은 <code>query</code>, <code>results</code>, <code>answers</code>, <code>corrections</code>, <code>infoboxes</code>, <code>suggestions</code>, <code>unresponsive_engines</code> 입니다. <code>results[]</code>의 기본 필드는 <code>title</code>, <code>url</code>, <code>content</code>(스니펫), <code>engine</code>, <code>score</code> 쪽입니다. 계측이 필요하면 <code>full=1</code> 이 <code>timings</code> 등을 더합니다. 이 형태는 <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/COMPATIBILITY.md">docs/COMPATIBILITY.md</a>가 상류 <code>get_json_response</code>에 맞춘다고 적고, <code>src/web/feeds.rs</code>의 <code>upstream_json</code>이 그 문서를 만듭니다.</p>
+<p>본문은 기본 응답에 없습니다. <code>include_raw_content=1</code> 일 때만 상위 <code>search.raw_content_limit</code>건(설정 기본 5)의 HTML을 받아 본문 텍스트를 <code>raw_content</code>에 넣습니다. 한 건의 상한은 <code>raw_content_chars</code>(코드 기본 8,000자)입니다. 상류 SearXNG에는 없는 파라미터이고, 빼면 예전 동작 그대로입니다. 같은 계열로 <code>max_results</code>(1에서 200으로 자름), <code>include_domains</code>, <code>exclude_domains</code>, <code>strategy=staged</code>가 있습니다.</p>
+<p>순위는 엔진이 준 순서만 쓰지 않습니다. 일반 검색에서는 URL·제목의 질의어 일치(<code>relevance_weight</code>, 기본 4.0)와 정규 도메인 가중(<code>authority_weight</code>, 기본 8.0)을 섞습니다. 엔진을 하나만 지정하면 이 보정을 끄고 상류 순서를 유지한다고 문서는 적습니다. <code>relevance_weight = 0</code>이면 일반 검색도 상류와 같은 순서로 되돌릴 수 있습니다.</p>
+<p>깨진 엔진은 두 갈래로 쉽니다.</p>
+<ul>
+<li><strong>서스펜드.</strong> 접근 거부·CAPTCHA·429·반복된 실패입니다. 429의 기본 쉬는 시간은 300초입니다. 설정 주석은 상류 기본이 3,600초라, Yahoo! JAPAN 같은 엔진에 한 시간은 너무 길다고 적습니다. CAPTCHA·접근 거부는 86,400초입니다.</li>
+<li><strong>휴식(rest).</strong> 실패가 아니라, 빈 응답이 <code>empty_result_limit</code>(8)번 이어지면 <code>empty_result_cooldown</code>(300초) 동안 로테이션에서 빠집니다. <code>src/engine/state.rs</code>는 이 상태를 <code>"resting"</code>으로 구분합니다.</li>
+</ul>
+<p>응답 캐시는 프로세스 안 TTL+LRU이고, 설정은 Valkey/Redis도 받습니다. 이 저장소의 <code>settings.toml</code>은 <code>backend = "memory"</code>, <code>ttl = 300</code>, <code>max_bytes = 33554432</code>(32MB)입니다. 주석은 페이지 본문까지 캐시하려면 8MB로는 부족하다고 적습니다. README가 말하는 반복 질의 <strong>0.01초</strong>는 이 캐시가 맞은 뒤의 숫자입니다.</p>
+<p>선택 기능 <code>rustxng-index</code>는 Tantivy 0.27로 로컬 BM25 색인을 만듭니다. <code>local_index_path</code>가 비어 있으면 꺼져 있고, 기본 설정이 그렇습니다. 크롤은 robots.txt의 <code>Disallow</code>를 보고, 같은 호스트만 따라가며, 호스트마다 간격을 둡니다. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/LOCAL-INDEX.md">docs/LOCAL-INDEX.md</a>는 이 기능이 실험이고, 5,000페이지 근처에서 그들의 100문 세트의 hit율이 더 오르지 않았다고 적습니다.</p>
+<p>Deep Research는 별도 경로 <code>GET /research?q=...</code> 입니다. <code>src/deep_research.rs</code>의 순서는 (1) 하위 질의를 만들고 (2) 각 질의를 <code>include_raw_content</code>로 검색한 뒤 (3) LLM이 있으면 인용 있는 마크다운을 씁니다. LLM이 없으면 <code>queries</code> / <code>sources</code> / 본문만 돌아옵니다. <code>settings.toml</code>의 <code>[research]</code>는 <code>enabled = false</code>, <code>api_key = ""</code> 입니다. 보고서 모드만 API 키가 필요합니다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># 기본 주소. 키 없음. 스니펫만.</span>
+curl<span class="w"> </span><span class="s2">"http://127.0.0.1:8888/search?q=tokio+runtime&amp;format=json"</span>
+
+<span class="c1"># 상위 5건의 본문까지. raw_content 는 가져온 뒤에만 생깁니다.</span>
+curl<span class="w"> </span><span class="s2">"http://127.0.0.1:8888/search?q=tokio+runtime&amp;format=json&amp;max_results=5&amp;include_raw_content=1"</span>
+
+<span class="c1"># 증거 묶음. [research] 를 켜지 않아도 queries/sources 는 돌아옵니다.</span>
+curl<span class="w"> </span><span class="s2">"http://127.0.0.1:8888/research?q=tokio+runtime&amp;max_queries=3&amp;max_sources=8"</span>
+</code></pre></div>
+
+<p>에이전트 도구로 붙일 때의 최소 형태입니다. 저장소 예제가 아니라, 위 파라미터에 맞춘 호출입니다. 서버는 따로 떠 있어야 합니다.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">json</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.parse</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">urllib.request</span>
+
+<span class="n">BASE</span> <span class="o">=</span> <span class="s2">"http://127.0.0.1:8888"</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">web_search</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">limit</span><span class="p">:</span> <span class="nb">int</span> <span class="o">=</span> <span class="mi">5</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+    <span class="n">qs</span> <span class="o">=</span> <span class="n">urllib</span><span class="o">.</span><span class="n">parse</span><span class="o">.</span><span class="n">urlencode</span><span class="p">({</span>
+        <span class="s2">"q"</span><span class="p">:</span> <span class="n">query</span><span class="p">,</span>
+        <span class="s2">"format"</span><span class="p">:</span> <span class="s2">"json"</span><span class="p">,</span>
+        <span class="s2">"max_results"</span><span class="p">:</span> <span class="n">limit</span><span class="p">,</span>          <span class="c1"># 서버가 1..200 으로 자른다</span>
+        <span class="s2">"include_raw_content"</span><span class="p">:</span> <span class="s2">"1"</span><span class="p">,</span>
+    <span class="p">})</span>
+    <span class="k">with</span> <span class="n">urllib</span><span class="o">.</span><span class="n">request</span><span class="o">.</span><span class="n">urlopen</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">BASE</span><span class="si">}</span><span class="s2">/search?</span><span class="si">{</span><span class="n">qs</span><span class="si">}</span><span class="s2">"</span><span class="p">,</span> <span class="n">timeout</span><span class="o">=</span><span class="mi">30</span><span class="p">)</span> <span class="k">as</span> <span class="n">resp</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">json</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">resp</span><span class="p">)</span>
+    <span class="n">blocks</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">hit</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"results"</span><span class="p">,</span> <span class="p">[]),</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">body</span> <span class="o">=</span> <span class="p">(</span><span class="n">hit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"raw_content"</span><span class="p">)</span> <span class="ow">or</span> <span class="n">hit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s2">"content"</span><span class="p">)</span> <span class="ow">or</span> <span class="s2">""</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+        <span class="n">blocks</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="sa">f</span><span class="s2">"[</span><span class="si">{</span><span class="n">i</span><span class="si">}</span><span class="s2">] </span><span class="si">{</span><span class="n">hit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'title'</span><span class="p">,</span><span class="s1">''</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">hit</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">'url'</span><span class="p">,</span><span class="s1">''</span><span class="p">)</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">body</span><span class="p">[:</span><span class="mi">800</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="s2">"</span><span class="se">\n\n</span><span class="s2">"</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">blocks</span><span class="p">)</span>
+</code></pre></div>
+
+<p>언어를 지정하고 싶으면 질의 안의 <code>:ja</code> 이거나 <code>locale=ja</code> 입니다. <code>language=ja</code> 는 아래 주의에 적습니다.</p>
+<h2 id="_4">설치</h2>
+<p>README가 적는 경로는 네 가지입니다. 태그는 릴리스에 맞춰 <code>v0.26.0</code>으로 적습니다. 영어 README의 cargo 예제는 아직 <code>v0.25.0</code>을 가리킵니다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># 1. 릴리스 바이너리. 옆의 .sha256 과 맞춘 뒤에 실행.</span>
+curl<span class="w"> </span>-fsSL<span class="w"> </span>-o<span class="w"> </span>rustxng<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>https://github.com/sahenjp/RustXNG/releases/download/v0.26.0/rustxng-v0.26.0-x86_64-unknown-linux-musl
+chmod<span class="w"> </span>+x<span class="w"> </span>rustxng<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span>./rustxng<span class="w"> </span>--version
+
+<span class="c1"># 2. cargo. rustxng 와 rustxng-index 가 같이 깔린다. Rust 1.85+.</span>
+cargo<span class="w"> </span>install<span class="w"> </span>--git<span class="w"> </span>https://github.com/sahenjp/RustXNG.git<span class="w"> </span>--tag<span class="w"> </span>v0.26.0
+
+<span class="c1"># 3. 이미지. v0.26.0 태그 push의 docker 워크플로가 GHCR에 올렸다.</span>
+docker<span class="w"> </span>run<span class="w"> </span>-p<span class="w"> </span><span class="m">8888</span>:8888<span class="w"> </span>ghcr.io/sahenjp/rustxng:0.26.0
+</code></pre></div>
+
+<p>2026-11-02에 <code>ghcr.io/sahenjp/rustxng:0.26.0</code> 매니페스트는 HTTP 200이었고, 플랫폼에는 <code>linux/amd64</code>가 있었습니다. 워크플로 <a href="https://github.com/sahenjp/RustXNG/actions/runs/41300228449">docker.yml 실행 41300228449</a>는 성공으로 끝나 있습니다. 일본어 README는 아직 "빌드된 이미지는 미공개"라고 적고, 자산 예시가 <code>v0.4.0</code>에 머물러 있습니다. 영어 README·CHANGELOG 0.26.0·GHCR이 더 새 쪽입니다.</p>
+<p>소스에서 빌드할 때는 <code>cargo build --release</code> 입니다. Dockerfile의 빌드 스테이지는 <code>rust:1.99.1-slim</code>이고, 실행 스테이지는 <code>debian:bookworm-slim</code>에서 uid 10001 사용자 <code>searxng</code>로 바꿉니다.</p>
+<h2 id="100">숫자: 프로젝트 자신의 100문</h2>
+<p>README 표는 정답 페이지가 있는 100문을 같은 기계에서 돌린 값이라고 합니다. 재현 명령은 <code>python3 tools/eval_quality.py</code> 이고, 문항은 <code>bench/quality-questions.json</code> 입니다. 저는 이 벤치를 다시 돌리지 않았습니다. 아래는 문서에 적힌 숫자입니다.</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th style="text-align: right;">RustXNG</th>
+<th style="text-align: right;">Exa</th>
+<th style="text-align: right;">Tavily</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>hit@1</td>
+<td style="text-align: right;"><strong>79–83</strong></td>
+<td style="text-align: right;">77</td>
+<td style="text-align: right;">34</td>
+</tr>
+<tr>
+<td>hit@5</td>
+<td style="text-align: right;"><strong>92–96</strong></td>
+<td style="text-align: right;">91</td>
+<td style="text-align: right;">79</td>
+</tr>
+<tr>
+<td>MRR</td>
+<td style="text-align: right;"><strong>0.853–0.889</strong></td>
+<td style="text-align: right;">0.840</td>
+<td style="text-align: right;">0.514</td>
+</tr>
+<tr>
+<td>요금</td>
+<td style="text-align: right;"><strong>$0</strong></td>
+<td style="text-align: right;">유료</td>
+<td style="text-align: right;">$8/1k</td>
+</tr>
+<tr>
+<td>요청당 본문</td>
+<td style="text-align: right;"><strong>약 32,000자</strong></td>
+<td style="text-align: right;">약 9,000</td>
+<td style="text-align: right;">약 1,200</td>
+</tr>
+<tr>
+<td>같은 질의의 두 번째</td>
+<td style="text-align: right;"><strong>0.01초</strong></td>
+<td style="text-align: right;">0.6초</td>
+<td style="text-align: right;">약 1초</td>
+</tr>
+<tr>
+<td>첫 질의</td>
+<td style="text-align: right;">0.8–1.6초</td>
+<td style="text-align: right;"><strong>0.6초</strong></td>
+<td style="text-align: right;">약 1초</td>
+</tr>
+</tbody>
+</table>
+<p>읽는 순서가 있습니다.</p>
+<ul>
+<li>범위 79–83은 한 방이 아닙니다. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/COMPARISON-EXA.md">docs/COMPARISON-EXA.md</a>는 대표값으로 hit@1 <strong>79/100</strong>, hit@5 <strong>92/100</strong>, MRR <strong>0.853</strong>을 적고, 같은 설정에서도 hit@1이 <strong>77–84</strong>에서 움직인다고 합니다. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/LOCAL-INDEX.md">docs/LOCAL-INDEX.md</a>의 5,000페이지 로컬 색인 병용은 <strong>83 / 96 / 0.889</strong>입니다. README의 구간은 이 두 줄을 묶은 것에 가깝습니다.</li>
+<li>첫 질의는 Exa보다 느립니다. 빠른 쪽은 캐시가 맞은 반복입니다.</li>
+<li>Google은 이 빌드에서 쓸 수 없다고 문서가 적습니다. WML은 403, HTML은 자바스크립트가 필요하고, 헤드리스 브라우저는 봇으로 막혔다고 합니다. <code>settings.toml</code>에서 <code>google</code> 엔트리에 <code>disabled = true</code>는 없습니다. 켜져 있지만 그들의 측정 환경에서는 결과가 없었다는 뜻입니다.</li>
+<li><a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/BENCHMARK.md">docs/BENCHMARK.md</a> 안에는 더 이른 결론도 남아 있습니다. 100문 4회 평균이 hit@1 <strong>62</strong>로 Exa 74에 못 미친다는 절과, 그 뒤에 "API 키 없이 Exa의 세 지표를 넘었다"(hit@1 81, 재시작 없는 연속 실행)는 절이 같이 있습니다. 한 문서 안에서 결론이 바뀐 기록입니다. 단일 숫자를 제품 보증으로 읽지 말라는 문장도 문서가 스스로 적습니다.</li>
+</ul>
+<p>본문 길이도 층이 있습니다. 코드 상한은 5건 × 8,000자입니다. COMPATIBILITY는 건당 약 4,000자라고 하고, BENCHMARK의 한 표는 raw를 붙였을 때 건당 4,158자, 상위 5건 합의 중앙값을 32,004자라고 합니다. README의 "약 32,000자"는 그 측정값입니다.</p>
+<h2 id="_5">주의할 곳</h2>
+<p><strong>AGPL-3.0-or-later.</strong> NOTICE의 구분은 이렇습니다. 바이너리를 띄우거나 <code>127.0.0.1</code>의 HTTP로만 말하면, 호출하는 프로그램의 라이선스는 호출자 것입니다. 그들이 예로 든 것은 MIT인 rustdsh입니다. 소스를 링크하면 AGPL이 이어지고, 고친 서버를 네트워크 서비스로 돌리면 AGPL 13조가 그 소스 제공을 요구합니다. <a href="https://github.com/firecrawl/firecrawl/pull/5524">firecrawl/firecrawl#5524</a>도 같은 구분을 적습니다. 이 PR은 2026-11-02에 열렸고, 머지되지 않았습니다. 작성자는 2001Y입니다.</p>
+<p><strong>상류 사이트의 조건과 차단.</strong> 메타검색은 질의어를 Bing, Wikipedia, Yahoo! JAPAN 같은 사이트로 보냅니다. README의 "search terms never leave it"는 RustXNG라는 유료 API 사업자에게 안 보낸다는 뜻으로만 맞습니다. 엔진 코드는 그 사이트들로 HTTP를 냅니다. 각 사이트의 이용 조건·로봇 규칙·속도 제한은 그대로 적용되고, 막히면 결과가 비습니다. CHANGELOG 0.24.0은 새 인스턴스 한 번 검색에서 응답 44, 무응답 25(403이 12, CAPTCHA가 7)였다고 적습니다. 막힘을 우회하는 방법은 여기 적지 않습니다. 문서가 말하는 결론은, 프록시를 넣어도 막힘의 일부에만 가능성이 있고 그 환경에서는 해제 효과를 확인하지 못했다는 쪽입니다.</p>
+<p><strong>젊은 트리.</strong> 저장소 생성부터 <code>v0.26.0</code>까지가 2026-10-18에서 11-01입니다. 태그는 <code>v0.1.0</code>부터 <code>v0.26.0</code>까지 있고, 10월 29일부터 11월 1일 사이에 릴리스가 촘촘합니다. API 형태가 이미 여러 번 움직였습니다. 영어 README와 일본어 README, COVERAGE.md의 엔진 개수도 파일을 그대로 세면 어긋납니다. <code>v0.26.0</code>의 <code>settings.toml</code>에는 <code>[[engines]]</code>가 284개이고, 그중 <code>disabled = true</code>가 113줄입니다. 켜진 항목은 171개입니다. README는 "설정 352개, 기본 180개", COVERAGE.md는 "이 이식의 설정 275개, 기본 약 170개"라고 합니다. 352는 그 문서가 상류 SearXNG <code>settings.yml</code>의 엔트리 수로 설명하는 숫자입니다.</p>
+<p><strong><code>language</code> 파라미터.</strong> <code>v0.26.0</code>에서 아직 그렇습니다. <code>SearchParams</code>에는 <code>language</code>가 있지만, <code>run_search</code>는 그 값을 검색에 넣지 않습니다. HTML 페이지 링크에 다시 실을 뿐입니다. 엔진이 읽는 언어는 <code>Query::engine_language</code> 입니다. 순서는 질의 안의 <code>:ja</code> 같은 지정, 그다음 <code>locale</code> 쿼리·쿠키, 둘 다 없으면 글자 범위로 <code>ja</code> 또는 <code>en</code>입니다. 히라가나·가타카나·한자 범위는 있고, 한글(U+AC00–U+D7AF)은 없습니다. 한글만 있는 질의는 이 분기에서 <code>en</code>이 됩니다. <code>SearchRequest.language</code>에 취향 쿠키와 <code>default_lang</code>(설정값은 <code>"auto"</code>)을 넣지만, 엔진 호출부가 이 필드를 읽지는 않습니다. <code>/config</code>의 엔진별 <code>languages</code>와 <code>regions</code>는 빈 배열이고, 주석은 트레이트가 엔진별 언어를 추적하지 않는다고 적습니다. Firecrawl PR도 같은 한계를 알려진 제한으로 적습니다. 그 클라이언트가 보내는 <code>language</code>는 지금 릴리스에서 무시됩니다.</p>
+<p><strong>SSRF 가드의 범위.</strong> <code>include_raw_content</code>와 이미지 프록시는 <code>is_public_url</code>로 <code>http</code>/<code>https</code>가 아닌 스킴, <code>localhost</code>, <code>.local</code>, 리터럴 사설·루프백·링크 로컬 IPv4를 거절합니다. 호스트 이름은 DNS로 풀어 보지 않고 통과합니다. 본문 취득은 시작 URL만 검사한 뒤, reqwest가 리다이렉트(기본 최대 20)를 따라갑니다. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/AI-INFRA.md">docs/AI-INFRA.md</a>는 리다이렉트 포함이라고 적지만, <code>page_text</code>의 검사 위치는 시작 URL입니다. IPv6 쪽 거부는 루프백과 미지정 주소입니다. 기본 바인드는 루프백이고 <code>limiter = false</code>이며, <code>secret_key</code>는 <code>ultrasecretkey</code>라는 자리표시자입니다. 이 기본값으로 인터넷에 열 설정은 아닙니다.</p>
+<p>GitHub 토픽에는 <code>mcp</code>가 있습니다. <code>v0.26.0</code> 트리에서 MCP 서버 구현은 찾지 못했습니다. 붙이는 면은 위의 HTTP입니다.</p>
+<h2 id="_6">팩트 체크</h2>
+<p>✅ 그 문장과 맞는 1차 자료가 있음 / ⚠️ 핵심만 맞거나, 범위가 더 좁거나, 1차 자료가 없음 / ❌ 코드·문서와 어긋남</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>10대 학생이 만들어 오픈소스로 공개했다</td>
+<td>⚠️</td>
+<td>공개 저장소와 AGPL 릴리스는 맞다. <a href="https://github.com/sahenjp">sahenjp</a> 소개는 <em>"a student developer"</em> 이고 위치는 Japan이다. 학생이라는 말은 본인 프로필의 자기 소개이고, 재학을 증명하는 문서는 없다. 10대라는 나이는 프로필·README·NOTICE·릴리스에 없다. <a href="https://sahen.site">sahen.site</a>는 이 글을 쓰는 동안 Cloudflare 확인 페이지라 본문을 읽지 못했다. <a href="https://x.com/studio_yebisu/status/2116899259824124279">원 포스트</a></td>
+</tr>
+<tr>
+<td>로컬 서버만 켜면 되고, API 키와 이용료가 없다</td>
+<td>✅</td>
+<td>기본 검색은 <code>127.0.0.1:8888</code>, 키 없음, 소프트웨어 요금 $0. 선택 엔진 <code>exaapi</code>와 <code>/research</code>의 보고서 모드는 키가 필요하다. 기계 비용과 상류 사이트의 차단은 별도다. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/README.md">README</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/settings.toml">settings.toml <code>[research]</code></a></td>
+</tr>
+<tr>
+<td>검색 결과만이 아니라 페이지 본문도 가져온다</td>
+<td>✅</td>
+<td><code>include_raw_content=1</code>일 때 상위 5건(기본)에 <code>raw_content</code>. 기본 JSON은 스니펫 <code>content</code>만 두고 이 필드를 생략한다. 건당 상한 8,000자. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/COMPATIBILITY.md">COMPATIBILITY</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/aggregator.rs">aggregator.rs <code>page_text</code></a></td>
+</tr>
+<tr>
+<td>캐시를 쓰면 1,000건을 약 3.3초에 모을 만큼 빠르다</td>
+<td>⚠️</td>
+<td>반복 질의 0.01초, 첫 질의 0.8–1.6초는 README에 있다. 첫 질의는 Exa 0.6초보다 느리다. 1,000건·3.3초는 포스트 작성자의 측정이고 저장소에 없다. 한 응답의 <code>max_results</code>는 200에서 잘린다. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/web/handlers.rs">handlers.rs</a></td>
+</tr>
+<tr>
+<td>유료 검색 API에 필적하는 성능을 무료로 낸다</td>
+<td>⚠️</td>
+<td>그들의 100문에서 hit@1 79–83 대 Exa 77은 README가 그렇게 적는다. 같은 문서가 편차, Google 부재, 첫 질의 지연을 같이 적고, BENCHMARK.md의 앞부분은 평균 62로 Exa에 못 미친다고 적었다가 뒤에서 넘었다고 고친다. 독립 재현은 이 글에 없다. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/COMPARISON-EXA.md">COMPARISON-EXA</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/BENCHMARK.md">BENCHMARK</a></td>
+</tr>
+<tr>
+<td>Exa 같은 유료 API를 대체한다</td>
+<td>⚠️</td>
+<td>원 포스트는 "완전히 필요 없어지는지는 모르겠다"고 스스로 한 걸음 물러선다. 제품은 키 없는 대안을 표방한다. Exa의 자기 색인이 아니고, 상류가 막히면 정답 페이지가 결과 집합에 아예 없다. 그 차이를 BENCHMARK가 아키텍처 차이라고 적는다.</td>
+</tr>
+<tr>
+<td>간단한 Deep Research가 들어 있다</td>
+<td>✅</td>
+<td><code>GET /research</code>가 하위 질의, 검색, 본문 수집을 한다. LLM 보고서는 <code>[research].enabled</code>와 <code>api_key</code>가 있을 때이고 기본은 꺼져 있다. 키 없이도 증거 묶음은 반환한다. <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/deep_research.rs">deep_research.rs</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/COMPATIBILITY.md">COMPATIBILITY의 ディープリサーチ</a></td>
+</tr>
+<tr>
+<td>여러 번 치면 보통 말하는 Deep Research가 된다</td>
+<td>⚠️</td>
+<td>인용 포스트의 예상이다. 한 번의 <code>/research</code>는 하위 질의를 최대 10개, 출처를 최대 50개로 자른 한 패스다. 기본은 5와 10이다. 장시간 조사 에이전트의 구현은 아니다.</td>
+</tr>
+<tr>
+<td>데이터를 무제한으로 가져올 수 있다</td>
+<td>❌</td>
+<td>요금 한도가 없다는 뜻과, 가져오는 양에 한도가 없다는 뜻은 다르다. <code>max_results</code>는 200, 본문은 5건×8,000자, 캐시 TTL은 300초, 429면 엔진이 300초 쉬고, 빈 응답이 8번이면 300초 휴식이다. 봇 리미터 코드도 있다(기본 <code>limiter = false</code>, 켜면 창 60초에 30회). 상류 429·CAPTCHA는 CHANGELOG에 측정으로 남아 있다.</td>
+</tr>
+<tr>
+<td>Sahen이 일본어 사용자가 쓰기 비교적 쉬운 DSH의 메인 프로그래머다</td>
+<td>⚠️</td>
+<td><a href="https://github.com/jimoto-no-llm/rustdsh">jimoto-no-llm/rustdsh</a> 기여자 API에서 sahenjp가 1,308, 다음 계정이 388이다(2026-11-02 조회). 기여 수와 "메인 프로그래머"는 같은 문장이 아니고, "메이저 릴리스가 곧"은 이 저장소에서 확인하지 못했다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 로컬에서 키 없이 SearXNG형 JSON을 받고, 파라미터 하나로 상위 페이지 본문을 붙이며, <code>/research</code>로 짧은 증거 수집을 하는 서버는 <code>v0.26.0</code>에 있습니다. 포스트가 가장 크게 나간 두 문장, 10대라는 신원과 무제한 수집은 그 릴리스가 말하지 않습니다. 유료 API와 맞먹는다는 문장은 프로젝트 자신의 100문 hit율이고, 같은 문서가 첫 질의는 더 느리다고 적습니다.</p>
+<h2 id="_7">개발자로서 가져갈 점</h2>
+<ol>
+<li><strong>기본 도구 호출은 <code>format=json&amp;max_results=5&amp;include_raw_content=1</code> 한 줄로 충분하다.</strong> 본문이 없으면 <code>raw_content</code> 키 자체가 없다. 스니펫 <code>content</code>로 폴백하면 된다.</li>
+<li><strong>언어는 <code>language=</code>가 아니라 <code>:ja</code> 또는 <code>locale=</code>로 넘긴다.</strong> Firecrawl의 SearXNG 클라이언트가 보내는 <code>language</code>는 이 릴리스에서 검색 언어가 되지 않는다. 한글만 있는 질의의 자동 판정도 <code>en</code>이다.</li>
+<li><strong>hit@1 79는 데모 숫자가 아니라 편차가 있는 자기 측정이다.</strong> 엔진이 403·CAPTCHA로 빠지는 날에는 순위 가중치로 정답 페이지를 만들어 낼 수 없다. 그 페이지가 후보에 없기 때문이다.</li>
+<li><strong>요금이 0이라는 말과 호출이 무한하다는 말을 섞지 않는다.</strong> 429 서스펜드와 본문 상한이 이미 코드에 있다. 에이전트 루프에는 <code>max_results</code>와 캐시 TTL을 예산으로 넣는 편이 맞다.</li>
+<li><strong>공개하기 전에 바인드, <code>secret_key</code>, 라이선스를 본다.</strong> 기본은 루프백과 자리표시자 키다. 고친 바이너리를 남에게 서비스하면 AGPL 13조가 소스 제공을 요구한다. HTTP로만 부르는 쪽은 NOTICE가 호출자 라이선스를 유지한다고 적는다.</li>
+</ol>
+<h2 id="_8">참고 자료</h2>
+<ul>
+<li>sahenjp/RustXNG <code>v0.26.0</code> (커밋 <code>fef998b</code>) — <a href="https://github.com/sahenjp/RustXNG">저장소</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/README.md">README</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/README.ja.md">README.ja.md</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/CHANGELOG.md">CHANGELOG 0.26.0</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/Cargo.toml">Cargo.toml</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/LICENSE">LICENSE (AGPL-3.0-or-later)</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/NOTICE">NOTICE</a> · <a href="https://github.com/sahenjp/RustXNG/releases/tag/v0.26.0">릴리스</a></li>
+<li>문서 — <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/AI-INFRA.md">AI-INFRA</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/COMPARISON-EXA.md">COMPARISON-EXA</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/BENCHMARK.md">BENCHMARK</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/COMPATIBILITY.md">COMPATIBILITY</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/LOCAL-INDEX.md">LOCAL-INDEX</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/docs/COVERAGE.md">COVERAGE</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/SECURITY.md">SECURITY</a></li>
+<li>코드 — <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/web/handlers.rs">handlers.rs</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/web/feeds.rs">feeds.rs</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/web/image_proxy.rs">image_proxy.rs <code>is_public_url</code></a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/deep_research.rs">deep_research.rs</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/query.rs">query.rs <code>engine_language</code></a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/src/engine/state.rs">engine/state.rs</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/settings.toml">settings.toml</a></li>
+<li>배포 — <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/Dockerfile">Dockerfile</a> · <a href="https://github.com/sahenjp/RustXNG/blob/v0.26.0/.github/workflows/docker.yml">docker 워크플로</a> · <a href="https://github.com/sahenjp/RustXNG/actions/runs/41300228449">GHCR 공개 실행</a> · <code>ghcr.io/sahenjp/rustxng:0.26.0</code></li>
+<li>상류 — <a href="https://github.com/searxng/searxng">searxng/searxng</a></li>
+<li>관련 PR (미머지) — <a href="https://github.com/firecrawl/firecrawl/pull/5524">firecrawl/firecrawl#5524</a>. <code>language</code> 무시와 AGPL 분리 프로세스 설명을 적는다.</li>
+<li>계정 — <a href="https://github.com/sahenjp">sahenjp</a> · <a href="https://github.com/jimoto-no-llm/rustdsh/graphs/contributors">jimoto-no-llm/rustdsh 기여자</a></li>
+<li>원본 X 포스트 — <a href="https://x.com/studio_yebisu/status/2116899259824124279">@studio_yebisu, 2026-11-01</a> · 인용 <a href="https://x.com/rna4219/status/2116903120794263616">@rna4219, 2026-11-01</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
