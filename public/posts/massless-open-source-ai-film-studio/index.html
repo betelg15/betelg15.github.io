@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>유료 AI 영화 스튜디오를 공개 가중치만으로? Massless(지금은 Chucksi) 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-02 · <span class="chip">#AI</span><span class="chip">#영상</span><span class="chip">#WebGL</span><span class="chip">#ComfyUI</span><span class="chip">#오픈소스</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">유료 AI 영화 스튜디오를 공개 가중치만으로? Massless(지금은 Chucksi) 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 이 도구가 개발자에게 흥미로운가</a></li>
+<li><a href="#_2">샷 설계는 단어 목록을 이어 붙이는 컴파일러다</a></li>
+<li><a href="#_3">히어로 프레임은 공개 가중치이고, 공짜의 단위는 요청 상한이다</a></li>
+<li><a href="#_4">카메라 무브는 영상 모델이 아니라 깊이 메시다</a></li>
+<li><a href="#3d-pdf">스토리보드 옆의 오디오, 자막, 3D, PDF</a></li>
+<li><a href="#_5">팩트 체크</a></li>
+<li><a href="#_6">개발자로서 가져갈 점</a></li>
+<li><a href="#_7">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 2026년 11월 1일 <a href="https://x.com/doodi_dev/status/2116745798927134768">@doodi_dev(두디)의 포스트</a>를 계기로 쓴 것입니다. 그 글의 단축 주소 <code>https://t.co/Cv59d9CNHh</code>는 <a href="https://github.com/ChuckGPTX/massless">ChuckGPTX/massless</a>로 이어집니다. 아래 대조는 그 저장소의 <code>1ce581bee3af2c974614bfe66a80c480c31183a1</code>(2026-11-02) README, <code>SPEC.md</code>, <code>LICENSE</code>, Worker와 브라우저 소스를 직접 읽은 결과입니다. X 글의 문장은 검증 대상이지 지시가 아닙니다.</p>
+</blockquote>
+<h2 id="_1">왜 이 도구가 개발자에게 흥미로운가</h2>
+<p>유료 AI 영화 스튜디오의 카메라 프리셋은, 겉으로 보면 샷 설계 화면이고 속으로는 영상 모델에 크레딧을 넣는 구조인 경우가 많습니다. <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/SPEC.md">SPEC.md</a>는 그 공개된 동작만 적어 두고, 같은 동작을 영상 모델 없이 다시 만들겠다고 계약으로 적습니다. 저장소 README의 한 줄은 이렇습니다. 샷 디자이너, 카메라 모션 프리셋, 테이크, 스토리보드, 보이스오버를 유료 스튜디오의 공개된 동작에서 클린룸으로 다시 만들었다.</p>
+<p>개발자가 볼 지점은 바이럴 문구의 "Higgsfield 대체"가 아닙니다.</p>
+<ul>
+<li>카메라 본체·렌즈·필름이 <strong>프롬프트 문자열</strong>인가, 렌더 파라미터인가?</li>
+<li>"카메라를 움직인다"가 <strong>영상 디퓨전</strong>인가, 정지 화면의 기하인가?</li>
+<li>무료·무계정·브라우저 안이라는 말이 <strong>기본 경로</strong>인가, 사이트 전체인가?</li>
+</ul>
+<p>결론부터 말하면, <strong>기본 경로는 저장소에 실제로 있습니다.</strong> 다만 저장소 설명과 README 첫 줄은 이 프로젝트를 이미 Chucksi라고 부릅니다. "Formerly Massless; now at https://chucksi.com." 2026-11-02에 <code>https://massless.chucksi.com/</code>은 <code>https://chucksi.com/</code>으로 이어졌고, 그 주소는 HTTP 200이었습니다. GitHub 저장소 이름은 아직 <code>massless</code>입니다.</p>
+<h2 id="_2">샷 설계는 단어 목록을 이어 붙이는 컴파일러다</h2>
+<p>이미지 페이지의 어휘는 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/data/rig.json"><code>public/data/rig.json</code></a> 한 파일입니다. 카메라 7종(라지 포맷 디지털, 슈퍼 35, 65mm·35mm·16mm 필름, 슈퍼 8, VHS), 렌즈 5종(구면 프라임, 빈티지, 애너모픽, 매크로, 틸트시프트), 조리개 f/1.4·f/2.8·f/5.6·f/11, 필름 스톡 8종. 초점 거리는 연속 슬라이더가 아니라 일곱 스톱입니다. 8, 14, 24, 35, 50, 85, 135mm.</p>
+<p><a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/rig.js"><code>public/js/rig.js</code></a>의 <code>compilePrompt</code>는 주제 문장 뒤에 장르, 샷 크기, 앵글, 카메라, 렌즈, 초점, 조리개, 조명, 스톡, 팔레트의 <code>prompt</code> 필드를 쉼표로 잇고, 마지막에 <code>cinematic film still, high detail, no text</code>를 붙입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">compilePrompt</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="nx">subject</span><span class="p">,</span><span class="w"> </span><span class="nx">sel</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="p">...</span><span class="nx">DEFAULT_SEL</span><span class="p">,</span><span class="w"> </span><span class="p">...</span><span class="nx">sel</span><span class="w"> </span><span class="p">};</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">parts</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">(</span><span class="nx">subject</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="s1">'a lone traveler with a lantern on a desert ridge at dusk'</span><span class="p">).</span><span class="nx">trim</span><span class="p">().</span><span class="nx">replace</span><span class="p">(</span><span class="sr">/[.\s]+$/</span><span class="p">,</span><span class="w"> </span><span class="s1">''</span><span class="p">),</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'genre'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">genre</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'shot'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">shot</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'angle'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">angle</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'camera'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">camera</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'lens'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">lens</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'focal'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">focal</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'aperture'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">aperture</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'light'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">light</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'stock'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">stock</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">pick</span><span class="p">(</span><span class="nx">rig</span><span class="p">,</span><span class="w"> </span><span class="s1">'palette'</span><span class="p">,</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">palette</span><span class="p">).</span><span class="nx">prompt</span><span class="p">,</span>
+<span class="w">    </span><span class="s1">'cinematic film still, high detail, no text'</span><span class="p">,</span>
+<span class="w">  </span><span class="p">];</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="nx">parts</span><span class="p">.</span><span class="nx">filter</span><span class="p">(</span><span class="nb">Boolean</span><span class="p">).</span><span class="nx">join</span><span class="p">(</span><span class="s1">', '</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>같은 파일의 <code>finishFor</code>는 그 선택을 렌더러 파라미터로도 바꿉니다. 카메라의 그레인·게이트 위브·VHS, 렌즈의 할레이션·스트릭·타원 보케, 초점 거리의 <code>distort</code>, 스톡의 채도·틸오렌지·모노. SPEC는 이 점을 "원본 대비 개선"으로 적습니다. 리그는 프롬프트 문장에만 남지 않고, 8/14mm 배럴, 애너모픽 플레어, VHS 스캔라인, 조리개에 따른 깊이 블러로도 들어갑니다.</p>
+<p>ComfyUI로 같은 샷을 뽑는 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/comfy/run_shot.py"><code>comfy/run_shot.py</code></a>는 같은 <code>rig.json</code>으로 프롬프트를 만들고, <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/comfy/massless_shot_flux_schnell.api.json"><code>public/comfy/massless_shot_flux_schnell.api.json</code></a>의 체크포인트 <code>flux1-schnell-fp8.safetensors</code>에 넣습니다. README의 실행 예는 이렇습니다.</p>
+<div class="highlight"><pre><span></span><code>python<span class="w"> </span>comfy/run_shot.py<span class="w"> </span><span class="s2">"a lighthouse keeper on a spiral stair"</span><span class="w"> </span>--camera<span class="w"> </span>16mm<span class="w"> </span>--lens<span class="w"> </span>vintage<span class="w"> </span>--focal<span class="w"> </span><span class="m">24</span><span class="w"> </span>--aspect<span class="w"> </span><span class="m">185</span>
+</code></pre></div>
+
+<p>테이크 수는 이미지 페이지가 1에서 4 사이로 클램프합니다.</p>
+<div class="highlight"><pre><span></span><code><span class="nx">$</span><span class="p">(</span><span class="s1">'#takes-minus'</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'click'</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">state</span><span class="p">.</span><span class="nx">takes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">max</span><span class="p">(</span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="nx">state</span><span class="p">.</span><span class="nx">takes</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">1</span><span class="p">);</span><span class="w"> </span><span class="nx">updateChips</span><span class="p">();</span><span class="w"> </span><span class="p">});</span>
+<span class="nx">$</span><span class="p">(</span><span class="s1">'#takes-plus'</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s1">'click'</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">state</span><span class="p">.</span><span class="nx">takes</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">min</span><span class="p">(</span><span class="mf">4</span><span class="p">,</span><span class="w"> </span><span class="nx">state</span><span class="p">.</span><span class="nx">takes</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mf">1</span><span class="p">);</span><span class="w"> </span><span class="nx">updateChips</span><span class="p">();</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+
+<h2 id="_3">히어로 프레임은 공개 가중치이고, 공짜의 단위는 요청 상한이다</h2>
+<p>기본 모델 id는 <code>flux-1-schnell</code>입니다. Worker <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/src/index.js"><code>src/index.js</code></a>의 이미지 목록은 Cloudflare Workers AI 네 개입니다.</p>
+<table>
+<thead>
+<tr>
+<th>페이지 id</th>
+<th>Workers AI 모델</th>
+<th>카탈로그가 적은 라이선스</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>flux-1-schnell</code></td>
+<td><code>@cf/black-forest-labs/flux-1-schnell</code></td>
+<td>Apache-2.0</td>
+</tr>
+<tr>
+<td><code>sdxl-lightning</code></td>
+<td><code>@cf/bytedance/stable-diffusion-xl-lightning</code></td>
+<td>OpenRAIL++</td>
+</tr>
+<tr>
+<td><code>dreamshaper-8-lcm</code></td>
+<td><code>@cf/lykon/dreamshaper-8-lcm</code></td>
+<td>CreativeML OpenRAIL-M</td>
+</tr>
+<tr>
+<td><code>sdxl-base</code></td>
+<td><code>@cf/stabilityai/stable-diffusion-xl-base-1.0</code></td>
+<td>OpenRAIL++</td>
+</tr>
+</tbody>
+</table>
+<p><code>/api/shot</code>은 그 호출 앞에 KV 카운터를 둡니다. 환경 변수가 없으면 하루 120장, 방문자당 12장입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="kd">const</span><span class="w"> </span><span class="nx">dailyCap</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Number</span><span class="p">(</span><span class="nx">env</span><span class="p">.</span><span class="nx">DAILY_CAP</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="mf">120</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">perVisitor</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Number</span><span class="p">(</span><span class="nx">env</span><span class="p">.</span><span class="nx">PER_VISITOR_CAP</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="mf">12</span><span class="p">);</span>
+</code></pre></div>
+
+<p>README는 이 카운터를 최선의 한도라고 적습니다. 동시 요청이 경합할 수 있고, 모델마다 소모가 다르며, 다른 AI 엔드포인트와 Cloudflare 할당을 나눈다고 합니다. 같은 Worker의 다른 기본 상한은 스크립트용 <code>/api/beats</code> 60/10, PDF 질문 <code>/api/ask</code> 30/8, MeloTTS <code>/api/tts</code> 300/40, Whisper <code>/api/transcribe</code> 120/15입니다. 파일 머리 주석은 이 상한이 하루 10,000 Neurons 무료 한도 안에 두기 위한 것이라고 적습니다. 그 숫자는 이 저장소의 주석이지, 이 글에서 Cloudflare 청구서로 다시 확인한 값은 아닙니다.</p>
+<p>상한에 걸리면 페이지는 백업 엔진으로 넘어갈 수 있습니다. <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/engines.js"><code>public/js/engines.js</code></a>의 Pollinations 호출은 <code>model=sana</code>, 간격 45.5초입니다. 모델 카탈로그는 이 항목의 라이선스 칸에 "NVIDIA's licence, open weights"라고 적습니다. 세 번째 엔진은 방문자의 ComfyUI입니다. <code>--enable-cors-header</code>로 띄운 주소에 위 워크플로를 넣습니다.</p>
+<p>카탈로그에는 멤버용 <code>moss-image-sft</code>도 있습니다. 노트는 "sign in"입니다. <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/docs/WORKFLOWS-CLOUD-MOSS.md"><code>docs/WORKFLOWS-CLOUD-MOSS.md</code></a>는 이 모델을 <code>OpenMOSS-Team/MOSS-Image-SFT</code>(Apache-2.0)로 적고, Runpod 워커를 통해 로그인 사용자에게 제공한다고 적습니다. 기본 버튼의 모델과 멤버 버튼의 모델은 다릅니다.</p>
+<p>런치 페이지의 샘플 스틸은 또 다릅니다. README는 <code>public/media/art</code>의 샘플이 상용 이미지 모델(Higgsfield Soul)로 만들어졌고, 포털 히어로 그림은 OpenAI 이미지 생성이며, 방문자가 실행하는 경로의 출력이 아니라고 적습니다.</p>
+<h2 id="_4">카메라 무브는 영상 모델이 아니라 깊이 메시다</h2>
+<p>영상 페이지의 입력은 스틸 한 장입니다. 생성된 샷이거나, 올린 사진입니다. 깊이는 브라우저의 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/depth.js"><code>public/js/depth.js</code></a>가 맡습니다. 모델 id는 <code>onnx-community/depth-anything-v2-small</code>이고, Transformers.js 4.3.2가 WebGPU(fp16, 그다음 fp32)를 먼저 보고 실패하면 WebAssembly q8로 내려갑니다. 파일 주석은 이미지가 기기를 떠나지 않는다고 적습니다. 모델 로드가 실패하면 <code>heuristicDepth</code>가 바닥 평면과 중앙 융기로 대체합니다.</p>
+<p><a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/renderer.js"><code>public/js/renderer.js</code></a>는 그 깊이로 WebGL2 메시를 만듭니다. 가로 분할은 320입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="nx">_buildMesh</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">gl</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">gl</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">cols</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">320</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">rows</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">max</span><span class="p">(</span><span class="mf">40</span><span class="p">,</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">round</span><span class="p">(</span><span class="nx">cols</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="k">this</span><span class="p">.</span><span class="nx">aspect</span><span class="p">));</span>
+</code></pre></div>
+
+<p>버텍스 셰이더는 각 점을 휴식 카메라의 광선을 따라 밀어 냅니다. 그래서 움직임이 0인 프레임은 원본과 맞게 설계돼 있습니다. 깊이 절벽 위의 삼각형은 잘라 내고, 그 뒤에는 전경을 밀어 낸 배경 레이어를 둡니다. README가 말하는 "늘어난 줄무늬 대신 그럴듯한 배경"은 이 레이어입니다. WebGL2가 없으면 렌더러는 <code>This browser has no WebGL2, which Chucksi needs to move the camera.</code>를 던집니다.</p>
+<p>무브 28개는 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/moves.js"><code>public/js/moves.js</code></a>의 <code>MOVES</code>입니다. 각 항목은 시간 <code>t</code>(0–1)를 <code>{ eye, target, fov, roll, focus, blur }</code>로 바꿉니다. 처음 배열에 14개, <code>MOVES.push</code>로 14개가 더해져 28개입니다. id는 다음과 같습니다.</p>
+<ul>
+<li>푸시: <code>dolly-in</code>, <code>dolly-out</code>, <code>crash-zoom</code>, <code>crash-zoom-out</code>, <code>zoom-in</code>, <code>zoom-out</code>, <code>dolly-zoom</code>, <code>dolly-zoom-in</code>, <code>fpv</code></li>
+<li>오빗: <code>arc-left</code>, <code>arc-right</code>, <code>bullet-time</code>, <code>wide-orbit</code>, <code>snorricam</code></li>
+<li>크레인·틸트: <code>crane-up</code>, <code>crane-down</code>, <code>tilt-up</code>, <code>tilt-down</code></li>
+<li>슬라이드·팬: <code>truck-right</code>, <code>truck-left</code>, <code>pan-left</code>, <code>pan-right</code></li>
+<li>텍스처: <code>breathe</code>, <code>handheld</code>, <code>rack-focus</code>, <code>float</code>, <code>dutch-roll</code>, <code>earthquake</code></li>
+</ul>
+<p>돌리 줌은 카메라가 피벗에서 멀어지는 동안 화각을 좁혀, 피사체의 각크기를 유지합니다. <code>dolly-zoom-in</code>은 같은 함수를 <code>1 - t</code>로 재생합니다.</p>
+<div class="highlight"><pre><span></span><code><span class="nx">fn</span><span class="p">(</span><span class="nx">t</span><span class="p">,</span><span class="w"> </span><span class="nx">ctx</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">b</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">base</span><span class="p">(</span><span class="nx">ctx</span><span class="p">);</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">e</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">ease</span><span class="p">.</span><span class="nx">inOutCubic</span><span class="p">(</span><span class="nx">t</span><span class="p">);</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">zs0</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">b</span><span class="p">.</span><span class="nx">D</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">sSub</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">zs</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">zs0</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="p">(</span><span class="mf">1</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="mf">0.95</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">k</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">e</span><span class="p">);</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">eye</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">b</span><span class="p">.</span><span class="nx">pivot</span><span class="p">[</span><span class="mf">2</span><span class="p">]</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">zs</span><span class="p">];</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">fov</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="mf">2</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">atan</span><span class="p">((</span><span class="nb">Math</span><span class="p">.</span><span class="nx">tan</span><span class="p">((</span><span class="nx">REST_FOV</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">PI</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">360</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">zs0</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nx">zs</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">180</span><span class="p">)</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">PI</span><span class="p">;</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">eye</span><span class="p">,</span><span class="w"> </span><span class="nx">target</span><span class="o">:</span><span class="w"> </span><span class="nx">b</span><span class="p">.</span><span class="nx">pivot</span><span class="p">,</span><span class="w"> </span><span class="nx">fov</span><span class="p">,</span><span class="w"> </span><span class="nx">roll</span><span class="o">:</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">focus</span><span class="o">:</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">focusSub</span><span class="p">,</span><span class="w"> </span><span class="nx">blur</span><span class="o">:</span><span class="w"> </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">blur</span><span class="w"> </span><span class="p">};</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>MP4는 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/recorder.js"><code>public/js/recorder.js</code></a>가 캔버스를 프레임마다 인코드합니다. 우선 경로는 WebCodecs H.264(<code>avc1.640028</code>부터)와 mp4-muxer, 비트레이트 10 Mbps입니다. <code>VideoEncoder</code>가 없으면 캔버스 스트림의 MediaRecorder로 떨어지고, 그때 확장자는 브라우저가 주는 WebM 또는 MP4입니다. 스토리보드 내보내기(<code>exportBoard</code> in <code>public/js/pages/video.js</code>)는 샷마다 <code>duration</code>을 가진 세그먼트를 같은 <code>recordSegments</code>에 넣습니다.</p>
+<p>README와 SPEC의 한계 문장은 이 구조의 결과입니다. 장면 속 인물은 연기하지 않습니다. 정지한 장면 위에서 카메라만 움직입니다. 큰 무브는 전경 뒤의 늘어난 배경을 드러냅니다. 장면 안 움직임용 오픈 비디오 모델은 README 로드맵에 있고, 기본 무브 경로의 모델 목록에는 없습니다.</p>
+<p>그 옆에 로그인 사용자용 GPU 패널이 있습니다. <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/gpu-panel.js"><code>public/js/gpu-panel.js</code></a> 주석은 Video 패널의 네 모드를 Wan 2.2 A14B(Animate), Wan-Animate-2(Motion), Wan 2.2 S2V(립싱크), SeedVR2 7B(업스케일)로 적고, 음악 쪽은 ACE-Step 1.5라고 적습니다. 이 패널은 <code>accessToken</code>이 있는 사용자를 전제로 합니다. 워크플로 문서는 이 잡을 80GB Runpod 워커와 하루 예산(<code>GPU_DAILY_BUDGET_CENTS</code> 기본 500, 사용자당 <code>GPU_PER_USER_DAILY</code> 10)에 연결합니다. 이 글은 그 워커가 2026-11-02에 실제로 과금 중인지까지는 확인하지 않았습니다. 확인한 것은 소스에 그 경로가 있다는 점입니다.</p>
+<h2 id="3d-pdf">스토리보드 옆의 오디오, 자막, 3D, PDF</h2>
+<p>보이스오버의 브라우저 경로는 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/audio-engine.js"><code>public/js/audio-engine.js</code></a>입니다. <code>onnx-community/Kokoro-82M-v1.0-ONNX</code>를 <code>kokoro-js@1.2.1</code>로 불러 오고, 영어 목소리 8개(<code>af_heart</code>, <code>af_bella</code>, <code>af_nicole</code>, <code>am_michael</code>, <code>am_fenrir</code>, <code>am_puck</code>, <code>bf_emma</code>, <code>bm_george</code>)를 고릅니다. 파일 주석은 Kokoro가 기기를 떠나지 않는다고 적습니다. 여섯 언어(영어, 스페인어, 프랑스어, 중국어, 일본어, 한국어)는 MeloTTS이고, Worker가 <code>@cf/myshell-ai/melotts</code>를 호출합니다. 대본만 나갑니다.</p>
+<p>자막은 Whisper입니다. <code>/api/transcribe</code>가 <code>@cf/openai/whisper-large-v3-turbo</code>를 부르고 <code>text</code>와 <code>vtt</code>를 돌려줍니다. 컷 페이지 설명은, 기기를 떠나는 것이 16 kHz 모노 음성이고 Transcribe를 눌렀을 때뿐이라고 적습니다. 단어 삭제와 MP4 재인코딩은 브라우저의 <code>textedit.js</code>와 WebCodecs입니다.</p>
+<p>이미지→3D는 두 갈래입니다. 브라우저 갈래는 Depth Anything V2로 가우시안 스플랫을 만들어 궤도만 돌립니다. 전체 물체 갈래는 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/comfy/idol_server.py"><code>comfy/idol_server.py</code></a>입니다. <code>speridlabs/idol</code>의 <code>IdolPipeline</code>을 불러 오고, <code>torch.cuda</code>가 있으면 그 GPU 이름을, 없으면 <code>CPU</code>를 찍습니다. 코드는 NVIDIA라는 문자열이나 8 GB를 검사하지 않습니다. README 표는 이 경로를 "Your own NVIDIA GPU, about 8 GB"로 적고, 시작 전에 <code>facebook/dinov3-vith16plus-pretrain-lvd1689m</code>과 <code>black-forest-labs/FLUX.2-dev</code> 접근 신청이 필요하다고 적습니다. GPU가 없으면 Idol의 Hugging Face 데모가 내보낸 <code>.ply</code>를 페이지의 Open으로 열 수 있다고도 적습니다.</p>
+<p>PDF는 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/pdf-tools.js"><code>public/js/pdf-tools.js</code></a>가 pdf.js 6.4.299로 읽고 pdf-lib 1.17.1로 씁니다. 내보낸 함수는 이미지↔PDF, 병합, 분할, 회전, 압축, 텍스트 추출, 주석 쓰기입니다. Office 페이지의 편집 도구 id에는 <code>highlight</code>, 글자, 그리기, <code>sign</code>, 노트가 있습니다. "Ask your PDF"는 고른 텍스트를 <code>/api/ask</code>의 Llama 3.3(<code>@cf/meta/llama-3.3-70b-instruct-fp8-fast</code>)으로 보냅니다.</p>
+<h2 id="_5">팩트 체크</h2>
+<p><a href="https://x.com/doodi_dev/status/2116745798927134768">@doodi_dev 포스트</a>의 주장입니다. ✅ 저장소와 맞음 / ⚠️ 핵심은 맞거나 일부만 맞음 / ❌ 저장소와 어긋남. 기준 커밋은 <a href="https://github.com/ChuckGPTX/massless/commit/1ce581bee3af2c974614bfe66a80c480c31183a1"><code>1ce581b</code></a>입니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>유료 AI 영화 스튜디오(Higgsfield 같은)의 기능을 공개 가중치만으로 다시 만든 오픈소스다</td>
+<td>⚠️</td>
+<td>README는 샷 디자이너, 카메라 프리셋, 테이크, 스토리보드, 보이스오버를 공개된 동작에서 클린룸으로 다시 만들었다고 적고, Higgsfield의 코드·프롬프트·에셋·브랜드는 넣지 않았다고 적습니다. <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/SPEC.md">SPEC.md</a>의 계약도 그 범위입니다. 기본 히어로 모델은 FLUX.1 schnell 등 공개 가중치입니다. 같은 사이트에는 로그인 MOSS, 로그인 GPU 패널(Wan 2.2 등), Pollinations 백업이 있고, 샘플 스틸은 Higgsfield Soul·OpenAI로 만들었다고 README가 밝힙니다. 인물이 연기하는 유료 영상 모델의 기능은 기본 무브가 재현하지 않습니다. 제품 이름은 README 기준으로 Chucksi입니다.</td>
+</tr>
+<tr>
+<td>카메라 본체·렌즈·필름을 고르면 프롬프트로 바꿔 준다</td>
+<td>✅</td>
+<td><code>rig.json</code>의 camera, lens, stock과 <code>compilePrompt</code>가 그 문장을 만듭니다. 컴파일 결과는 화면의 <code>#compiled</code>에 들어가고, 사용자가 고치면 <code>state.edited</code>가 됩니다.</td>
+</tr>
+<tr>
+<td>무료 모델로 이미지를 만든다</td>
+<td>⚠️</td>
+<td>기본값은 Workers AI의 FLUX.1 schnell이고, 카탈로그 그룹 이름은 Free입니다. <code>/api/shot</code> 기본 상한은 하루 120장, 방문자 12장입니다. 상한은 README가 최선의 한도라고 적은 KV 카운터입니다. ComfyUI 경로는 자기 GPU입니다.</td>
+</tr>
+<tr>
+<td>그 이미지 위에서 카메라를 움직인다</td>
+<td>✅</td>
+<td>Depth Anything V2 Small과 WebGL2 메시, <code>moves.js</code>의 가상 카메라입니다. 영상 디퓨전이 아닙니다. README 한계: 장면은 얼어 있고 카메라만 움직입니다.</td>
+</tr>
+<tr>
+<td>계정이 필요 없다</td>
+<td>⚠️</td>
+<td>README와 워크플로 문서는 브라우저 도구와 로컬 라이브러리(IndexedDB)를 로그인 없이 쓸 수 있다고 적습니다. 같은 문서가 Supabase 로그인(비공개 프로젝트)을 추가했고, MOSS와 GPU 패널은 사인인을 요구합니다. 호스트 모델은 Turnstile 시크릿 세 개가 있을 때 6시간짜리 쿠키를 요구할 수 있습니다. 그 검사는 시크릿이 없으면 꺼집니다.</td>
+</tr>
+<tr>
+<td>카메라 무브 28가지(돌리 줌, 크래시 줌, 크레인, 불릿 타임 등)를 MP4로 보낸다</td>
+<td>✅</td>
+<td><code>moves.js</code>의 id가 28개이고 그 네 이름이 들어 있습니다. <code>recorder.js</code>는 WebCodecs H.264 MP4를 우선하고, 인코더가 없으면 MediaRecorder(WebM 또는 MP4)로 떨어집니다.</td>
+</tr>
+<tr>
+<td>스토리보드가 있다</td>
+<td>✅</td>
+<td><code>public/js/pages/video.js</code>의 <code>exportBoard</code>가 샷 배열을 한 클립으로 <code>recordSegments</code>에 넣습니다.</td>
+</tr>
+<tr>
+<td>보이스오버가 있다</td>
+<td>✅</td>
+<td>영어 8목소리는 브라우저의 Kokoro-82M입니다. 6개 언어는 상한이 있는 MeloTTS(<code>/api/tts</code>)입니다.</td>
+</tr>
+<tr>
+<td>자막이 있다</td>
+<td>✅</td>
+<td><code>/api/transcribe</code>가 Whisper large-v3-turbo로 <code>text</code>와 <code>vtt</code>를 돌려줍니다. 컷 페이지는 재타이밍한 <code>.srt</code>/<code>.vtt</code>와 번인 자막 MP4를 내보냅니다. 음성(16 kHz 모노)은 Transcribe 때 워커로 갑니다.</td>
+</tr>
+<tr>
+<td>이미지를 3D로 바꿀 수 있다</td>
+<td>✅</td>
+<td>브라우저 깊이 스플랫과, 자기 머신에서 돌리는 Idol <code>.ply</code> 두 경로가 <code>public/js/pages/three-d.js</code>에 있습니다. 전체 물체의 조건은 아래 NVIDIA 행입니다.</td>
+</tr>
+<tr>
+<td>PDF를 편집할 수 있다</td>
+<td>✅</td>
+<td><code>pdf-tools.js</code>가 브라우저에서 pdf.js로 읽고 pdf-lib로 씁니다. 병합·분할·회전·압축·텍스트 추출·주석이 함수로 있고, Office 편집 도구에 하이라이트·텍스트·그리기·서명이 있습니다. 문서에 질문하기는 Llama 3.3 호스트 호출입니다.</td>
+</tr>
+<tr>
+<td>렌즈 범위가 8–135mm다</td>
+<td>✅</td>
+<td><code>rig.json</code>의 focal이 8, 14, 24, 35, 50, 85, 135mm입니다. 양 끝은 그 범위와 같고, 그 사이의 임의 mm는 없습니다.</td>
+</tr>
+<tr>
+<td>프롬프트당 테이크가 최대 4장이다</td>
+<td>✅</td>
+<td><code>public/js/pages/image.js</code>가 <code>takes</code>를 <code>Math.max(1, …)</code>와 <code>Math.min(4, …)</code>로 묶습니다.</td>
+</tr>
+<tr>
+<td>영상 제작과 편집이 브라우저 안에서 돈다</td>
+<td>⚠️</td>
+<td>무브 미리보기, 스토리보드 MP4, 컷 페이지의 단어 삭제·재인코딩은 브라우저(WebGL2, WebCodecs)입니다. 자막용 Whisper와 다국어 TTS는 워커입니다. Wan 영상 생성은 <code>gpu-panel.js</code>의 로그인 호스트 잡입니다.</td>
+</tr>
+<tr>
+<td>라이선스가 MIT다</td>
+<td>✅</td>
+<td>루트 <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/LICENSE">LICENSE</a>는 MIT이고 저작권은 Copyright (c) 2026 Chuck Crawley입니다. 모델·onnx·폰트는 각자 라이선스를 유지합니다. README와 <code>LICENSES/</code>가 Apache-2.0, OpenRAIL, BSD-3-Clause, SIL OFL을 따로 적습니다.</td>
+</tr>
+<tr>
+<td>브라우저 도구는 무료다</td>
+<td>✅</td>
+<td>README 문장과 같습니다. 깊이, 카메라, Kokoro, PDF, 스플랫은 브라우저에서 돌고 호출당 과금 코드가 없습니다.</td>
+</tr>
+<tr>
+<td>호스트 AI에는 하루 한도가 있다</td>
+<td>✅</td>
+<td><code>/api/shot</code> 기본 <code>DAILY_CAP</code> 120, <code>PER_VISITOR_CAP</code> 12이고 beats·ask·tts·asr도 각자 상한이 있습니다. README는 이 상한이 지출 한도를 보장하지 않는다고 적습니다. 로그인 GPU 잡은 별도 하루 예산 변수를 갖습니다.</td>
+</tr>
+<tr>
+<td>3D 물체 전체에는 자기 NVIDIA GPU가 필요하다</td>
+<td>⚠️</td>
+<td>README 표는 Idol을 "Your own NVIDIA GPU, about 8 GB"로 적습니다. <code>idol_server.py</code>는 <code>torch.cuda</code>를 쓰고, 브랜드나 8 GB를 검사하지 않습니다. 브라우저 깊이 스플랫은 이 GPU 없이 동작합니다. README는 GPU가 없을 때 Hugging Face 데모의 <code>.ply</code>를 열 수 있다고 적습니다. Idol 기동 주석은 DINOv3와 FLUX.2-dev 접근 신청을 요구합니다.</td>
+</tr>
+<tr>
+<td>태그에 ComfyUI가 있다</td>
+<td>✅</td>
+<td>포스트 해시태그는 <code>#AI #OpenSource #AIVideo #ComfyUI</code>입니다. GitHub topics는 빈 배열입니다. ComfyUI 연동 자체는 워크플로 JSON과 <code>comfy/run_shot.py</code>에 있습니다. 기본 브라우저 경로는 ComfyUI 없이 Workers AI 또는 Pollinations로 이미지를 받습니다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> "그런 저장소는 없다"로 꺾을 글은 아닙니다. 프롬프트 컴파일, 28개 무브, MP4, 테이크 4장, 8–135mm의 일곱 스톱, MIT, 브라우저 도구, 호스트 일일 상한은 소스에 있습니다. 문장보다 넓은 쪽은 "공개 가중치만", "계정 없음", "영상 제작과 편집이 전부 브라우저 안", "전체 3D는 NVIDIA GPU가 필수"입니다. 기본 카메라 경로는 그 문장과 맞고, 로그인 호스트 영상·멤버 이미지·Idol의 대체 <code>.ply</code>는 그 문장 밖에 있습니다. 그리고 2026-11-02의 README는 이 프로젝트를 Massless가 아니라 Chucksi로 소개합니다.</p>
+<h2 id="_6">개발자로서 가져갈 점</h2>
+<ol>
+<li><strong>샷 설계와 카메라 무브를 다른 층으로 둔다.</strong> 리그는 <code>rig.json</code>에서 프롬프트와 피니시 파라미터로 갈라지고, 무브는 깊이 메시 위의 카메라 함수입니다. 영상 모델 프롬프트에 "dolly zoom"을 쓰는 설계와 다릅니다.</li>
+<li><strong>돌리 줌을 쓸 거면 화각과 거리를 같이 움직인다.</strong> <code>dolly-zoom</code>은 피벗 거리 <code>zs</code>가 늘어날 때 <code>fov</code>를 <code>atan(tan(fov0/2) * zs0 / zs)</code>로 줄입니다. 줌만 바꾸는 <code>zoom-in</code>과 id가 따로 있습니다.</li>
+<li><strong>무료 한도는 기능 플래그가 아니라 엔드포인트별 카운터다.</strong> 이미지 120/12를 다른 호출에 재사용하지 않습니다. TTS, 자막, PDF 질문, 비트 생성은 키가 다릅니다.</li>
+<li><strong>ComfyUI는 태그이자 선택 엔진이다.</strong> 같은 <code>rig.json</code>을 <code>run_shot.py</code>가 읽고 FLUX.1 schnell fp8 워크플로에 넣습니다. 웹 기본 경로는 그 프로세스를 요구하지 않습니다.</li>
+<li><strong>이름을 따라갈 때는 저장소 이름과 README 첫 줄을 같이 본다.</strong> 클론 주소는 <code>ChuckGPTX/massless</code>이고, 문서와 라이브 사이트는 Chucksi(<code>https://chucksi.com</code>)입니다.</li>
+</ol>
+<h2 id="_7">참고 자료</h2>
+<ul>
+<li>ChuckGPTX/massless (문서상의 이름 Chucksi), 기준 커밋 <code>1ce581bee3af2c974614bfe66a80c480c31183a1</code> — <a href="https://github.com/ChuckGPTX/massless">저장소</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/README.md">README</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/SPEC.md">SPEC.md</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/LICENSE">LICENSE</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/data/rig.json">rig.json</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/rig.js">rig.js</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/moves.js">moves.js</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/renderer.js">renderer.js</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/depth.js">depth.js</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/public/js/recorder.js">recorder.js</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/src/index.js">src/index.js</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/comfy/idol_server.py">idol_server.py</a> · <a href="https://github.com/ChuckGPTX/massless/blob/1ce581bee3af2c974614bfe66a80c480c31183a1/docs/WORKFLOWS-CLOUD-MOSS.md">워크플로·MOSS 문서</a></li>
+<li>라이브 사이트 — <a href="https://chucksi.com/">chucksi.com</a> (구 주소 massless.chucksi.com은 여기로 이어짐)</li>
+<li>원본 X 포스트 — <a href="https://x.com/doodi_dev/status/2116745798927134768">@doodi_dev, 2026-11-01</a> (같은 글: <a href="https://x.com/i/web/status/2116745798927134768">https://x.com/i/web/status/2116745798927134768</a>)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
