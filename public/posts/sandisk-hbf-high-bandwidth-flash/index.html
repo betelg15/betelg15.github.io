@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>샌디스크 HBF, 첫 칩 설계가 끝났나? HBM 옆 낸드 스택 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-02 · <span class="chip">#HBF</span><span class="chip">#HBM</span><span class="chip">#NAND</span><span class="chip">#추론</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">샌디스크 HBF, 첫 칩 설계가 끝났나? HBM 옆 낸드 스택 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 추론을 돌리는 사람에게 닿는 이야기인가</a></li>
+<li><a href="#_2">쌓는 그림은 닮았고, 핀은 다르다</a></li>
+<li><a href="#_3">용량, 대역, 지연, 수명</a></li>
+<li><a href="#_4">용량 산수</a></li>
+<li><a href="#_5">팩트 체크</a></li>
+<li><a href="#_6">소프트웨어를 붙일 때 가져갈 점</a></li>
+<li><a href="#_7">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 북마크해 둔 <a href="https://x.com/i/status/2116891412109414454">2026-11-01 한국어 포스트</a>를 계기로 썼습니다. 포스트 본문은 이 환경의 X API가 열지 못해, 리드로 받은 첫 문장만 검증 대상으로 삼았습니다. 그 문장은 "샌디스크가 HBM의 낸드 버전인 HBF의 첫 칩 설계를 마쳤다. HBM은 D램을 여러 층 쌓아 GPU 바로 옆에 붙인 메모리이고, HBF는 같은 방식으로 쌓되 D램 대신 낸드플래시를 쓴다"로 시작합니다. 근거는 <a href="https://investor.sandisk.com/static-files/4ca97b6e-7da4-4d52-b4ac-0e80f462716f">Sandisk 2027 회계연도 1분기 실적 자료</a>(2026-10-29), <a href="https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/collateral/company/Sandisk-HBF-Fact-Sheet.pdf">HBF 팩트시트</a>(2025-07), <a href="https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/corporate/Sandisk-Investor-Day_2025.pdf">Investor Day 2025</a>(표지 날짜 2025-02-11), <a href="https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf">OCP HBF 규격 v0.7.0</a>(2026-08-03), Sandisk·SK hynix 보도자료입니다.</p>
+</blockquote>
+<h2 id="_1">왜 추론을 돌리는 사람에게 닿는 이야기인가</h2>
+<p>추론에서 토큰 하나는 앞선 맥락을 다시 봅니다. Sandisk가 2026-10-29 실적 자료에 적은 표현은, 그 맥락이 쌓인 <strong>KV 캐시가 모델의 작업 메모리</strong>라는 것입니다. 프롬프트가 길어지고, 추론 단계가 늘고, 입력이 이미지나 음성을 포함하면 그 작업 메모리가 커집니다. 가중치도 같이 커집니다. 2025-02-11 Investor Day 슬라이드는 16비트 가중치의 약 1.8조 파라미터 모델을 <strong>3,600GB</strong>로 적습니다.</p>
+<p>HBM은 그 바이트를 GPU 바로 옆에서 넓은 버스로 줍니다. 용량 단가는 크고, 한 패키지에 쌓을 수 있는 D램에는 끝이 있습니다. 모델이 HBM에 다 들어가지 않으면 가중치나 KV를 호스트나 SSD에서 다시 읽어 와야 하고, 그 왕복이 토큰 사이사이에 끼어듭니다. Sandisk CTO Alper Ilkbahar가 회사 블로그 인터뷰에서 한 말은 "모델 전체를 GPU에 넣기에는 메모리가 부족하다"입니다.</p>
+<p>HBF는 그 옆에 두려고 만든 낸드 스택입니다. SK hynix 뉴스룸의 위치 규정은 <strong>HBM과 SSD 사이</strong>입니다. HBM이 가장 빠른 층을 맡고, HBF는 용량을 연산 장치 가까이 붙이는 보강 층입니다. 2026-10-29 슬라이드는 HBF를 장기 재무 모델 밖의 미래 기술로 두면서도, 더 큰 모델과 더 긴 컨텍스트, 늘어나는 KV 캐시를 목표로 적습니다. 같은 자료가 적은 "SSD를 쓴 시스템이 토큰 처리량을 약 3배, 에너지를 약 75% 줄였다"는 문장은 SSD와 휘발성 메모리 비교이고, HBF 측정이 아닙니다.</p>
+<h2 id="_2">쌓는 그림은 닮았고, 핀은 다르다</h2>
+<p>2025-02-11 슬라이드의 HBF 스택은 이렇습니다. 패키지 기판과 인터포저 위에 로직 다이가 있고, 그 위에 코어 다이 16장이 TSV와 마이크로범프로 쌓입니다. GPU, CPU, TPU, SoC는 그 옆에서 PHY로 붙습니다. HBM도 베이스 로직 위에 D램을 쌓아 GPU 옆에 두는 그림으로 나란히 그려져 있습니다.</p>
+<div class="highlight"><pre><span></span><code>GPU / xPU 다이
+    |
+    |  2026-08-03 규격: UCIe 3.0 (x64, 등급별 8/16/32 GT/s)
+    |  2025-02-11 슬라이드: "HBM과 같은 전기 인터페이스, 프로토콜만 소폭"
+    v
++---------------------------+
+| 베이스 다이 (로직)         |  호스트 PHY, 코어 컨트롤러
+| 선택 사항: 스크래치패드    |  뱅크당 4KiB 페이지 캐시 2개(기본)
++---------------------------+
+| NAND 코어 다이 0           |  TSV
+| ...                       |
+| 등급 1은 최대 8단          |
+| 등급 2·3은 최대 16단       |
++---------------------------+
+  인터포저 / 패키지 기판
+</code></pre></div>
+
+<p>같은 슬라이드는 한 줄을 더 적습니다. <strong>HBF는 HBM에 그대로 꽂히지 않는다.</strong> "전기 인터페이스는 같고 프로토콜만 조금 다르다"가 2025년 2월의 문장입니다. 2026년 8월에 나온 OCP 규격 v0.7.0은 호스트 링크를 <strong>UCIe 3.0</strong>으로 적습니다. HBM PHY의 핀 호환을 정의하는 문서가 아닙니다. 규격이 JEDEC를 부르는 곳은 HBM 참고문헌(JESD235D, JESD270-4)입니다. 공개된 HBF 문서의 발행 주체는 Open Compute Project이고, 저자는 Sandisk와 SK hynix입니다. 이 글을 쓰는 시점에 JEDEC 목록에서 HBF 표준 번호는 찾지 못했습니다.</p>
+<p>스택 안에서도 낸드만 있는 것이 아닙니다. 규격의 코어 다이가 낸드이고, 베이스 다이가 호스트 트래픽과 낸드 컨트롤러, UCIe PHY를 갖습니다. 채널 하나는 자기 낸드만 봅니다. 다른 채널의 데이터를 대신 읽지 않습니다. 메모리 일관성(coherency)은 규격 서문이 <strong>non-coherent</strong>라고 적습니다.</p>
+<h2 id="_3">용량, 대역, 지연, 수명</h2>
+<p>회사가 반복하는 용량 문장은 "HBM 대비 8배에서 16배, 대역과 비용은 비슷하다"입니다. 2025-07 팩트시트의 1세대 목표 숫자는 따로 있습니다. 읽기 대역 <strong>1.6 TB/s</strong>, 다이당 <strong>256Gb</strong>, 16단 스택 <strong>512GB</strong>, HBM4와 풋프린트·전력·스택 높이를 비슷하게 맞춘다는 목표입니다. 각주는 <code>1 GB = 10^9</code> 바이트이고, 실제 사용자 용량은 더 적다고 합니다. 2세대는 읽기 2 TB/s 초과와 최대 1 TB, 3세대는 3.2 TB/s 초과와 최대 1.5 TB, 전력은 1세대의 0.8배와 0.64배가 목표입니다. 팩트시트는 사양이 바뀔 수 있다고 적고, 출하 부품의 측정표는 아닙니다.</p>
+<p>OCP 규격은 제품 세대 이름 대신 속도 등급을 적습니다.</p>
+<table>
+<thead>
+<tr>
+<th>등급</th>
+<th style="text-align: right;">표의 최대 사용자 대역</th>
+<th style="text-align: right;">UCIe</th>
+<th style="text-align: right;">모듈 수</th>
+<th style="text-align: right;">모듈당 시스템 대역 (본문)</th>
+<th style="text-align: right;">최대 단수</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td style="text-align: right;">0.384 TB/s</td>
+<td style="text-align: right;">x64, 8 GT/s</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">48 GB/s</td>
+<td style="text-align: right;">8</td>
+</tr>
+<tr>
+<td>2</td>
+<td style="text-align: right;">1.536 TB/s</td>
+<td style="text-align: right;">x64, 16 GT/s</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">94 GB/s</td>
+<td style="text-align: right;">16</td>
+</tr>
+<tr>
+<td>3</td>
+<td style="text-align: right;">3.072 TB/s</td>
+<td style="text-align: right;">x64, 32 GT/s</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">188 GB/s</td>
+<td style="text-align: right;">16</td>
+</tr>
+</tbody>
+</table>
+<p>등급 3의 산수는 표 2에 풀려 있습니다. 채널당 32 GT/s × 64비트는 256 GB/s이고, 16채널이면 raw 4,096 GB/s입니다. AXI 링크 효율 75%를 곱하면 <strong>3,072 GB/s</strong>입니다. 기능 목록은 같은 목표를 "3.072 TiB/s"라고도 씁니다. 규격 용어집의 GB는 10^9 바이트라서, 표의 3,072 GB/s는 10진 3.072 TB/s입니다. 3.072 TiB/s와 같지 않습니다. 본문의 모듈당 188 GB/s × 16은 3,008 GB/s로, 75%를 그대로 곱한 3,072와도 어긋납니다. 등급 2의 94 GB/s × 16 = 1,504 GB/s도 표의 1.536 TB/s보다 작습니다. 등급 1만 48 × 8 = 384 GB/s로 표와 맞습니다. 숫자를 인용할 때는 표 2의 식과 등급 표를 같이 밝히는 편이 맞습니다.</p>
+<p>팩트시트의 1.6 TB/s와 규격 등급 2의 1.536 TB/s는 가까운 숫자이고, 같은 문서의 같은 항목이 아닙니다. 하나는 2025년 7월 제품 목표, 하나는 2026년 8월 인터페이스 등급입니다.</p>
+<p>지연은 공개 자료에 나노초로 적혀 있지 않습니다. 팩트시트 각주는 HBF의 지연과 페이지가 HBM보다 크다고 인정한 뒤, 그 조건에서도 가중치 읽기 시뮬레이션이 견딘다고 설명합니다. 그 시뮬레이션은 Llama 3.1 405B의 8비트 사전학습 가중치를 읽고, 커널은 한 번에 하나, HBM 용량은 무한으로 둔 내부 모델입니다. 회사 블로그가 전하는 차이는 <strong>2.2%</strong>입니다. 용량이 모자라서 생기는 차이는 이 비교에 들어 있지 않습니다. Ilkbahar의 인터뷰 문장은 "추론에서는 지연보다 대역이 중요하다"입니다.</p>
+<p>규격이 적는 읽기 단위는 그 지연을 소프트웨어가 어떻게 숨기는지 보여 줍니다. 읽기는 64바이트 배수, 64바이트 정렬, 4KiB 페이지를 넘지 않습니다. 뱅크마다 4KiB 버퍼가 기본 두 개라서, 세 번째 4KiB가 첫 페이지를 밀어 냅니다. 버퍼에 있으면 바로 주고, 없으면 코어 다이 센스가 붙습니다. 선택 사항인 스크래치패드는 낸드가 아니라 베이스 다이 쪽 메모리이고, 규격은 지연을 L3 캐시 읽기 수준, 응답을 수 사이클이라고 적습니다. 전원 사이클에 내용이 사라집니다. 제품이 이 기능을 넣을지는 규격이 강제하지 않습니다.</p>
+<p>쓰기는 읽기와 다릅니다. 4KiB 정렬, 블록 안에서는 순차, 호스트에는 코어 다이에 기록된 뒤에야 완료가 돌아옵니다. 블록의 0번 페이지를 쓰면 장치가 그 블록을 지웁니다. 규격 11.4절의 문장은 <strong>가비지 컬렉션이 없다</strong>는 것입니다. 살아있는 페이지를 다른 물리 위치로 옮기지 않고, 웨어 레벨링은 주소 재매핑입니다. P/E 상한은 레지스터 <code>MAXPEC</code>(오프셋 0x144)에 있고 값은 제품마다 다릅니다. 공개 규격에 공통 P/E 횟수는 없습니다. 수명 등급은 10년 또는 내구 지표 100% 중 먼저 오는 쪽이고, UBER은 10^-16, MTBF는 2,000만 시간(AFR 0.04%)입니다. 동작 접합 온도는 0°C에서 105°C입니다.</p>
+<p>보존도 낸드 상식과 규격 문장이 갈립니다. 2025-07 팩트시트는 전원이 빠져도 데이터가 남고, 리프레시 전력이 필요 없다고 합니다. 낸드 기능 목록에는 <strong>read refresh 카운터</strong>가 있습니다. 읽기 교란을 세는 장치와 D램의 주기적 리프레시는 다른 메커니즘입니다. 규격 9장의 보증은 더 좁습니다. 전원이 켜져 있을 때 85°C에서 <strong>24시간</strong>입니다. 전원이 꺼지면 그 시간 뒤에는 HBM과 같이 데이터가 남지 않을 수 있고, 영구 저장은 SSD를 쓰라고 합니다. 모델 가중치를 꺼 둔 카드에 영구 저장하는 용도로 읽으면, 팩트시트와 규격이 같은 약속을 하지 않습니다.</p>
+<h2 id="_4">용량 산수</h2>
+<p>아래 곱셈은 슬라이드와 팩트시트의 숫자를 그대로 따른 것입니다. 출하품 용량도, KV 캐시 벤치도 아닙니다. GB는 팩트시트 각주대로 10^9 바이트입니다.</p>
+<div class="highlight"><pre><span></span><code># Investor Day 2025-02-11이 적은 가중치
+1.8e12 param * 2 B = 3,600 GB
+64e9 param * 1 B   = 64 GB
+
+# 팩트시트 2025-07, 1세대
+256 Gb/die * 16 / 8 = 512 GB/스택
+3,600 / 512 = 7.03125     # 8스택(4,096 GB) 안에 3,600 GB가 들어간다
+256 Gb/8 = 32 GB/die
+64 / 32 = 2               # 그 다이 한 장에는 64 GB 가중치가 안 들어간다
+
+# 슬라이드 합계를 스택 수로 나눈 값. 스택당 GB는 슬라이드에 인쇄되어 있지 않다.
+4,096 GB / 8 = 512 GB
+192 GB / 8 = 24 GB
+512 / 24 = 21.333...      # 그림 속 HBM 대비. 슬로건의 8–16배와 다른 비다.
+6 * 512 + 2 * 24 = 3,120  # 혼합 그림의 총량과 같다.
+
+# OCP 밀도 줄은 "512 GiB 또는 그 이상"이다.
+512 GiB = 2^39 B = 549.755... GB
+512 GB  = 512 * 10^9 B = 476.837 GiB
+</code></pre></div>
+
+<p>8스택 4,096GB와 3,600GB는 슬라이드끼리 맞습니다. "HBF 다이 한 장이 8비트 64B 모델 전체를 담는다"는 같은 날의 다른 슬라이드입니다. 다섯 달 뒤 팩트시트의 256Gb 다이는 32GB라서, 그 문장을 1세대 다이 한 장으로 읽으면 64GB가 들어가지 않습니다. 512GB 스택 하나에는 들어갑니다. 슬라이드가 다이라고 부른 것이 스택인지, 이후 다이 용량이 바뀐 것인지는 두 문서가 설명하지 않습니다.</p>
+<p>KV 캐시는 회사 자료에 바이트 공식이 없습니다. 자리만 보기 위한 가정입니다. 층 80, KV 헤드 8, 헤드 차원 128, 요소 2바이트(FP16)이면 토큰당 <code>2 × 80 × 8 × 128 × 2 = 327,680</code> 바이트, 즉 320 KiB입니다. 컨텍스트 128 × 1024 토큰이면 시퀀스당 <strong>40 GiB</strong>입니다. 배치 8이면 320 GiB입니다. 팩트시트의 512 GB 스택은 약 476.8 GiB이므로, 이 가정의 KV만으로도 스택 하나의 상당 부분을 씁니다. 가중치를 같은 스택에 더하면 더 줄어듭니다. 계수를 바꾸면 결과가 바뀌고, 이 식은 HBF의 성능 예측이 아닙니다.</p>
+<p>규격 13.3.3절은 그 둘을 한 존에 섞지 말라고 합니다. 가중치는 읽고 가끔 다시 쓰고, KV는 프리필 때 쓰였다가 디코드 때 읽힙니다. 채널을 반으로 나누면 웨어 레벨링이 단순해지고, 가중치 크기에 맞춰 채널 수를 나누면 용량을 더 씁니다. 가중치를 모든 채널에 인터리브하면 한 번의 읽기 지연 동안 <code>4KiB × N × 16</code> 페이지가 같이 움직입니다. N은 채널 안 뱅크와 플레인의 병렬도이고, 규격은 그 양을 "수백 KiB가 될 수 있다"고만 적습니다.</p>
+<h2 id="_5">팩트 체크</h2>
+<p>리드로 받은 첫 문장을 위 자료와 대조했습니다. ✅ 자료와 맞음 / ⚠️ 방향은 맞거나 일부만 맞음 / ❌ 자료와 어긋남. 포스트의 뒷문장은 이 환경에서 열리지 않아 표에 넣지 않았습니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HBF는 HBM의 낸드 버전이다</td>
+<td>⚠️</td>
+<td>낸드를 연산 장치 가까이 쌓아 대역과 용량을 같이 노린다는 설명은 Sandisk·SK hynix 자료에 있다. SK hynix는 HBM과 SSD 사이의 계층이라고 하고, Sandisk는 HBM을 보강한다고 한다. 2025-02-11 슬라이드는 drop-in이 아니라고 적는다. <a href="https://news.skhynix.com/en/sk-hynix-and-sandisk-begin-global-standardization-ofnext-generation-memory-hbf/">SK hynix, 2026-02-26</a>, <a href="https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/corporate/Sandisk-Investor-Day_2025.pdf">Investor Day</a></td>
+</tr>
+<tr>
+<td>첫 HBF 칩의 설계를 마쳤다</td>
+<td>⚠️</td>
+<td>2026-10-29 자료: 회계 1분기(분기 종료 2026-10-02)에 <strong>첫 HBF 메모리 다이</strong>를 테이프아웃했다. 첫 HBF 기반 제품 샘플은 다음 역년이다. 같은 날 실적 보도자료 본문에는 HBF가 없다. 칩 전체의 설계 완료, 웨이퍼 수령, 샘플 출하는 이 슬라이드에 없다. 같은 콜 녹취에는 베이스 다이(컨트롤러) 테이프아웃이 그 다음 단계로 남아 있다고 적혀 있다. 그 문장은 회사 PDF가 아니라 녹취 매체에 있다. <a href="https://investor.sandisk.com/static-files/4ca97b6e-7da4-4d52-b4ac-0e80f462716f">실적 자료 PDF</a>, <a href="https://investor.sandisk.com/news-releases/news-release-details/sandisk-reports-fiscal-first-quarter-2027-financial-results">실적 보도자료</a>, <a href="https://stockanalysis.com/stocks/sndk/transcripts/725299-q1-2027/">stockanalysis.com 녹취</a></td>
+</tr>
+<tr>
+<td>HBM은 D램을 여러 층 쌓아 GPU 바로 옆에 붙인 메모리다</td>
+<td>✅</td>
+<td>Investor Day 그림이 그 배치다. OCP 규격은 HBM을 JEDEC DRAM 표준으로 인용한다. <a href="https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/corporate/Sandisk-Investor-Day_2025.pdf">Investor Day</a>, <a href="https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf">OCP v0.7.0</a></td>
+</tr>
+<tr>
+<td>HBF는 같은 방식으로 쌓되 D램 대신 낸드를 쓴다</td>
+<td>⚠️</td>
+<td>코어 다이를 베이스 다이 위에 TSV로 쌓고 연산 다이 옆에 두는 그림은 2025-02-11 슬라이드에 있다. 호스트 쪽은 2026-08-03 규격이 UCIe 3.0으로 정의한다. 베이스 다이는 낸드가 아니다. <a href="https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf">OCP v0.7.0 4장</a></td>
+</tr>
+</tbody>
+</table>
+<p>회사 자료에서 숫자로 인용되기 쉬운 문장입니다. 포스트가 이 숫자를 말했는지는 확인하지 못했습니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1세대는 읽기 1.6 TB/s, 다이 256Gb, 16단 512GB이고 HBM4의 풋프린트·전력·높이에 가깝다</td>
+<td>✅</td>
+<td>2025-07 팩트시트의 목표 문장이다. 각주는 10진 GB이고 사용자 용량은 더 적다고 한다. 출하 측정이 아니고 사양은 바뀔 수 있다고 적혀 있다. <a href="https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/collateral/company/Sandisk-HBF-Fact-Sheet.pdf">팩트시트</a></td>
+</tr>
+<tr>
+<td>HBM 대비 용량 8–16배, 대역과 비용은 비슷하다</td>
+<td>⚠️</td>
+<td>팩트시트, 2025-08-06 MOU, OCP 서문이 같은 폭의 목표를 반복한다. 분모가 되는 HBM 용량은 적혀 있지 않다. 2025-02-11 그림의 합계를 나누면 24GB 대 512GB, 약 21배다. <a href="https://www.sandisk.com/company/newsroom/press-releases/2025/2025-08-06-sandisk-to-collaborate-with-sk-hynix-to-drive-standardization-of-high-bandwidth-flash-memory-technology">MOU</a></td>
+</tr>
+<tr>
+<td>무제한 용량 HBM과 성능 차이가 2.2%다</td>
+<td>⚠️</td>
+<td>팩트시트 각주 1의 내부 시뮬레이션 숫자다. Llama 3.1 405B, 8비트 가중치 읽기, 커널 하나, HBM 용량은 무한이다. 용량이 더 들어가서 생기는 이점은 이 비교 밖에 있다.</td>
+</tr>
+<tr>
+<td>메모리 샘플은 2026년 하반기, 추론 장치 샘플은 2027년 초</td>
+<td>⚠️</td>
+<td>2025-08-06 보도자료의 목표다. 2026-10-29 슬라이드는 첫 HBF 기반 제품 샘플을 다음 역년이라고 한다. 샘플을 출하했다는 보도자료는 찾지 못했다. <a href="https://www.sandisk.com/company/newsroom/press-releases/2025/2025-08-06-sandisk-to-collaborate-with-sk-hynix-to-drive-standardization-of-high-bandwidth-flash-memory-technology">2025-08-06</a>, <a href="https://investor.sandisk.com/static-files/4ca97b6e-7da4-4d52-b4ac-0e80f462716f">2026-10-29 PDF</a></td>
+</tr>
+<tr>
+<td>전원이 꺼져도 데이터가 남고 리프레시 전력이 필요 없다</td>
+<td>⚠️</td>
+<td>팩트시트는 그렇게 적는다. OCP 9장은 전원 켜진 상태의 보존을 85°C 24시간으로 보증하고, 꺼진 뒤에는 그 시간을 넘기면 HBM과 같이 남지 않을 수 있다고 하며 SSD를 권한다. 낸드 기능에는 read refresh 카운터가 있다. <a href="https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf">OCP 9장</a></td>
+</tr>
+<tr>
+<td>스택 용량 512 GiB와 512 GB는 같은 양이다</td>
+<td>❌</td>
+<td>규격 용어집의 GiB는 2^30 바이트, GB는 10^9 바이트다. 4.1절은 "512 GiB 또는 그 이상"이고 팩트시트는 512GB(10진)다. 512 GiB는 약 549.8 GB다. SK hynix 2026-08-04 보도자료는 상한을 512GB, 대역을 약 0.4–3.0 TB/s로 반올림해 적는다. <a href="https://news.skhynix.com/en/hbf-at-fms-2026/">SK hynix, 2026-08-04</a></td>
+</tr>
+<tr>
+<td>HBF 표준이 JEDEC에 있다</td>
+<td>❌</td>
+<td>공개 규격은 OCP v0.7.0이다. 2026-02-25 킥오프와 2026-08-03 공개 모두 OCP 워크스트림이다. Google과 Tenstorrent가 그 과정에 참여했다고 보도자료가 적는다. <a href="https://www.sandisk.com/company/newsroom/press-releases/2026/2026-08-03-Sandisk-and-sk-hynix-advance-global-standardization-of-hbf">Sandisk, 2026-08-03</a></td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 낸드를 GPU 옆에 쌓아 HBM보다 큰 용량을 노린다는 방향은 회사 자료와 맞습니다. "첫 칩 설계가 끝났다"에 대해 2026-10-29 회사 PDF가 확인하는 범위는 <strong>메모리 다이 테이프아웃</strong>입니다. 베이스 다이는 같은 콜의 녹취에 다음 단계로 남아 있고, 제품 샘플 문장은 2027년입니다. 1.6 TB/s, 512GB, 8–16배, 2.2%는 목표이거나 각주가 붙은 시뮬레이션입니다. 512GB와 512 GiB는 다른 양입니다.</p>
+<h2 id="_6">소프트웨어를 붙일 때 가져갈 점</h2>
+<ol>
+<li><strong>HBM을 대체하는 주소 공간으로 잡지 않는다.</strong> 규격은 비일관 메모리이고, 읽기 최소 단위는 64바이트, 쓰기 완료 단위는 4KiB다. 낮은 지연이 필요한 핫 데이터는 HBM이나, 제품이 넣었다면 스크래치패드 쪽이다.</li>
+<li><strong>가중치와 KV는 채널을 나눈다.</strong> 장치는 가비지 컬렉션을 하지 않는다. 쓰기 패턴이 다른 데이터를 한 존에 섞으면 내구와 용량이 같이 손해라고 규격이 적는다.</li>
+<li><strong>읽기는 4KiB 페이지와 뱅크 버퍼에 맞춘다.</strong> 버퍼는 뱅크당 두 페이지가 기본이다. 세 번째 페이지가 첫 페이지를 밀어 낸 뒤의 재센스는 호스트가 만들 수 있다.</li>
+<li><strong>용량 숫자의 단위를 문서에서 확인한다.</strong> 팩트시트 512GB, 규격의 512 GiB, Investor Day 그림에서 역산한 24GB HBM은 한 표에 넣으면 안 된다.</li>
+<li><strong>일정의 기준 문장은 2026-10-29 슬라이드다.</strong> 메모리 다이는 테이프아웃되어 제조에 들어갔다는 것이 회사 PDF의 최신 문장이고, 샘플은 다음 역년이다. 2025년 8월의 "2026년 하반기 메모리 샘플"은 그 슬라이드가 반복하지 않는다.</li>
+</ol>
+<h2 id="_7">참고 자료</h2>
+<ul>
+<li>Sandisk, Fiscal First Quarter 2027 Financial Results (2026-10-29, 분기 종료 2026-10-02, HBF 메모리 다이 테이프아웃) — <a href="https://investor.sandisk.com/static-files/4ca97b6e-7da4-4d52-b4ac-0e80f462716f">PDF</a> · <a href="https://investor.sandisk.com/events/event-details/sandisk-first-quarter-fiscal-2027-earnings-call">실적 콜 안내</a> · <a href="https://investor.sandisk.com/news-releases/news-release-details/sandisk-reports-fiscal-first-quarter-2027-financial-results">보도자료</a> (본문에 HBF 없음)</li>
+<li>같은 콜의 녹취 (회사 제출 문서가 아님). 베이스 다이 테이프아웃이 남았다는 문장 — <a href="https://stockanalysis.com/stocks/sndk/transcripts/725299-q1-2027/">stockanalysis.com</a> · <a href="https://www.investing.com/news/transcripts/earnings-call-transcript-sandisk-beats-q1-2027-estimates-shares-fall-93CH-4985403">Investing.com</a></li>
+<li>Sandisk, High Bandwidth Flash 팩트시트 (2025-07) — <a href="https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/collateral/company/Sandisk-HBF-Fact-Sheet.pdf">PDF</a></li>
+<li>Sandisk, Investor Day 2025 (자료 말미 날짜 02.11.25) — <a href="https://documents.sandisk.com/content/dam/asset-library/en_us/assets/public/sandisk/corporate/Sandisk-Investor-Day_2025.pdf">PDF</a></li>
+<li>Sandisk, <em>Scaling the Memory Wall</em> (2025-08-06, Ilkbahar 인터뷰와 2.2% 각주) — <a href="https://www.sandisk.com/company/newsroom/blogs/2025/scaling-beyond-the-wall-inside-sandisks-high-bandwidth-flash-for-ai">블로그</a></li>
+<li>Sandisk, SK hynix와 HBF 규격 MOU (2025-08-06, 메모리 샘플 목표 2026년 하반기) — <a href="https://www.sandisk.com/company/newsroom/press-releases/2025/2025-08-06-sandisk-to-collaborate-with-sk-hynix-to-drive-standardization-of-high-bandwidth-flash-memory-technology">보도자료</a></li>
+<li>Sandisk·SK hynix, OCP 표준화 킥오프 (2026-02-25) — <a href="https://www.sandisk.com/company/newsroom/press-releases/2026/2026-02-25-sandisk-and-sk-hynix-begin-global-standardization-of-next-generation-memory-solution-high-bandwidth-flash-hbf">Sandisk</a> · <a href="https://news.skhynix.com/en/sk-hynix-and-sandisk-begin-global-standardization-ofnext-generation-memory-hbf/">SK hynix</a></li>
+<li>Sandisk·SK hynix, 첫 OCP HBF 기술 규격 공개 (2026-08-03) — <a href="https://www.sandisk.com/company/newsroom/press-releases/2026/2026-08-03-Sandisk-and-sk-hynix-advance-global-standardization-of-hbf">보도자료</a></li>
+<li>SK hynix, FMS 2026에서 HBF 규격 공개 (2026-08-04, 512GB, 약 0.4–3.0 TB/s, UCIe) — <a href="https://news.skhynix.com/en/hbf-at-fms-2026/">뉴스룸</a></li>
+<li>Chinnakrishnan Ballapuram (Sandisk), Dongsop Lee (SK hynix) 외, <em>High Bandwidth Flash (HBF) High-Level Base Die Specification</em>, OCP v0.7.0, 2026-08-03 — <a href="https://www.opencompute.org/documents/ocp-hbf-architecture-specification-v0-7-0-final-pdf">PDF</a></li>
+<li>원본 X 포스트 (리드, 본문 전체는 이 글에서 확인하지 못함) — <a href="https://x.com/i/status/2116891412109414454">status/2116891412109414454</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
