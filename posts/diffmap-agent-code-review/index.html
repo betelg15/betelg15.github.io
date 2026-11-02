@@ -1,0 +1,349 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>AI가 한 번에 1000줄을 바꾸면 사람은 도장만 찍나? diffmap 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-02 · <span class="chip">#AI</span><span class="chip">#코드리뷰</span><span class="chip">#에이전트</span><span class="chip">#diffmap</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">AI가 한 번에 1000줄을 바꾸면 사람은 도장만 찍나? diffmap 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 이 형식이 나왔나</a></li>
+<li><a href="#diffmap">diffmap이 실제로 무엇인가</a></li>
+<li><a href="#_2">스펙 한 장이 담는 것</a></li>
+<li><a href="#_3">펜스: 뷰어가 특별 취급하는 블록</a></li>
+<li><a href="#_4">스킬을 에이전트에게 맡기는 법</a></li>
+<li><a href="#_5">뷰어를 띄우고, 고르고, 나누는 법</a></li>
+<li><a href="#_6">한계</a></li>
+<li><a href="#_7">팩트 체크</a><ul>
+<li><a href="#aburacadabra_-2026-11-01">@aburacadabra_ 포스트 (2026-11-01)</a></li>
+<li><a href="#tanishqk-2026-10-30">@tanishqk 발표 (2026-10-30)</a></li>
+</ul>
+</li>
+<li><a href="#_8">리뷰할 때 가져갈 점</a></li>
+<li><a href="#_9">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 북마크해 둔 <a href="https://x.com/aburacadabra_/status/2116702513218945179">@aburacadabra_(세일러아이리스)의 포스트</a>와, 그 글이 인용한 저자 <a href="https://x.com/tanishqk/status/2116212881125691850">@tanishqk의 발표</a>를 계기로 쓴 것입니다. 포스트 문장은 검증할 주장으로만 다뤘고, 근거는 <a href="https://github.com/tanishqkancharla/diffmap">diffmap 저장소</a>의 README, 스킬 파일, 커밋, npm 패키지입니다. 확인한 커밋은 <code>973e2c9</code>(2026-10-31, "Show images, videos, and Amp-style galleries in specs")입니다.</p>
+</blockquote>
+<h2 id="_1">왜 이 형식이 나왔나</h2>
+<p>코딩 에이전트는 한 브랜치에 사람이 오후 내내 짤 분량의 변경을 올려 둡니다. 리뷰어에게 남는 화면은 파일 경로와 <code>+</code>/<code>-</code> 줄의 긴 목록입니다. 설계가 바뀐 지점과, lockfile이 바뀐 지점이 같은 밀도로 보입니다.</p>
+<p>Tanishq Kancharla의 <a href="https://github.com/tanishqkancharla/diffmap">diffmap</a>은 그 순서를 바꾸자는 제안입니다. 발표 포스트의 문장은 "중요한 설계 변경을 리뷰하게 하고, 거대한 줄 diff는 아니게 한다"입니다. 저장소 README와 <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/src/host/home.md">diffmap.dev의 소스</a>도 같은 두 문장으로 시작합니다.</p>
+<blockquote>
+<p>Your coding agent writes more code than you can review.
+Review the important design changes, not massive line diffs.</p>
+</blockquote>
+<p>줄 diff를 없애는 도구는 아닙니다. 에이전트가 <strong>마크다운 스펙 한 장</strong>을 쓰고, 로컬 뷰어가 그 스펙의 다이어그램·호출 스택·"먼저 볼 파일" 카드를 그린 다음, 카드를 누르면 그때 줄 diff가 옆 패널에 열립니다. 리뷰의 입구가 패치가 아니라 의도라는 뜻입니다.</p>
+<p>결론부터 말하면, <strong>형식·스킬·프롬프트·뷰어는 저장소에 실제로 있습니다.</strong> "1000줄", "거의 아무도 안 읽고 도장만 찍는다"는 측정치가 아니라 수사입니다. "이 스킬을 2개월 넘게 매일 쓴다"는 저자의 진술이고, 공개 git 이력만으로는 그 기간과 매일 사용을 확정할 수 없습니다.</p>
+<h2 id="diffmap">diffmap이 실제로 무엇인가</h2>
+<p>diffmap은 diff 알고리즘이 아닙니다. 세 조각입니다.</p>
+<ol>
+<li><strong>문서 형식.</strong> 에이전트가 쓰는 마크다운 스펙. 계획(planning)과, 이미 올라온 변경의 리뷰(reviewing) 둘 다 이 파일로 합니다. 발표 포스트의 한 줄 정의는 "a new document format for planning and reviewing agent code"입니다.</li>
+<li><strong>에이전트 스킬.</strong> <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/skills/generate-diffmap/SKILL.md"><code>skills/generate-diffmap/SKILL.md</code></a>. 스펙을 어디에 두고, 페이즈를 어떻게 나누고, 커밋이 끝난 뒤 어떤 참조를 고칠지 적혀 있습니다.</li>
+<li><strong>로컬 뷰어이자 CLI.</strong> npm 패키지 <a href="https://www.npmjs.com/package/@tanishqkancharla/diffmap"><code>@tanishqkancharla/diffmap</code></a>. <code>package.json</code>의 description은 "Serve a spec or code walkthrough as a local page"입니다. 2026-11-02에 레지스트리를 조회했을 때 최신 버전은 <strong>0.7.1</strong>(배포 시각 2026-10-30T23:34:53Z)이었습니다.</li>
+</ol>
+<p>저장소 메타데이터(같은 날 GitHub API):</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>값</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>만든 사람</td>
+<td>Tanishq Kancharla. X <a href="https://x.com/tanishqk">@tanishqk</a>. 저작권 표기 "Copyright (c) 2026 Tanishq Kancharla"</td>
+</tr>
+<tr>
+<td>라이선스</td>
+<td><a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/LICENSE">MIT</a></td>
+</tr>
+<tr>
+<td>저장소 생성</td>
+<td>2026-09-10T16:53:28Z</td>
+</tr>
+<tr>
+<td>기본 브랜치 HEAD</td>
+<td><code>973e2c9</code>, 2026-10-31</td>
+</tr>
+<tr>
+<td>설명 필드</td>
+<td><code>big diff energy</code> (발표 문장과는 다른 필드입니다)</td>
+</tr>
+<tr>
+<td>홈페이지</td>
+<td><a href="https://diffmap.dev">diffmap.dev</a></td>
+</tr>
+<tr>
+<td>Star / fork</td>
+<td>206 / 8 (2026-11-02 조회, 이후 변합니다)</td>
+</tr>
+<tr>
+<td>런타임</td>
+<td><code>package.json</code>의 <code>engines.node</code>는 <code>&gt;=22</code></td>
+</tr>
+<tr>
+<td>공개 커밋</td>
+<td>104개, 커밋이 있는 날 19일 (2026-09-10 ~ 2026-10-31)</td>
+</tr>
+</tbody>
+</table>
+<p>커밋 저자 수는 저장소가 어떻게 만들어졌는지도 보여 줍니다. 104개 중 Amp 52, Tanishq Kancharla 36, Cursor Agent 13, tembo[bot] 2, cursor[bot] 1입니다. 개인 저장소이고, 그 안의 상당수는 에이전트 커밋입니다.</p>
+<p>첫 커밋 <a href="https://github.com/tanishqkancharla/diffmap/commit/eb5fba9"><code>eb5fba9</code></a>(2026-09-10) 메시지는 "Extract tkstack package and walkthrough skill"입니다. 공개 이력은 그때 이미 있던 패키지를 꺼내는 장면으로 시작합니다. <code>tkstack</code>이라는 이름의 공개 저장소는 이 계정의 저장소 목록에서 찾지 못했습니다.</p>
+<h2 id="_2">스펙 한 장이 담는 것</h2>
+<p>스킬이 정한 파일 위치는 두 가지입니다.</p>
+<ul>
+<li>진행 중인 작업: <code>specs/&lt;짧은-kebab-이름&gt;.md</code>. 계획이 바뀌고 코드가 착지할 때마다 같은 파일을 고칩니다. 스킬의 말로는 living spec입니다.</li>
+<li>이미 있는 풀 리퀘스트를 설명만 할 때: 그 PR에 스펙이 있으면 그것을 고치고, 없으면 <code>.diffmap/</code> 아래에 새로 씁니다.</li>
+</ul>
+<p>권장 골격은 문제 개요, 해결 개요, 목표와 비목표, 페이즈, <strong>References</strong>입니다. 스킬은 "내용이 각 절에 필요한 것을 정한다"고도 적습니다. 고정된 스키마 파일은 없고, 마크다운 관례입니다.</p>
+<p>페이즈 제목은 계획이면 평범한 제목, 진행 중이면 ⏳, 끝나면 ✅입니다. 각 페이즈는 쓰는 사람 입장에서 <strong>Today</strong>와 <strong>Proposed</strong>로 열고, 설명은 변경의 종류에 맞춥니다. 새 흐름이면 다이어그램과 호출 스택, 리팩터이면 호출 스택 diff, 의존성 올리기면 문장 두 개로 충분하다고 스킬이 말합니다.</p>
+<p>페이즈의 끝에는 <code>changes</code> 펜스가 옵니다. 커밋 전에는 비어 있고, 커밋 뒤에는 SHA와 <strong>리뷰어가 읽을 파일 순서</strong>가 들어갑니다. 스킬이 적는 순서는 보통 사용자에게 닿는 진입점부터입니다. lockfile, 생성 코드, 스냅샷, 기계적인 이름 변경은 목록에서 빼고, 카드가 나머지를 "N other files"로 접습니다. README는 이 카드를 "most important first"라고 부릅니다.</p>
+<p>홈페이지 소스는 역할을 한 문장으로 나눕니다. "코드를 쓰기 전에 에이전트가 스펙을 쓰고, 사람은 계획을 본 다음 페이즈가 착지할 때마다 다시 본다." 발표 포스트에 적힌 프롬프트는 <strong>이미 있는 브랜치</strong>용이고, 홈에는 계획용 문장이 하나 더 있습니다.</p>
+<div class="highlight"><pre><span></span><code>Plan &lt;feature&gt; as a diffmap spec. Use github.com/tanishqkancharla/diffmap
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>Write a diffmap spec for the changes on this branch. Use github.com/tanishqkancharla/diffmap
+</code></pre></div>
+
+<p>두 번째가 저자가 발표 포스트와 README "Try it"에 적은 사용 프롬프트입니다.</p>
+<h2 id="_3">펜스: 뷰어가 특별 취급하는 블록</h2>
+<p>뷰어는 일반 마크다운에 더해, 정보 문자열(fence info)로 블록 종류를 가릅니다. README 표의 핵심만 옮기면 다음과 같습니다.</p>
+<table>
+<thead>
+<tr>
+<th>펜스</th>
+<th>화면에 나오는 것</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mermaid</code></td>
+<td>Mermaid 다이어그램 (beautiful-mermaid)</td>
+</tr>
+<tr>
+<td><code>services</code></td>
+<td>서비스와 상태를 단계로 재생하는 그림. Play, 화살표, 진행 막대</td>
+</tr>
+<tr>
+<td><code>mermaid diff</code>, <code>services diff</code></td>
+<td>오늘만 있는 부분(<code>-</code>, 빨강)과 제안만 있는 부분(<code>+</code>, 초록)을 한 레이아웃에</td>
+</tr>
+<tr>
+<td><code>callstack</code> 또는 <code>└──</code> / <code>├──</code>가 있는 <code>diff</code></td>
+<td>호출 스택. <code>+</code> 행은 새 코드, <code>-</code> 행은 빠지는 코드</td>
+</tr>
+<tr>
+<td><code>diff</code> 또는 <code>diff:path</code></td>
+<td>Pierre 패치 (<a href="https://www.npmjs.com/package/@pierre/diffs"><code>@pierre/diffs</code></a> 1.6.1)</td>
+</tr>
+<tr>
+<td><code>changes</code></td>
+<td>커밋·범위·또는 빈 본문(커밋 안 된 변경)의 파일 카드와 Review 버튼</td>
+</tr>
+<tr>
+<td><code>start:end:path</code></td>
+<td>파일 일부 발췌</td>
+</tr>
+<tr>
+<td><code>html</code></td>
+<td>그 파일에 적힌 HTML. README는 "diffmap은 이를 새니타이즈하지 않는다"고 명시</td>
+</tr>
+</tbody>
+</table>
+<p>줄 강조용 <code>{2-3}</code>, 호버 노트 <code>[!note L3]</code>, 갤러리 <code>:::gallery side-by-side</code> / <code>grid</code> / <code>carousel</code>도 있습니다. 서비스 배치에는 <a href="https://eclipse.dev/elk/">ELK</a>를 쓰고, 마크다운 파서는 <a href="https://github.com/unjs/md4x">md4x</a>입니다. MDC 문법(<code>::mermaid</code>, <code>::callstack</code>, <code>::diff</code>, <code>::changes</code>, <code>::details</code>)도 같은 뷰로 연결됩니다. <code>services</code>만은 들여쓰기가 의미라 MDC 형태가 없다고 README가 적습니다.</p>
+<p>소스 연결은 <code>[[참조]]</code>입니다.</p>
+<ul>
+<li><code>[[src/store.ts#Store.save]]</code> — TypeScript/JavaScript 선언. 이름이 겹치면 한정 이름을 쓰라고 안내합니다.</li>
+<li><code>[[path#L12-L30]]</code> — 아무 언어나 되는 줄 범위.</li>
+<li><code>[[&lt;sha&gt;:path#L12-L30]]</code> — 그 커밋(또는 <code>&lt;sha&gt;..&lt;sha&gt;</code> 범위) 안의 변경. SHA는 소문자 7~40자. 줄 번호는 <strong>커밋 이후 파일</strong> 기준이라, 삭제된 줄은 가리킬 수 없습니다.</li>
+</ul>
+<p>참조가 없는 스택 줄은 약속된 API가 아니라 의사코드입니다. 잘못된 참조, 커밋에 없는 파일, 맞지 않는 줄 범위는 <code>serve</code>와 <code>share</code>가 <strong>기동 시점에 실패</strong>합니다. <code>changes</code>에 적은 파일이 그 커밋의 변경 목록에 없어도 실패합니다. 본문의 "왜"까지 자동으로 대조하지는 않습니다. 검사되는 것은 참조와 파일 목록이 git과 맞는지입니다.</p>
+<p>스킬에 있는 예시 페이즈는 Diffmap 소스가 아니라 지어낸 경로와 SHA입니다. 형식이 한눈에 들어오게 앞부분만 줄였습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="gu">### ⏳ Phase 1: Validate request input</span>
+
+<span class="gs">**Today**</span>
+
+The handler passes records straight to the service. A client that sends an empty name gets a success response.
+
+<span class="gs">**Proposed**</span>
+
+A client that sends an empty name gets an error naming the <span class="sb">`name`</span> field.
+
+<span class="sb">```callstack</span>
+<span class="s"> response = requestHandler(record) [[src/request.ts#requestHandler]]</span>
+<span class="s">-└── return existingService(record) [[src/service.ts#existingService]]</span>
+<span class="s">+├── error = validateInput(record) # reject empty names</span>
+<span class="s">+├── if error: return error</span>
+<span class="s">+└── return result</span>
+<span class="sb">```</span>
+
+<span class="sb">```changes</span>
+<span class="s">a1b2c3d</span>
+<span class="s">src/request.ts</span>
+<span class="s">src/validate.ts</span>
+<span class="sb">```</span>
+</code></pre></div>
+
+<p>서비스 다이어그램은 "누가 어떤 상태를 바꾸며 메시지를 주고받는가"를 단계로 보여 줍니다. README의 로그인 예는 <code>service</code> / <code>state</code> / <code>step</code> / <code>Browser -&gt; API: POST /login</code> 형태이고, <code>&gt;</code> 줄은 그 단계의 설명입니다. diff를 붙이면 같은 상태 키가 오늘 값(취소선)과 제안 값을 나란히 보여 줍니다.</p>
+<h2 id="_4">스킬을 에이전트에게 맡기는 법</h2>
+<p>README의 설치 전 시험은 저장소를 클론하지 않습니다. 변경이 있는 저장소에서 에이전트에 위의 <code>Write a diffmap spec...</code> 문장을 붙입니다. 문장 안의 <code>github.com/tanishqkancharla/diffmap</code>이 에이전트에게 형식의 출처를 알려 줍니다.</p>
+<p>결과물이 마음에 들면 스킬을 설치합니다. 이 명령은 README에 적힌 그대로입니다.</p>
+<div class="highlight"><pre><span></span><code>npx<span class="w"> </span>skills<span class="w"> </span>add<span class="w"> </span>tanishqkancharla/diffmap<span class="w"> </span>--skill<span class="w"> </span>generate-diffmap
+</code></pre></div>
+
+<p>스킬 프론트 매터의 <code>name</code>은 <code>generate-diffmap</code>이고, description은 "planning work, implementing from a spec, updating a spec, or explaining code changes"일 때 쓰라고 되어 있습니다. <code>agents/openai.yaml</code>의 기본 프롬프트는 "Use $generate-diffmap to create and update a living spec..."입니다.</p>
+<p>스킬이 에이전트에게 시키는 순서는 대략 이렇습니다.</p>
+<ol>
+<li>관련 코드를 먼저 읽고, 설계·범위·페이즈 분할이 불명확하면 선택지와 자신의 안을 사용자에게 확인한 뒤에 많이 쓰지 말 것.</li>
+<li>저장소 루트에서 이미 떠 있는 뷰어가 있으면 <code>npx @tanishqkancharla/diffmap list</code>로 URL을 재사용하고, 없으면 <code>npx @tanishqkancharla/diffmap serve specs/&lt;name&gt;.md</code>.</li>
+<li>서버는 켜 둔 채 파일 경로와 URL을 사용자에게 줄 것. 브라우저는 요청받았을 때만 열 것.</li>
+<li>페이즈가 끝나면 코드를 커밋하고, SHA를 <code>changes</code>에 넣고, 읽을 파일을 순서대로 적고, 그 페이즈가 바꾼 참조를 전부 그 커밋으로 돌리고, 제목에 ✅를 달고, <strong>스펙 갱신은 코드 커밋과 따로 커밋</strong>할 것. 스펙이 코드 커밋의 SHA를 이름 붙이기 때문입니다.</li>
+<li><code>serve</code>를 다시 시작해서 커밋 참조 검사를 통과시킬 것.</li>
+</ol>
+<p>UI가 바뀌는 페이즈는 스크린샷을 기본으로 하고, 호버·드래그·전환처럼 정지 화면이 못 담는 것만 15초 안쪽의 영상으로 남기라고 합니다. 경로는 <code>specs/media/&lt;스펙-이름&gt;/</code>. 캡처는 "무슨 일이 일어났는지"이지 동작의 증명은 아니라고, 어떤 검사를 돌렸는지 적으라고 스킬이 못 박습니다.</p>
+<h2 id="_5">뷰어를 띄우고, 고르고, 나누는 법</h2>
+<div class="highlight"><pre><span></span><code>npx<span class="w"> </span>@tanishqkancharla/diffmap<span class="w"> </span>serve<span class="w"> </span>path/to/file.md
+</code></pre></div>
+
+<p>인자만 주면 <code>serve</code>와 같습니다. <code>--port</code>로 포트를 고정하고(기본은 빈 포트), <code>--root</code>로 발췌의 워크스페이스 루트를 바꿉니다. 오른쪽 위의 <strong>Close server</strong>가 서버를 끝냅니다. 페이지나 소스 요청이 24시간 없으면 서버도 멈춥니다. 새로고침은 그 타이머를 리셋하고, 헬스체크와 Vite 연결은 리셋하지 않습니다.</p>
+<p><code>diffmap update</code>(또는 <code>--update</code>)는 전역 설치를 npm / pnpm / bun 가운데 당시 설치에 쓴 도구로 올립니다. <code>npx</code> 아래에서는 설치하지 않고 직접 칠 명령만 출력합니다.</p>
+<p>코멘트는 스펙 파일이 아니라 <strong>브라우저 localStorage(페이지마다)</strong> 에 남습니다. 본문을 드래그해 Comment를 누르거나, diff 거터의 <code>+</code>로 줄 범위를 집습니다. 오른쪽 위의 <strong>Copy comments</strong>가 위치와 인용을 붙인 번호 매긴 마크다운으로 복사해, 에이전트에 붙여 넣게 합니다.</p>
+<p>공유는 실험 기능입니다.</p>
+<div class="highlight"><pre><span></span><code>npx<span class="w"> </span>@tanishqkancharla/diffmap<span class="w"> </span>share<span class="w"> </span>path/to.md
+</code></pre></div>
+
+<p><code>gh</code> 로그인이 필요하고, 로컬 서버는 켜지 않습니다. 결과 주소는 <code>https://diffmap.dev/g/&lt;gistId&gt;</code>입니다. gist는 unlisted이지 private가 아닙니다. 페이지가 브라우저에서 <code>api.github.com</code>으로 gist를 읽습니다. 로컬 이미지·영상이 있으면 <code>share</code>는 실패합니다. gist는 텍스트만 담기 때문에, 미디어는 https URL이어야 합니다. 스킬은 더 나아가, 참조된 커밋의 diff와 커밋 없는 참조가 읽은 파일 내용이 <code>diffmap-changes.json</code>과 <code>diffmap-files.json</code>으로 gist에 들어간다고 합니다. URL을 아는 사람은 그 스냅샷을 읽습니다.</p>
+<p>PR에 커밋된 스펙은 <code>https://diffmap.dev/&lt;owner&gt;/&lt;repo&gt;/pull/&lt;n&gt;/specs/&lt;name&gt;.md</code>로도 열립니다. 이 경로의 커밋 diff는 GitHub API의 패치 hunk라서, 변경 근처 줄만 도달하고 Diff 버튼은 PR의 전체 diff로 이어집니다. 홈이 예시로 거는 Halo 스펙은 다른 형태입니다. <a href="https://github.com/cashew-labs/halo/commit/b01ac5e0633c906efb1d09bf164da46b8bed2b04"><code>cashew-labs/halo</code>의 <code>b01ac5e0</code></a>(2026-10-30, 작성자 ampagent, 메시지 "Add a diffmap walkthrough of shared workspace memory") 안의 <a href="https://github.com/cashew-labs/halo/blob/b01ac5e0633c906efb1d09bf164da46b8bed2b04/.diffmap/shared-workspace-memory.md"><code>.diffmap/shared-workspace-memory.md</code></a>이고, 주소는 <code>https://diffmap.dev/cashew-labs/halo/commit/b01ac5e0633c906efb1d09bf164da46b8bed2b04/.diffmap/shared-workspace-memory.md</code>입니다. 저자 프로필은 Cashew Labs에서 에이전트 운영체제를 만든다고 적혀 있습니다.</p>
+<p>라이브러리로도 열립니다. README의 import는 <code>startServer</code>, <code>parseFence</code>, <code>parseViewerDocument</code>이고, 패키지 exports는 <code>./src/index.ts</code>입니다. 문서 모양의 주인은 스킬이고, 뷰어는 그 모양을 강제하지 않는다고 README가 적습니다.</p>
+<p>릴리스는 <code>main</code>에 푸시한다고 자동으로 npm에 나가지 않습니다. <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/AGENTS.md"><code>AGENTS.md</code></a>는 버전을 올린 커밋이 있어야 <code>Publish to npm</code> 워크플로가 <code>npm stage publish</code>를 하고, npmjs.com에서 메인테이너가 승인해야 공개된다고 합니다.</p>
+<h2 id="_6">한계</h2>
+<p>형식은 리뷰 순서를 바꿀 뿐, 에이전트의 자기 요약을 사실로 만들어 주지는 않습니다. 확인한 범위에서 실용적인 한계는 다음과 같습니다.</p>
+<ul>
+<li><strong>설명의 진실성은 에이전트에게 달려 있습니다.</strong> git이 실패시키는 것은 깨진 참조, 커밋에 없는 <code>changes</code> 파일, 파싱되지 않는 Mermaid입니다. "이 변경의 이유는 이것이다"는 문장은 검사 대상이 아닙니다. 스펙을 읽고 나서도, 카드가 접어 둔 파일은 따로 열어야 합니다.</li>
+<li><strong>줄 diff는 사라지지 않습니다.</strong> 입구가 스펙일 뿐, Review와 파일 행은 Pierre 패널의 패치를 엽니다. "줄 단위 대신"을 "줄 diff 기능이 없다"로 읽으면 저장소와 다릅니다.</li>
+<li><strong><code>html</code> 펜스는 새니타이즈하지 않습니다.</strong> README는 로컬에서 자신이 쓴 파일에만 쓰라고 합니다.</li>
+<li><strong>공유는 실험이고, unlisted는 비밀이 아닙니다.</strong> 이슈 <a href="https://github.com/tanishqkancharla/diffmap/issues/32">#32</a>에서 저자는 gist 공유가 GitHub rate limit과 소스 노출 때문에 "a little unreliable"하다고 적고, Diffmap Cloud는 관심 투표용으로 열어 두었습니다(2026-10-30, 상태 open).</li>
+<li><strong>코멘트는 팀 리뷰 기록이 아닙니다.</strong> 브라우저 localStorage라서 다른 사람 화면이나 스펙 커밋에는 없습니다. Copy comments로 꺼내 에이전트에 붙이는 구조입니다.</li>
+<li><strong>호스티드 뷰어의 소스 패널은 hunk 근처만 봅니다.</strong> 정의로 점프하는 Cmd/Ctrl-클릭은 로컬 뷰어에서만 동작한다고 README가 적습니다.</li>
+<li><strong>Node.js 22 이상</strong>이 <code>engines</code>에 적혀 있습니다. 그 아래 버전에서의 동작은 이 글에서 확인하지 않았습니다.</li>
+<li><strong>프로젝트는 공개된 지 두 달도 안 된 개인 저장소입니다.</strong> 첫 공개 커밋은 2026-09-10이고, npm 0.1.3은 2026-09-16, 0.7.1은 2026-10-30입니다. 스킬 문장과 뷰어가 그 사이에 여러 번 바뀌었습니다. 오늘 읽은 <code>SKILL.md</code>가 다음 주 에이전트가 받는 문서와 같다는 보장은 없습니다.</li>
+</ul>
+<h2 id="_7">팩트 체크</h2>
+<p>북마크한 글과 그 글이 인용한 발표를, 2026-11-02에 읽은 원문과 대조했습니다. ✅ 사실 / ⚠️ 일부만 사실·확인 불가·과장 / ❌ 사실 아님</p>
+<p>확인에 쓴 1차 출처는 <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/README.md">README (<code>973e2c9</code>)</a>, <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/skills/generate-diffmap/SKILL.md">generate-diffmap 스킬</a>, <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/src/host/home.md">홈 소스</a>, <a href="https://github.com/tanishqkancharla/diffmap/commit/eb5fba9">첫 커밋 <code>eb5fba9</code></a>, <a href="https://registry.npmjs.org/@tanishqkancharla/diffmap">npm 레지스트리</a>, <a href="https://x.com/tanishqk/status/2116212881125691850">발표 포스트</a>, <a href="https://x.com/aburacadabra_/status/2116702513218945179">한국어 포스트</a>입니다.</p>
+<h3 id="aburacadabra_-2026-11-01">@aburacadabra_ 포스트 (2026-11-01)</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AI가 고친 코드를 사람이 검토하기 쉽게 만드는 문서 형식이 나왔다</td>
+<td>✅</td>
+<td>저자 발표(2026-10-30)의 정의와 같고, 형식은 <code>SKILL.md</code>와 README 펜스 표로 구현되어 있습니다.</td>
+</tr>
+<tr>
+<td>원래 코드 리뷰는 줄을 하나씩 보는 방식이다</td>
+<td>✅</td>
+<td>통상적인 <code>git diff</code> 설명입니다. diffmap이 측정한 사실은 아닙니다.</td>
+</tr>
+<tr>
+<td>AI가 한 번에 1000줄씩 바꾸고, 그걸 다 읽는 사람은 거의 없어 대충 승인하게 된다</td>
+<td>⚠️</td>
+<td>1000줄이라는 수와 "거의 없다"는 측정은 포스트에도 저장소에도 없습니다. 저자와 README가 말하는 것은 "massive line diffs", "writes more code than you can review"라는 문제 설정입니다.</td>
+</tr>
+<tr>
+<td>줄 단위 대신, 무엇을 왜 바꿨는지·기능이 어떤 순서로 도는지·꼭 봐야 할 변경만 한 장에 정리한다</td>
+<td>⚠️</td>
+<td>방향은 맞습니다. 이유와 순서는 Today/Proposed, <code>services</code>/<code>callstack</code>/<code>mermaid</code>이고, 우선 파일은 <code>changes</code> 카드입니다. 다만 나머지 파일은 삭제되지 않고 "N other files"로 접히고, 줄을 누르면 줄 diff가 열립니다. 골라 담는 주체도 자동 필터가 아니라 스펙을 쓰는 에이전트입니다.</td>
+</tr>
+<tr>
+<td>AI에게 이 변경을 diffmap으로 정리해 달라고 하면 만들어 주는 기능이 있다</td>
+<td>✅</td>
+<td>별도 버튼이 아니라 스킬과 프롬프트입니다. README와 발표에 적힌 문장은 <code>Write a diffmap spec for the changes on this branch. Use github.com/tanishqkancharla/diffmap</code>입니다. 한국어 문장은 그 프롬프트의 풀어쓰기입니다.</td>
+</tr>
+<tr>
+<td>막 나온 개인 프로젝트라 완성도는 기대하지 않는 편이 좋다</td>
+<td>⚠️</td>
+<td>개인 저장소(저작권 개인, 조직 저장소 아님)와 2026-10-30 공개 발표는 맞습니다. 다만 공개 커밋은 2026-09-10부터 있고, 테스트 스크립트·npm 배포·긴 README가 있습니다. 완성도에 대한 직접 근거는 <code>share</code>를 experimental로 단 점과, gist가 불안정하다는 <a href="https://github.com/tanishqkancharla/diffmap/issues/32">이슈 #32</a>입니다. "기대하지 말라"는 조언이지, 저장소가 스스로를 스케치라고 부른 문장은 아닙니다.</td>
+</tr>
+<tr>
+<td>"코드 리뷰는 의도부터 보자"는 아이디어만 가져가도 충분하다</td>
+<td>✅</td>
+<td>아이디어 자체는 발표와 홈의 "Review the important design changes, not massive line diffs"와 같습니다. "가져가도 충분하다"는 글쓴이의 판단입니다.</td>
+</tr>
+</tbody>
+</table>
+<h3 id="tanishqk-2026-10-30">@tanishqk 발표 (2026-10-30)</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>diffmap은 에이전트 코드를 계획하고 리뷰하는 새 문서 형식이다</td>
+<td>✅</td>
+<td>발표 문장과 스킬의 역할(계획, 구현, 스펙 갱신, 변경 설명)이 일치합니다. GitHub 저장소 설명 필드는 따로 <code>big diff energy</code>입니다.</td>
+</tr>
+<tr>
+<td>거대한 줄 diff가 아니라 중요한 설계 변경을 리뷰하게 하려는 것이다</td>
+<td>✅</td>
+<td>README, 홈 소스, 발표가 같은 문장입니다. 줄 diff 패널은 그 다음에 열립니다.</td>
+</tr>
+<tr>
+<td>사용 프롬프트가 <code>Write a diffmap spec for the changes on this branch. Use github.com/tanishqkancharla/diffmap</code>이다</td>
+<td>✅</td>
+<td>발표의 링크는 그 저장소로 풀리고, README "Try it"과 홈 소스에 같은 문장이 있습니다. 홈에는 계획용 <code>Plan &lt;feature&gt; as a diffmap spec...</code>도 있습니다.</td>
+</tr>
+<tr>
+<td>이 스킬을 2개월 넘게 다듬어 왔다</td>
+<td>⚠️</td>
+<td>공개 이력은 2026-09-10 추출 커밋부터 발표일까지 50일입니다. 첫 메시지가 기존 tkstack 패키지 추출이라 그 이전 작업은 있어 보이지만, 공개 저장소에서 그 기간을 세는 커밋은 찾지 못했습니다. 같은 저자의 <a href="https://github.com/tanishqkancharla/calldiff">calldiff</a>(생성 2026-08-07, 에이전트 리뷰용 호출 스택 diff)는 주제가 가깝지만, diffmap 스킬의 전신이라고 적은 커밋은 없습니다.</td>
+</tr>
+<tr>
+<td>큰 기능이나 리팩터마다 매일 쓴다</td>
+<td>⚠️</td>
+<td>본인 진술입니다. diffmap 저장소 자체는 2026-09-10부터 2026-10-31까지 19일에만 커밋이 있습니다. 다른 저장소에서의 매일 사용은 이 이력으로 확인되지 않습니다. 발표 당일 Halo 저장소에 워크스루 커밋이 하나 있는 것은 확인됩니다.</td>
+</tr>
+<tr>
+<td>이제야 공개하게 되어 기쁘다</td>
+<td>✅</td>
+<td>발표일은 2026-10-30입니다. 저장소 <code>created_at</code>은 2026-09-10이라, "공개"가 저장소 생성과 같은 날인지는 이 API만으로 확정하지 못했습니다. 발표 시점의 자기 서술은 그 포스트에 있습니다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 한국어 포스트의 핵심(한 장의 스펙, 에이전트에게 시키면 나온다, 의도부터 본다)은 저장소와 맞습니다. 어긋나는 부분은 1000줄이라는 수, "꼭 봐야 할 것만 남긴다"는 강한 표현, 그리고 완성도에 대한 조언입니다. 저자 포스트에서 공개 이력과 안 맞는 것은 "2개월 넘게"와 "매일"이고, 둘 다 거짓으로 단정할 자료는 없습니다. ❌로 닫을 주장은 없었습니다.</p>
+<h2 id="_8">리뷰할 때 가져갈 점</h2>
+<ol>
+<li><strong>프롬프트 한 줄로 시험할 수 있습니다.</strong> 설치 전에 README의 <code>Write a diffmap spec for the changes on this branch...</code>를 지금 브랜치에 붙여 보면, 스킬이 말하는 페이즈·Today/Proposed·<code>changes</code> 카드가 나오는지가 바로 보입니다.</li>
+<li><strong>스펙은 리뷰의 목차이고, 패치의 대체물이 아닙니다.</strong> <code>changes</code>에 적힌 순서대로 보고, 접힌 "N other files"은 생성 파일인지 아직 사람이 볼 변경인지 한 번은 구분하는 편이 맞습니다. 그 구분을 에이전트가 이미 했다고 가정하는 순간 이 형식의 구멍이 열립니다.</li>
+<li><strong>공유 링크를 보내기 전에 스냅샷 범위를 보세요.</strong> unlisted gist에는 참조된 파일 내용이 들어갈 수 있고, 로컬 미디어는 그 경로로 나가지 않습니다. 팀 공유가 필요하면 저자가 이슈 #32에 적어 둔 한계(rate limit, 소스 노출)를 같이 보는 것이 맞습니다.</li>
+</ol>
+<h2 id="_9">참고 자료</h2>
+<ul>
+<li>Tanishq Kancharla, diffmap — <a href="https://github.com/tanishqkancharla/diffmap">GitHub</a> · <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/README.md">README @ <code>973e2c9</code></a> · <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/skills/generate-diffmap/SKILL.md">스킬</a> · <a href="https://github.com/tanishqkancharla/diffmap/blob/973e2c9/src/host/home.md">홈 소스</a> · <a href="https://github.com/tanishqkancharla/diffmap/commit/eb5fba9">첫 커밋 <code>eb5fba9</code></a> · <a href="https://diffmap.dev">diffmap.dev</a></li>
+<li>npm <code>@tanishqkancharla/diffmap</code> — <a href="https://www.npmjs.com/package/@tanishqkancharla/diffmap">패키지</a> · <a href="https://registry.npmjs.org/@tanishqkancharla/diffmap">레지스트리</a> (조회일 2026-11-02, 최신 0.7.1)</li>
+<li>이슈 #32, "Diffmap Cloud hosting solution" — <a href="https://github.com/tanishqkancharla/diffmap/issues/32">링크</a></li>
+<li>홈이 예시로 거는 Halo 워크스루 — <a href="https://github.com/cashew-labs/halo/commit/b01ac5e0633c906efb1d09bf164da46b8bed2b04">커밋 <code>b01ac5e0</code></a> · <a href="https://github.com/cashew-labs/halo/blob/b01ac5e0633c906efb1d09bf164da46b8bed2b04/.diffmap/shared-workspace-memory.md">스펙</a></li>
+<li>원본 X 포스트: <a href="https://x.com/tanishqk/status/2116212881125691850">@tanishqk의 발표</a> · <a href="https://x.com/aburacadabra_/status/2116702513218945179">@aburacadabra_의 한국어 요약</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
