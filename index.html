@@ -8,7 +8,8 @@
 <link rel="stylesheet" href="assets/code.css">
 </head><body>
 <header class="site"><a class="brand" href="index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
-<main><h1 class="title">글 목록</h1><ul class="list"><li class="card"><a href="posts/libreyolo-image-to-3d-gaussian-splat/index.html">
+<main><h1 class="title">글 목록</h1><ul class="list"><li class="card"><a href="posts/freetoken-consumer-gpu-giant-models/index.html">
+<p class="meta">2026-11-04</p><h2>게이밍 PC가 284B를 돌리나? FreeToken 논문 팩트 체크</h2><p>FreeToken(arXiv:2608.16157 v1)은 MoE 전문가 풀을 호스트 RAM에 두고 GPU VRAM은 LRU 캐시로 씁니다. 8GB RTX 4060 노트북의 39.3 tok/s는 Qwen3.6 NVFP4이고, 284B의 22–25 tok/s는 임대 제온 서버의 RTX 5090에 적혀 있습니다.</p></a></li><li class="card"><a href="posts/libreyolo-image-to-3d-gaussian-splat/index.html">
 <p class="meta">2026-11-02</p><h2>세 줄이면 사진이 3D 가우시안 스플랫이 되나? LibreYOLO 1.7.0 Idol 팩트 체크</h2><p>LibreYOLO 1.7.0의 LibreGen은 Speridlabs Idol로 물체 한 장을 3DGS .ply로 저장한다. 문서의 최소 예시는 세 문장이고 Idol 가중치는 Apache-2.0이지만, 같이 받는 DINOv3는 그 라이선스가 아니고 사진 기본 모드는 synthetic이다.</p></a></li><li class="card"><a href="posts/infernix-cuda-llm-inference-engine/index.html">
 <p class="meta">2026-11-02</p><h2>Infernix는 RTX 5090에서 활성화를 16비트로 지키나? Qwen3.8 TTFT 팩트 체크</h2><p>Infernix main은 Qwen3.8을 RTX 5090 한 장에서 돌리는 C++/CUDA 엔진이다. 벤치마크된 NVFP4 기본값은 expert 활성화가 4비트이고, Basalt 대비 4–8배 TTFT와 --a8-activations의 정확도 유지는 그 표와 맞지 않는다.</p></a></li><li class="card"><a href="posts/byod-ar-to-diffusion-lm/index.html">
 <p class="meta">2026-11-02</p><h2>LoRA 몇 시간이면 디퓨전 언어모델이 되나? BYOD 논문 팩트 체크</h2><p>BYOD(arXiv:2610.41574)는 Gemma 2 9B, Llama 3.1 8B, Qwen2.5 7B, Ministral 8B를 랭크 1024 Q/V LoRA만으로 마스크드 디퓨전 생성기로 바꿉니다. 같은 하니스에서 BYOD-Gemma 평균 50.6%는 LLaDA 51.9% 옆이지만, 부모 AR보다 낮고 추론 가속은 재지 않았습니다.</p></a></li><li class="card"><a href="posts/scientisttwo-autonomous-research-agents/index.html">
