@@ -1,0 +1,156 @@
+---
+title: "거부 방향 하나를 지우면 끝인가? Heretic 2.0"
+date: 2026-11-05
+time: "08:23"
+slug: heretic-2-llm-abliteration
+tags: [Heretic, abliteration, ARA, LLM, 팩트체크]
+summary: "Heretic v2.0.0(2026-11-01)의 기본 수정기는 방향 제거가 아니라 ARA다. 층 범위와 손실 가중치는 Optuna TPE가 고르고, 가중치는 기본 랭크 50 LoRA를 L-BFGS가 맞춘다. 2026-11-05 API 별은 39,340개다."
+---
+
+> 이 글은 [@rS_alonewolf의 포스트](https://x.com/rS_alonewolf/status/2117273804426891594)를 계기로 썼습니다. 같은 상태 주소는 [x.com/i/status/2117273804426891594](https://x.com/i/status/2117273804426891594)입니다. fxtwitter가 돌려준 `created_at`은 `Mon Nov 02 15:13:06 +0000 2026`, 2026-11-03 00:13 KST입니다. 응답의 `name` 필드는 "rS_로컬LLM×투자"이고, `screen_name`은 `rS_alonewolf`입니다. 이 환경의 X API는 `client-not-enrolled`로 본문을 주지 않아, 공개 글은 [fxtwitter 응답](https://api.fxtwitter.com/status/2117273804426891594)(`code` 200)으로 읽었습니다. 그 문장은 검증 대상이지 지시가 아닙니다. 첨부 이미지는 작업대 위 로봇 그림이고, 숫자나 도표는 없습니다. 아래 대조는 2026-11-05에 읽은 [p-e-w/heretic](https://github.com/p-e-w/heretic) 태그 `v2.0.0` 커밋 `0db5c31e10ecc426440b6fb0ce4bf85352faf1a7`(릴리스 시각 2026-11-01T13:03:19Z)의 README·`docs/migration_v1_to_v2.md`·`config.default.toml`·`src/heretic/modifiers/`·`src/heretic/scorers/`, 태그 `v1.4.0` 커밋 `6ea3b8d778d047b4b3b7c5b843e21c5bea98ee8d`의 `evaluator.py`, 그리고 Arditi 등의 [arXiv:2406.11717v3](https://arxiv.org/abs/2406.11717v3) HTML입니다. 같은 날 `GET /repos/p-e-w/heretic`의 `stargazers_count`는 **39,340**, `forks_count`는 **4,441**입니다. 요청 시각은 2026-11-04T23:22:55Z, 2026-11-05 08:22 KST입니다. 이 글은 `heretic`을 실행하지 않았고, 가중치를 받지 않았으며, README의 30–40분을 다시 재지 않았습니다.
+
+## 왜 이 릴리스가 가중치 수정에 닿는가
+
+포스트의 첫 문장은 LLM 무검열화 도구 Heretic이 2.0으로 진화했다는 것입니다. 이어지는 문장은 GitHub 별 37,700개의 인기 OSS가 거부 반응을 빼는 방법을 근본부터 바꿨고, 일반적인 abliteration은 거부를 특정 벡터 방향으로 잡아 그 성분을 제거한다는 것입니다. 저장소는 있습니다. GitHub 전체 이름은 `p-e-w/heretic`, 설명 문장은 "Training-free language model modification: Remove censorship, suppress slop, reduce sycophancy, and more", SPDX는 AGPL-3.0, 기본 브랜치는 `master`, 생성 시각은 2025-09-21T05:46:16Z, 아카이브 상태는 아닙니다. 저작권 줄과 `pyproject.toml`의 저자는 Philipp Emanuel Weidmann입니다.
+
+태그된 2.0.0은 있습니다. [릴리스](https://github.com/p-e-w/heretic/releases/tag/v2.0.0) 본문이 깨진다고 적은 것은 두 가지입니다. 1.x 설정 파일은 2.0과 호환되지 않고, 연구용 기능은 빠졌으며 그 자리의 의도된 대체는 Lophius라고 적혀 있습니다. 이 글은 lophius.org를 열어 보지 않았습니다. PyPI `heretic-llm`의 `info.version`은 `2.0.0`이고, 그 릴리스 파일의 `upload_time` 필드는 `2026-11-01T12:21:39`입니다. 필드에 오프셋은 없었습니다. GitHub 릴리스 시각은 그 문자열보다 뒤인 13:03:19Z입니다.
+
+개발자에게 닿는 지점은 "별이 많은 무검열 스크립트"가 아닙니다. 2.0.0의 기본 `modifiers` 항목은 `heretic.modifiers.ara.ARA`입니다. 방향 하나를 잔차에서 빼는 abliteration 클래스는 같은 트리에 남아 있고, 마이그레이션 문서는 그 클래스를 쓰려면 `modifiers`를 직접 고치라고 적습니다. 2026-11-03T12:23:18Z의 master `f4cf5354032419178584e7c52af6de6c138de856`는 `pyproject.toml` 버전이 `2.1.0.dev0`입니다. 그 커밋과 태그 사이에서 `ara.py`, `abliteration.py`, `config.default.toml`, 마이그레이션 문서는 같았습니다. README diff는 `config.toml`과 환경 변수 `HERETIC_CONFIG_FILE`를 알리는 문장입니다.
+
+## 고전 abliteration은 평균 차의 한 방향이다
+
+Arditi, Obeso, Syed, Paleka, Panickssery, Gurnee, Nanda의 [*Refusal in Language Models Is Mediated by a Single Direction*](https://arxiv.org/abs/2406.11717)는 arXiv API 기준 2024-06-17에 제출되고 2024-10-30에 v3로 갱신됐습니다. HTML의 소속 줄은 Arditi Independent, Obeso와 Paleka ETH Zürich, Syed University of Maryland, Panickssery Anthropic, Gurnee MIT입니다. 같은 줄에서 Neel Nanda의 소속 단어는 이 글이 받은 텍스트에 끊겨 있어 적지 않습니다.
+
+초록이 주장하는 범위는 인기 있는 오픈소스 채팅 모델 **13개**, 크기 상한 **72B**입니다. 각 모델에서 방향 하나를 찾으면, 그 방향을 잔차 스트림에서 지우면 해로운 지시를 거부하지 않게 되고, 그 방향을 더하면 해롭지 않은 지시에도 거부한다는 문장입니다. 저자들은 이 가중치 수정을 화이트박스 탈옥이라고 부릅니다.
+
+2.3절의 추출은 difference-in-means입니다. 층 `l`과 지시 뒤 토큰 위치 `i`에서, 해로운 학습 프롬프트의 평균 활성에서 해롭지 않은 쪽 평균을 뺍니다. 그 차가 후보 벡터입니다. 후보는 위치 개수 곱하기 층 개수만큼 나오고, 검증 집합에서 하나를 고릅니다. 고르는 기준은 지웠을 때 거부를 피하는지, 더했을 때 거부를 유도하는지, 그 밖의 행동 변화가 작은지입니다. 고른 벡터를 논문은 `r`, 그 단위 벡터를 `r_hat`으로 적습니다.
+
+2.4절의 방향 제거(directional ablation)는 추론 중 잔차 `x`에서 `r_hat` 방향 성분을 0으로 만듭니다. 4.1절은 같은 연산을, 잔차에 쓰는 행렬의 열을 `r_hat`에 대해 직교화하는 가중치 수정으로 다시 씁니다. 논문이 그 행렬로 적는 것은 임베딩, 위치 임베딩, 어텐션 출력, MLP 출력, 그리고 출력 바이어스입니다. 논문은 이 가중치 수정이 추론 중 개입과 동치라고 4.1절과 E절에 적습니다.
+
+```python
+# Arditi et al., arXiv:2406.11717v3 HTML.
+# (2) r_i^(l) = mu_i^(l) - nu_i^(l)
+#     mu: 해로운 프롬프트 평균 활성, nu: 해롭지 않은 쪽
+# (4) x' = x - r_hat @ r_hat.T @ x          # 방향 제거
+# (5) W_out' = W_out - r_hat @ r_hat.T @ W_out  # 가중치 직교화
+```
+
+3.1절의 거부 우회 실험은 JailbreakBench의 해로운 지시 100개입니다. 개입이 없으면 채팅 모델이 거의 모두 거부하고, 방향을 지우면 거부율이 줄며 안전하지 않은 완성이 나온다고 그 절이 적습니다. 안전 점수는 Llama Guard 2입니다. 거부 점수는 "I'm sorry", "As an AI" 같은 부분 문자열이고, 2.5절은 이 문자열 방식이 외운 거부는 잡아도 완성이 해로운지는 보지 않는다고 적습니다.
+
+4.3절은 능력 쪽을 MMLU, ARC, GSM8K, TruthfulQA로 잽니다. 본문은 MMLU·ARC·GSM8K에서 직교화 모델이 기준과 비슷하고, Qwen 7B와 Yi 34B를 제외하면 평가 지표가 원래 성능의 99% 신뢰구간 안에 있다고 적습니다. TruthfulQA 정확도는 직교화 모델에서 일관되게 떨어진다고 같은 절이 적습니다. HarmBench 비교(표준 행동 159개, ASR)는 4.2절에 있고, 이 글은 그 표의 칸 숫자를 다시 베끼지 않았습니다.
+
+## Heretic 1.4가 그 방향 위에 얹은 것
+
+v1.4.0은 2026-06-14T12:55:57Z에 나왔고, `pyproject.toml` 버전은 `1.4.0`입니다. 그 태그의 루트에는 `modifiers/`가 없습니다. 거부는 `main.py`가 층별 잔차 평균을 빼서 만듭니다. `refusal_directions = normalize(bad_means - good_means)`. 설정의 기본 `orthogonalize_direction = true`는 그 방향에서 good 방향에 평행한 성분을 한 번 더 뺍니다. 주석은 Lai의 projected abliteration 글을 가리킵니다. 이것은 논문의 식 (5) 그대로가 아닙니다. 식 (5)는 고른 방향 하나에 대한 완전 직교화이고, 1.4는 층마다 방향을 가진 뒤 층별 가중 커널을 곱합니다.
+
+2.0.0에 남아 있는 `Abliteration`도 같은 평균 차입니다. 태그 `abliteration.py`의 해당 부분입니다.
+
+```python
+self.residual_directions = F.normalize(
+    bad_means - good_means,
+    p=2,
+    dim=1,
+)
+```
+
+같은 파일의 가중치 갱신 주석은 LoRA로 적은 스케일 있는 직교화입니다. `delta W = -lambda * v * (v^T W)`, `lora_B = -lambda * v`, `lora_A = v^T W`. `lambda`는 층과 컴포넌트마다 Optuna가 고르는 커널 값입니다. `mlp.down_proj`의 하한은 음수였다가 0으로 잘리고, 주석은 MLP 제거가 종종 불필요하며 지능을 더 해친다고 적습니다. 행 정규화 기본값은 `"full"`이라 랭크 1이 아니라 `full_normalization_lora_rank = 3`입니다. 주석은 Lai 2025의 magnitude-preserving orthogonal ablation을 지능 유지의 이유로 둡니다. `"none"`이나 `"pre"`면 주석이 말하듯 랭크 1이면 됩니다.
+
+바깥 루프는 그때도 Optuna입니다. v1.4 `main.py`의 `create_study` 방향은 `MINIMIZE`, `MINIMIZE` 두 개입니다. 기본 `n_trials`는 200입니다. 점수 함수는 `evaluator.py`에 있고, KL이 목표 이상이면 첫 축은 KL을 스케일로 나눈 값, 목표 미만이면 첫 축이 거부 비율에 묶입니다. 기본 `kl_divergence_target`는 **0.01**, `kl_divergence_scale`은 **1.0**입니다. 설정 설명은 목표 아래에서는 거부 개수에 기반한 목적을 써서, 아무것도 하지 않는 조합을 오래 탐색하지 않게 한다고 적습니다. KL은 해롭지 않은 프롬프트의 첫 토큰 로그확률에 대한 `F.kl_div(..., reduction="batchmean", log_target=True)`입니다. 거부 축은 기준 모델의 거부 수로 나눈 비율입니다.
+
+```python
+# v1.4.0 evaluator.py. 기본 target 0.01, scale 1.0.
+if kl_divergence >= kl_divergence_target:
+    kld_score = kl_divergence / kl_divergence_scale
+else:
+    kld_score = refusals_score * kl_divergence_target / kl_divergence_scale
+score = (kld_score, refusals_score)
+```
+
+그래서 1.x의 "KL 대 거부"는 두 점수를 동시에 최소화하되, KL이 0.01 아래면 첫 축이 거부 축을 따라가게 만든 스칼라 규칙입니다. 2.0 마이그레이션 문서는 `kl_divergence_scale`과 `kl_divergence_target`를 더 이상 알아보지 않는다고 적습니다.
+
+## 2.0의 기본 수정기는 ARA다
+
+2.0.0 README의 기본 행동은 여전히 검열 제거, 곧 거부 억제입니다. 사용 예는 Python 3.10+, PyTorch 2.6+ 환경에서 `pip install -U heretic-llm` 다음 `heretic Qwen/Qwen3-4B-Instruct-2507`입니다. 같은 문단은 RTX 3090과 기본 설정에서 그 4B 모델이 약 30–40분이라고 적습니다. 이 글은 그 명령을 실행하지 않았습니다. 4비트는 `quantization = "bnb_4bit"`이고, README는 VRAM을 양자화 모델을 돌릴 때와 비슷한 양까지 줄일 수 있다고 적으며 정확도 비용이 있다고 적습니다.
+
+기본 설정 파일의 채점기 두 개는 둘 다 `optimization = "minimize"`입니다. `KeywordRate`의 `score_name`은 `"Refusals"`이고, 평가는 `mlabonne/harmful_behaviors`의 `test[:100]`입니다. 일치는 대소문자 무시 부분 문자열입니다. `KLDivergence`는 `mlabonne/harmless_alpaca`의 `test[:100]`에서 원래 모델과의 첫 토큰 KL이고, 클래스 주석은 낮을수록 손상이 적다는 뜻이라고 적습니다. 기준 KL은 정의상 0입니다. `n_trials` 기본값은 **100**, `n_startup_trials`는 **30**입니다. `main.py`의 샘플러는 `TPESampler(n_startup_trials=..., n_ei_candidates=128, multivariate=True)`이고, 스터디 방향은 채점기 설정에서 옵니다. 끝난 뒤 `study.best_trials`를 점수 순으로 정렬합니다. 1.4의 "KL이 0.01 아래면 거부 점수에 묶는다"는 분기는 이 태그에서 빠졌습니다. 두 점수는 각각의 최소화 축입니다.
+
+ARA는 그 TPE가 고른 하이퍼파라미터 안에서, 모듈 가중치를 맞추는 쪽입니다. README는 구현을 `ara.py`로, 개요를 [PR 211](https://github.com/p-e-w/heretic/pull/211)로 보냅니다. 그 PR은 2026-09-04에 닫혔고 `merged`는 false입니다. 릴리스 노트에 ARA를 넣은 항목은 [PR 446](https://github.com/p-e-w/heretic/pull/446) `feat: modifier plugins + ARA`이고, 머지 시각은 2026-10-01T09:00:07Z입니다. PR 211 본문이 세 목표로 적은 것과, 태그 `ara_loss`의 세 항은 대응합니다. 좋은 프롬프트의 모듈 출력은 최대한 그대로 두고, 나쁜 프롬프트의 출력은 원래의 좋은 출력 쪽으로 당기며, 동시에 원래의 나쁜 출력에서는 밀어 냅니다. 세 번째를 주석이 overcorrect라고 부르는 이유입니다. 더 복잡한 거부 장치를 넘는 더 강한 조향이라는 문장은 그 주석과 PR 211에 있고, 2.0.0 README의 측정 표는 아닙니다.
+
+```python
+# v2.0.0 src/heretic/modifiers/ara.py 의 ara_loss. 주석은 원문 그대로가 아니다.
+preserve_good_behavior = ((new_good_output - good_output) ** 2).mean()
+steer_bad_behavior = (
+    mean_distances_to_knn(new_bad_output, good_output, k).mean()
+    + overcorrect_relative_weight
+    * -mean_distances_to_knn(new_bad_output, bad_output, k).mean()
+)
+loss = (
+    preserve_good_behavior_weight * preserve_good_behavior
+    + steer_bad_behavior_weight * steer_bad_behavior
+)
+```
+
+`mean_distances_to_knn`은 각 벡터에서 상대 텐서의 k개 최근접까지 유클리드 거리의 평균입니다. k는 트라이얼마다 1에서, 15와 실제로 읽힌 두 프롬프트 수 중 작은 값까지입니다. 기본 설정이 요청하는 split은 양쪽 모두 `train[:400]`입니다. good 집합은 `mlabonne/harmless_alpaca`, bad 집합은 `mlabonne/harmful_behaviors`입니다. 이 글은 그 데이터셋을 받아 행 수를 세지 않았습니다. TPE가 같이 고르는 값은 층 구간의 시작·끝, `preserve_good_behavior_weight`(0 이상 1 이하), `steer_bad_behavior_weight`(0.0001 이상 1 이하, 로그 스케일), `overcorrect_relative_weight`(0 이상 1.3 이하)입니다. 시작 층은 0 이상 `layer_count // 2` 이하이고, 끝 인덱스는 `layer_count // 2 + 1` 이상 층 수 이하입니다. 끝 인덱스는 구간에서 빠지므로 층 범위가 비지 않습니다.
+
+맞춰지는 변수는 밀집 행렬 전체가 아닙니다. `modify_model`은 PEFT LoRA의 A와 B를 `torch.optim.LBFGS`로 갱신합니다. 유효 가중치는 `W_base + B @ A`이고, 출력은 `input @ W_base.T + (input @ A.T) @ B.T`로 다시 계산합니다. 기본 `lora_rank`는 **50**, `n_optimization_steps`는 **5**, `max_iter`는 **20**, `history_size`는 **10**, `learning_rate`는 **1.0**, `line_search_fn`은 `"strong_wolfe"`입니다. A는 시드로 Kaiming uniform 초기화하고, B는 PEFT 기본인 0에서 시작합니다. `preserve_row_magnitudes` 기본값 true는 행 크기를 원래 행렬에 맞춥니다. 설정 주석은 수학적으로는 랭크 제한이 없어도 특이값이 수십 차원 뒤에서 빨리 떨어졌고, LoRA 근사가 실용적이라고 적습니다. PR 211은 "보통 2–3 이터레이션에 수렴"이라고 적지만, 그 문장은 머지되지 않은 PR의 문장이고 이 글은 다시 재지 않았습니다. 태그에 적힌 기본 바깥 스텝은 5입니다.
+
+플러그인 항목도 2.0.0 릴리스 노트에 있습니다. [PR 53](https://github.com/p-e-w/heretic/pull/53) `feat: generic plugin system`의 머지 시각은 2026-07-07T09:04:34Z입니다. v1.4.0(2026-06-14)과 v2.0.0 사이에 다른 태그 릴리스는 릴리스 목록 6개 안에 없습니다. 그래서 태그된 릴리스로서 플러그인을 처음 담은 것은 2.0.0입니다. master를 2026-07-07부터 따라가던 체크아웃은 그 이전이 아닙니다. 채점기 경로는 `fully.qualified.module.Class` 또는 `path/to/plugin.py:Class`이고, README는 패키지 코드를 고치지 않아도 된다고 적습니다. 수정기는 설정 이름이 복수형이어도 한 번에 하나라고 같은 README가 적습니다.
+
+거부 밖의 예는 설정 파일입니다. v2.0.0 README가 가리키는 것은 `config.noslop.toml`, `config.nohumor.toml`, `config.nosyco.toml`, `config.emotions.toml`입니다. v1.4.0 루트 목록에는 `config.noslop.toml`과 `config.nohumor.toml`이 이미 있습니다. v1.2.0 노트는 슬롭 감소 예제 설정을 넣었다고 적습니다. `config.nosyco.toml`과 `config.emotions.toml`은 v1.4.0 루트 목록에 없고 v2.0.0 트리에는 있습니다. noslop과 nosyco 파일 안에는 `modifiers`와 `scorers` 키가 없어서, 적히지 않은 키는 기본값(ARA, 키워드 최소화, KL 최소화)을 탑니다. 키워드 목록과 프롬프트 집합은 그 파일이 바꿉니다. emotions는 채점기를 직접 적습니다. KL 최소화, 부정 감정 BERT 최소화, 긍정 감정 BERT 최대화입니다. 분류 모델 문자열은 `j-hartmann/emotion-english-distilroberta-base`이고, 줄이는 라벨은 anger, disgust, fear, sadness입니다. 이 글은 그 허브 모델을 다시 받아 보지 않았습니다.
+
+각주 4는 ARA를 "Weidmann 2026"으로 적고, 기법을 설명하는 프리프린트가 곧 나온다고 적습니다. 이 글을 쓰는 시점에 그 프리프린트 URL은 README에 없습니다.
+
+## 가드레일과 라이선스
+
+논문 4절이 자기 방법을 부르는 이름은 화이트박스 탈옥입니다. 3.1절은 방향을 지운 뒤 JailbreakBench에서 안전하지 않은 완성이 나온다고 적습니다. Heretic README의 기본 행동 문장도 검열 제거입니다. 로컬 가중치를 그렇게 고치면, 그 체크포인트의 거부 문장은 줄어드는 쪽으로 목적이 잡혀 있습니다. 키워드 점수가 0에 가까워지는 것은 부분 문자열이 빠졌다는 뜻이지, 논문 2.5절이 따로 재는 유해성 점수는 아닙니다. 2.0의 기본 키워드 채점기도 그 계열의 문자열 일치입니다.
+
+도구 라이선스와 가중치 라이선스는 다른 문서입니다. 저장소 SPDX와 README는 GNU AGPL 3.0(이후 버전 포함, `pyproject.toml`의 `AGPL-3.0-or-later`)입니다. README 예제 모델 `Qwen/Qwen3-4B-Instruct-2507`의 모델 카드 `license` 필드는 2026-11-05 API에서 `apache-2.0`이었습니다. 다른 체크포인트의 라이선스와 사용 조건은 그 카드에 있고, 이 글은 카드마다 읽지 않았습니다. 호스팅 API의 서버 쪽 필터는 사용자가 받은 가중치 파일 안에 있지 않습니다. 그 파일만 고쳐서 API 제공자의 필터가 바뀐다는 문장은 이 저장소에 없습니다.
+
+## 비즈니스 인사이트
+
+숫자와 문서 사실은 위에 붙입니다. 시장 점유율은 이 글이 측정하지 않았습니다.
+
+README가 Heretic을 처음 공개한 시점(2025년 11월)에 이미 있던 abliteration 구현으로 적는 이름은 AutoAbliteration, FailSpy의 abliterator.py, wassname의 Abliterator, ErisForge, Sumandora의 remove-refusals-with-transformers, AUGMXNT의 deccp입니다. 같은 절은 Heretic이 그 코드를 재사용하지 않고 새로 썼다고 적습니다. 2.0 README가 자기 수정기로 적는 것은 ARA(기본)와 방향 abliteration(projected abliteration과 MPOA를 옵션으로 가진 구현) 둘입니다. 커뮤니티 모델은 "thousands"이고 링크는 `huggingface.co/models?other=heretic`입니다. 같은 날 그 필터의 API를 `limit=1`로 호출했을 때 응답 헤더에 `X-Total-Count`는 없었습니다. 8,500개나 다운로드 8,800만 같은 숫자는 이 글의 1차 출처에 없어 적지 않습니다.
+
+비용으로 README가 적는 기계 시간은 RTX 3090, 기본 설정, Qwen3-4B-Instruct-2507, 약 30–40분입니다. 1.4 기본 트라이얼 200과 2.0 기본 트라이얼 100은 설정 파일의 정수이고, 벽시계가 그만큼 줄었다는 측정은 이 글에 없습니다. ARA의 L-BFGS는 트라이얼 안의 추가 루프입니다. PR 211은 거부 집계가 시간을 지배해서 ARA가 더 빠를 수도 있다고 적습니다. "수도"가 그 문장의 서술이고, 머지되지 않은 PR입니다.
+
+**분석/의견.** 이득이 가는 자리는 이미 오픈 웨이트를 돌릴 GPU가 있고, 미세조정 클러스터 없이 행동 하나를 체크포인트에 넣고 싶은 사람입니다. README가 적은 4B·3090·수십 분은 그 자리의 비용 문장입니다. 가중치를 받을 수 없는 호스팅 API 제품은 이 루프의 입력 자체가 없습니다. 서버 쪽 필터는 파일 수정 밖에 있습니다.
+
+손해가 생기는 읽기는 세 가지입니다. 1.x 설정이 2.0에서 그대로 돈다고 보면 마이그레이션 문서의 호환 불가 문장이 빠집니다. 2.0 결과가 예전과 같은 방향 제거라고 보면 기본 플러그인이 ARA라는 줄이 빠집니다. 키워드 거부율만 보면, 1.4가 0.01 아래로 내려가려 하던 KL과 2.0이 별도 축으로 최소화하는 KL이 빠집니다. 논문이 능력 지표로 본 범위는 MMLU·ARC·GSM8K·TruthfulQA 쪽이고 TruthfulQA는 떨어졌다고 본문이 적습니다. Heretic README의 독립 벤치마크 각주는 Reddit 글 두 개이고, 이 글은 그 글을 재현하지 않았습니다.
+
+도구를 제품에 넣는 비용은 GPU 시간과 별개입니다. 프로그램 라이선스는 AGPL-3.0-or-later이고, 예제 가중치 카드는 Apache-2.0입니다. 네트워크로 도구를 제공하는 쪽이 소스 제공 의무를 지는지는 법률 자문이 아니라 그 라이선스 본문의 문제입니다. 이 글은 그 판정을 대신하지 않습니다. 오픈 웨이트를 받은 사람이 로컬에서 거부 문장을 줄일 수 있다는 사실 자체는 논문 초록이 "현재 안전 미세조정의 취약함"이라고 부른 현상과 같은 축입니다. 배포자가 가중치 파일 안의 거부에만 기대면, 파일을 받은 쪽의 수정은 그 기대 밖에 있습니다.
+
+## 팩트 체크
+
+✅ 사실 / ⚠️ 부분적으로 사실·범위가 다름 / ❌ 사실 아님
+
+### @rS_alonewolf 포스트
+
+| 주장 | 판정 | 근거 |
+|---|---|---|
+| Heretic이 2.0으로 나왔다 | ✅ | [v2.0.0](https://github.com/p-e-w/heretic/releases/tag/v2.0.0) 발행 2026-11-01T13:03:19Z, 커밋 `0db5c31`. 태그 `pyproject.toml` 버전 `2.0.0`. PyPI `heretic-llm` `2.0.0`, `upload_time` `2026-11-01T12:21:39`. |
+| GitHub 별 37,700개의 인기 OSS다 | ⚠️ | 저장소는 `p-e-w/heretic`이 맞다. 2026-11-05 08:22 KST의 `stargazers_count`는 **39,340**, 포크는 4,441이다. 37,700은 그 응답의 값이 아니다. 포스트 시각(2026-11-02 15:13 UTC)의 별을 이 글은 다시 세지 못했다. |
+| 거부를 빼는 방법을 근본부터 바꿨다 | ✅ | [마이그레이션 문서](https://github.com/p-e-w/heretic/blob/0db5c31e10ecc426440b6fb0ce4bf85352faf1a7/docs/migration_v1_to_v2.md)는 2.x 기본이 abliteration이 아니라 ARA라고 적는다. v1.4.0에는 수정기 플러그인이 없고 `abliterate()`가 방향 제거를 한다. 바깥 탐색은 1.4도 2.0도 Optuna TPE다. 바뀐 것은 그 탐색이 호출하는 수정기다. |
+| 일반 abliteration은 거부를 한 벡터 방향으로 보고 그 성분을 제거한다 | ✅ | 논문 식 (2)·(4)·(5). Heretic `Abliteration`은 `normalize(bad_means - good_means)` 뒤 `delta W = -lambda * v * (v^T W)`. 논문의 완전 직교화와 달리 층별 스케일, 기본 projected abliteration, 기본 행 정규화 랭크 3이 있다. |
+| 거부가 한 방향이 아닌 모델에서는 제거가 부족하거나 능력까지 깎인다 | ⚠️ | 논문 초록은 13개 모델, 최대 72B에서 거부가 1차원 부분공간이라고 적는다. 4.3절은 MMLU·ARC·GSM8K가 대체로 유지되고 TruthfulQA는 떨어진다고 적는다. "더 복잡한 거부"를 넘는다는 문장은 머지되지 않은 [PR 211](https://github.com/p-e-w/heretic/pull/211)과 `ara_loss` 주석에 있다. 2.0.0 README는 그 실패를 잰 표를 싣지 않는다. |
+| ARA는 방향 하나를 빼지 않고 가중치 행렬을 직접 최적화한다 | ⚠️ | 방향 벡터를 만들지 않는 것은 `ara.py`와 PR 211이 맞다. 태그 구현이 갱신하는 것은 기본 랭크 **50** LoRA의 A·B이고, 유효 가중치는 `W_base + B @ A`다. 설정 주석은 완전 랭크가 수학적 이름이고 LoRA는 근사라고 적는다. |
+| 목표는 둘이다. 거부 대상의 내부 표현을 보통 입력에 가깝게, 보통 입력의 내부 표현은 최대한 유지 | ⚠️ | 손실에는 세 항이 있다. good 출력의 제곱 오차, bad 출력을 원래 good 출력의 kNN 쪽으로 당기는 항, bad 출력을 원래 bad 출력에서 밀어 내는 overcorrect. 대상은 잔차 방향이 아니라 모듈 입출력 훅으로 받은 출력이다. |
+| 그것을 L-BFGS로 실현하며, 고치는 방향 수에 제한이 없다 | ⚠️ | 모듈 안 최적화는 `torch.optim.LBFGS`가 맞다. 기본은 바깥 5스텝, 안쪽 `max_iter` 20, `strong_wolfe`다. 층 구간·세 가중치·이웃 수는 TPE가 고른다. "제한이 없다"는 PR 211과 설정의 수학적 설명이고, 출고 기본 랭크는 50이다. |
+| 2.0에서 평가 지표를 플러그인으로 넣을 수 있다 | ✅ | `Scorer`와 `scorers` 설정. 플러그인 PR 53은 2026-07-07에 master로 머지됐고, 그다음 태그 릴리스가 v2.0.0이다. |
+| 거부 말고 상투적 문장, 과도한 동조, 감정 경향도 고칠 수 있다 | ⚠️ | 2.0.0 README가 세 설정과 유머 설정을 적는다. 슬롭·유머 파일은 v1.4.0 루트에 이미 있다. 동조·감정 파일은 v1.4.0 루트 목록에 없고 v2.0.0 트리에 있다. 감정 파일은 DistilRoBERTa 감정 분류기를 문자열로 적는다. |
+| 무검열 도구에서 LLM 행동 자체를 편집하는 도구로 진화했다 | ⚠️ | 2.0.0 README 제목은 "Training-free language model modification"이고, 기본 행동은 여전히 검열 제거다. 슬롭 예제는 v1.2.0 노트에 이미 있다. 넓어진 것은 문서가 적어 둔 설정 범위와 플러그인 인터페이스다. |
+
+**총평:** Heretic 2.0.0은 있고, 기본 수정기는 거부 방향 제거에서 ARA로 바뀌었다. 포스트가 말한 L-BFGS와 "좋은 출력은 유지하고 나쁜 출력은 좋은 쪽에 붙인다"는 손실의 두 항과 맞다. 느슨한 곳은 별 37,700(같은 날 API는 39,340), 목표가 둘이 아니라 셋이라는 점, 출고 코드가 무제한 밀집 행렬이 아니라 랭크 50 LoRA라는 점, 그리고 슬롭 설정이 2.0에서 처음 생긴 것이 아니라는 점이다.
+
+## 참고 자료
+
+- 계기 포스트 — [@rS_alonewolf, 2026-11-02 15:13 UTC](https://x.com/rS_alonewolf/status/2117273804426891594) · [i/status](https://x.com/i/status/2117273804426891594) · 이 환경에서 읽은 사본 [fxtwitter](https://api.fxtwitter.com/status/2117273804426891594)
+- Heretic v2.0.0, 커밋 `0db5c31e10ecc426440b6fb0ce4bf85352faf1a7`, 릴리스 2026-11-01T13:03:19Z — [릴리스](https://github.com/p-e-w/heretic/releases/tag/v2.0.0) · [README](https://github.com/p-e-w/heretic/blob/0db5c31e10ecc426440b6fb0ce4bf85352faf1a7/README.md) · [마이그레이션](https://github.com/p-e-w/heretic/blob/0db5c31e10ecc426440b6fb0ce4bf85352faf1a7/docs/migration_v1_to_v2.md) · [config.default.toml](https://github.com/p-e-w/heretic/blob/0db5c31e10ecc426440b6fb0ce4bf85352faf1a7/config.default.toml) · [ara.py](https://github.com/p-e-w/heretic/blob/0db5c31e10ecc426440b6fb0ce4bf85352faf1a7/src/heretic/modifiers/ara.py) · [abliteration.py](https://github.com/p-e-w/heretic/blob/0db5c31e10ecc426440b6fb0ce4bf85352faf1a7/src/heretic/modifiers/abliteration.py) · [kl_divergence.py](https://github.com/p-e-w/heretic/blob/0db5c31e10ecc426440b6fb0ce4bf85352faf1a7/src/heretic/scorers/kl_divergence.py)
+- 같은 저장소 v1.4.0, 커밋 `6ea3b8d778d047b4b3b7c5b843e21c5bea98ee8d`, 릴리스 2026-06-14T12:55:57Z — [evaluator.py의 KL 분기](https://github.com/p-e-w/heretic/blob/6ea3b8d778d047b4b3b7c5b843e21c5bea98ee8d/src/heretic/evaluator.py)
+- master `f4cf5354032419178584e7c52af6de6c138de856`(2026-11-03T12:23:18Z). `pyproject.toml` 버전 `2.1.0.dev0`. 수정기 소스와 기본 설정은 태그와 같았고 README는 설정 경로 문장이 추가됨
+- 별·포크·라이선스 — 2026-11-04T23:22:55Z `GET /repos/p-e-w/heretic`. `stargazers_count` 39340, `forks_count` 4441, `license.spdx_id` AGPL-3.0
+- PyPI `heretic-llm` 2.0.0 — [pypi.org/pypi/heretic-llm/json](https://pypi.org/pypi/heretic-llm/json), `upload_time` `2026-11-01T12:21:39`
+- ARA를 릴리스에 넣은 PR — [#446](https://github.com/p-e-w/heretic/pull/446) (merged 2026-10-01). README가 개요로 가리키는 [#211](https://github.com/p-e-w/heretic/pull/211)은 2026-09-04에 닫혔고 머지되지 않음. 플러그인 [#53](https://github.com/p-e-w/heretic/pull/53)은 2026-07-07에 머지
+- Arditi, Obeso, Syed, Paleka, Panickssery, Gurnee, Nanda, *Refusal in Language Models Is Mediated by a Single Direction*, arXiv:2406.11717v3, 제출 2024-06-17, 갱신 2024-10-30. [abs](https://arxiv.org/abs/2406.11717v3) · [HTML](https://arxiv.org/html/2406.11717v3) · [PDF](https://arxiv.org/pdf/2406.11717v3)
+- README가 구현 근거로 적는 글 — [Labonne, Abliteration](https://huggingface.co/blog/mlabonne/abliteration) · [Lai, projected abliteration](https://huggingface.co/blog/grimjim/projected-abliteration) · [Lai, norm-preserving biprojected abliteration](https://huggingface.co/blog/grimjim/norm-preserving-biprojected-abliteration)
+- 예제 가중치 카드의 라이선스 필드 — [Qwen/Qwen3-4B-Instruct-2507](https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507), 2026-11-05 모델 API의 `cardData.license`는 `apache-2.0`
