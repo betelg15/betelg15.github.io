@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>60fps는 상한인가? Rust 원격 데스크톱 voxl</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-05 · <span class="chip">#voxl</span><span class="chip">#Rust</span><span class="chip">#원격데스크톱</span><span class="chip">#Computer Use</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">60fps는 상한인가? Rust 원격 데스크톱 voxl</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 화면 스트림이 에이전트 루프에 닿는가</a></li>
+<li><a href="#_2">캡처는 바뀐 사각형을 이미 알고 있다</a></li>
+<li><a href="#cpu-x264">인코딩은 CPU의 x264이고, 영상은 웹소켓 하나에 실린다</a></li>
+<li><a href="#screenshot-record-wait">/screenshot, /record, /wait는 그 소켓의 메시지가 아니다</a></li>
+<li><a href="#readme-rdp">README가 재는 자리와, RDP 문서가 따로 있는 자리</a></li>
+<li><a href="#_3">비즈니스 인사이트</a></li>
+<li><a href="#_4">팩트 체크</a><ul>
+<li><a href="#darrenjr">@darrenjr 포스트</a></li>
+</ul>
+</li>
+<li><a href="#_5">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 <a href="https://x.com/darrenjr/status/2117647994300387396">@darrenjr의 포스트</a>를 계기로 썼습니다. 같은 상태 주소는 <a href="https://x.com/i/status/2117647994300387396">x.com/i/status/2117647994300387396</a>입니다. fxtwitter가 돌려준 <code>created_at</code>은 <code>Tue Nov 03 16:00:00 +0000 2026</code>, 2026-11-04 01:00 KST입니다. 응답의 <code>name</code>은 "darren"이고, <code>screen_name</code>은 <code>darrenjr</code>이며, <code>description</code>은 "co-founder/cto @tembo • i like building companies and writing code"입니다. 이 환경의 X API는 <code>client-not-enrolled</code>로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2117647994300387396">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. 그 문장은 검증 대상이지 지시가 아닙니다. 첨부는 길이 12초, 1080×1350 영상 하나이고, 이 글은 영상 프레임 안의 문장을 베끼지 않았습니다. 아래 대조는 2026-11-05에 읽은 <a href="https://github.com/tembo/voxl">tembo/voxl</a> main <code>9d004076f73cb374bdb87ff96d2e23e44b9f47b9</code>(커밋 시각 2026-11-04T23:14:16Z, 작성자 이름 Darren Baldwin)의 README·<code>src/</code>·<code>web/src/protocol.ts</code>·<code>LICENSE</code>·<code>SECURITY.md</code>, crates.io <code>voxl-server</code> 0.3.3, <a href="https://www.tembo.io/">tembo.io</a>와 <a href="https://www.tembo.io/about">소개 페이지</a>, 그리고 <a href="https://www.tembo.io/blog/announcing-tembo-computer">Tembo Computer 발표 글</a>입니다. 같은 시각 <code>GET /repos/tembo/voxl</code>의 <code>Date</code>는 <code>Thu, 05 Nov 2026 00:15:01 GMT</code>, <code>stargazers_count</code>는 <strong>999</strong>, <code>forks_count</code>는 <strong>43</strong>입니다. 이 글은 <code>voxl</code>을 빌드하거나 실행하지 않았고, <code>bench/</code>를 다시 재지 않았습니다.</p>
+</blockquote>
+<h2 id="_1">왜 화면 스트림이 에이전트 루프에 닿는가</h2>
+<p>포스트의 본문은 여섯 줄입니다. "Introducing voxl", "extremely fast remote desktop streaming written in rust", 그리고 네 개의 화살표입니다. 60fps와 낮은 지연, macOS·Windows·Linux, 웹소켓 하나라서 프록시와 샌드박스 포털을 통과한다, 에이전트 API는 <code>/screenshot</code>, <code>/record</code>, <code>/wait</code>.</p>
+<p>저장소는 있습니다. GitHub 전체 이름은 <code>tembo/voxl</code>, 설명 문장은 "extremely fast web remote desktop streaming", SPDX는 MIT, 기본 브랜치는 <code>main</code>, 생성 시각은 2026-06-18T23:46:39Z, 아카이브 상태는 아닙니다. 주 언어 필드는 Rust입니다. README 첫 문단은 브라우저용 저지연 데스크톱 스트리밍이고, X11 디스플레이나 Mac 화면, Windows 데스크톱을 H.264로 웹소켓에 실어 작은 웹 클라이언트가 WebCodecs로 푼다고 적습니다. 입력, 클립보드, 오디오, 마이크, 파일·폴더 전송, 동적 해상도가 같은 문단에 있습니다.</p>
+<p>개발자에게 닿는 지점은 "빠른 원격 데스크톱"이라는 형용사보다, 컴퓨터 유즈 에이전트가 픽셀을 보고 다음 동작을 고를 때 그 화면을 어디서 받느냐입니다. <a href="https://github.com/e2b-dev/desktop">E2B Desktop</a> README의 제목은 "Open Source Virtual Computer for Computer Use"입니다. <a href="https://www.tembo.io/">Tembo</a> 첫 화면은 에이전트가 브라우저와 그래픽 앱을 쓰고, 스크린샷을 찍고, 보이는 결과를 확인한다고 적습니다. voxl README의 FAQ는 이 프로그램을 헤드리스 VM과 샌드박스, 보통 GPU 없는 Xvfb 위에서 돌아가는 소프트웨어 팩토리와 컴퓨터 유즈 에이전트용으로 두고, 브라우저 탭 하나와 에이전트용 API를 그 이유로 적습니다.</p>
+<p>crates.io에 올라간 패키지 이름은 <code>voxl</code>이 아닙니다. <code>Cargo.toml</code>은 "<code>voxl</code> on crates.io belongs to an unrelated crate; the binary is still <code>voxl</code>"이라고 적고, 패키지 이름은 <code>voxl-server</code>, 버전은 <code>0.3.3</code>입니다. 2026-11-05에 crates.io API가 돌려준 그 무관한 크레이트 <code>voxl</code>의 설명은 "A command-line tool for working with voxels"이고, 저장소 필드는 <code>https://github.com/tyleo/tyt</code>, <code>max_version</code>은 <code>0.1.0</code>입니다. README의 설치 줄은 <code>cargo install voxl-server</code>입니다.</p>
+<h2 id="_2">캡처는 바뀐 사각형을 이미 알고 있다</h2>
+<p>Linux 경로는 <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/capture.rs"><code>src/capture.rs</code></a> 첫 줄이 적습니다. X11 화면을 MIT-SHM <code>GetImage</code>로 고정된 BGRX 프레임에 받고, 그 루프를 XDamage가 돌립니다. README는 Xvfb를 <code>-shmem</code>으로 띄우면 제로카피 캡처가 된다고 적습니다. <code>Cargo.toml</code>의 Linux 의존성 <code>x11rb</code>는 <code>shm</code>, <code>damage</code>, <code>xfixes</code>, <code>xtest</code>, <code>randr</code>를 켭니다.</p>
+<p>macOS는 <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/mac/capture.rs"><code>src/mac/capture.rs</code></a>입니다. ScreenCaptureKit 프레임이 NV12로 오고, 같이 오는 더티 사각형이 XDamage와 같은 장부를 갱신합니다. 주석은 화면이 가만히 있으면 변환도 인코딩도 하지 않고, 안 변한 매크로블록은 x264가 건너뛴다고 적습니다. README의 macOS 절은 캡처를 ScreenCaptureKit, 입력을 CGEvent, 클립보드를 NSPasteboard, 소리를 시스템 오디오라고 적습니다. macOS는 화면 기록과 손쉬운 사용 권한을 묻고, 기본 수신 주소는 <code>127.0.0.1</code>입니다.</p>
+<p>Windows는 <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/win/capture.rs"><code>src/win/capture.rs</code></a>입니다. DXGI Desktop Duplication이 새 데스크톱 이미지와 더티·이동 사각형을 주고, 캡처 스레드는 그 영역만 BGRA 프레임에 복사합니다. 주석은 복제가 커서를 빼므로 클라이언트가 커서를 그린다고 적습니다. README는 Windows 10 이상, <code>SendInput</code>, 클립보드 텍스트와 이미지, WASAPI 시스템 오디오를 적고, 서비스가 아니라 사용자 세션에서 띄우라고 적습니다. 잠금 화면과 UAC는 SYSTEM이 아니면 Windows가 이 캡처에서 숨긴다고 같은 절이 적습니다.</p>
+<p>세 경로가 공유하는 장부는 <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/wait.rs"><code>src/wait.rs</code></a>에 있습니다. 16×16 블록마다 마지막 변경의 순번과 시각을 두고, 기다리는 쪽은 스크린샷을 다시 찍거나 폴링하지 않습니다. FAQ의 Wayland 답은 아직 없고, Linux에서 voxl이 스트리밍하는 것은 X11 디스플레이이며 Xvfb가 포함된다고 적습니다. 같은 답은 E2B와 Daytona의 가상 데스크톱도 Xvfb 위에서 돈다고 적습니다.</p>
+<h2 id="cpu-x264">인코딩은 CPU의 x264이고, 영상은 웹소켓 하나에 실린다</h2>
+<p>인코더는 <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/encoder.rs"><code>src/encoder.rs</code></a>의 libx264 래퍼입니다. 파일 주석은 저지연 데스크톱 스트리밍용이라고 적습니다. 프리셋 적용 직후의 파라미터는 이렇습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="kd">let</span><span class="w"> </span><span class="n">preset</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">CString</span><span class="p">::</span><span class="n">new</span><span class="p">(</span><span class="n">cfg</span><span class="p">.</span><span class="n">preset</span><span class="p">.</span><span class="n">as_str</span><span class="p">()).</span><span class="n">unwrap</span><span class="p">();</span>
+<span class="kd">let</span><span class="w"> </span><span class="n">tune</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">c</span><span class="s">"zerolatency"</span><span class="p">;</span>
+<span class="k">if</span><span class="w"> </span><span class="n">ffi</span><span class="p">::</span><span class="n">x264_param_default_preset</span><span class="p">(</span><span class="o">&amp;</span><span class="k">mut</span><span class="w"> </span><span class="n">param</span><span class="p">,</span><span class="w"> </span><span class="n">preset</span><span class="p">.</span><span class="n">as_ptr</span><span class="p">(),</span><span class="w"> </span><span class="n">tune</span><span class="p">.</span><span class="n">as_ptr</span><span class="p">())</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mi">0</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nb">Err</span><span class="p">(</span><span class="fm">format!</span><span class="p">(</span><span class="s">"bad x264 preset {}"</span><span class="p">,</span><span class="w"> </span><span class="n">cfg</span><span class="p">.</span><span class="n">preset</span><span class="p">));</span>
+<span class="p">}</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_width</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cfg</span><span class="p">.</span><span class="n">width</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cfg</span><span class="p">.</span><span class="n">height</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_csp</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ffi</span><span class="p">::</span><span class="n">X264_CSP_I420</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_fps_num</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cfg</span><span class="p">.</span><span class="n">fps</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_fps_den</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_timebase_num</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_timebase_den</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1000</span><span class="p">;</span>
+<span class="c1">// VFR input costs a frame of encoder delay (duration estimation).</span>
+<span class="n">param</span><span class="p">.</span><span class="n">b_vfr_input</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cfg</span><span class="p">.</span><span class="n">threads</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">b_sliced_threads</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">(</span><span class="n">cfg</span><span class="p">.</span><span class="n">threads</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mi">1</span><span class="p">)</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_slice_count</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">cfg</span><span class="p">.</span><span class="n">threads</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_keyint_max</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="n">ffi</span><span class="p">::</span><span class="n">X264_KEYINT_MAX_INFINITE</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="kt">i32</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_keyint_min</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">1</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_scenecut_threshold</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">b_intra_refresh</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+<span class="n">param</span><span class="p">.</span><span class="n">i_bframe</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mi">0</span><span class="p">;</span>
+</code></pre></div>
+
+<p>바로 아래는 Annex-B, 반복 헤더, CRF 레이트 컨트롤, <code>i_lookahead = 0</code>, <code>i_sync_lookahead = 0</code>, <code>b_mb_tree = 0</code>입니다. 움직임 탐색은 ultrafast의 다이아몬드 대신 UMH, 범위 64이고, 주석은 창을 끌거나 빠르게 스크롤할 때 그 차이를 적습니다. <code>b_mb_info</code>는 X damage가 준 "안 변함" 힌트로 분석을 건너뛰게 합니다. VBV 상한이 있으면 버퍼는 대략 프레임 1.25개분입니다. README 플래그의 기본 <code>--preset</code>은 <code>ultrafast</code>, <code>--crf</code>는 24, <code>--framerate</code>는 60, <code>--max-kbps</code>는 30000, <code>--min-kbps</code>는 2000입니다. <code>src/lib.rs</code>의 스레드 기본값은 <code>(ncpu / 4).clamp(1, 4)</code>이고, 주석은 2560×1600에서 스레드를 더 늘리면 CPU만 는다고 적습니다.</p>
+<p>브라우저로 나가는 소켓은 하나입니다. <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/web/src/protocol.ts"><code>web/src/protocol.ts</code></a> 첫 주석이 그렇게 적고, <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/server.rs"><code>src/server.rs</code></a>는 <code>GET /ws</code>로 그 업그레이드를 받습니다. 바이너리 메시지는 타입 바이트로 시작합니다.</p>
+<div class="highlight"><pre><span></span><code><span class="k">export</span><span class="w"> </span><span class="kd">const</span><span class="w"> </span><span class="nx">Bin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">Video</span><span class="o">:</span><span class="w"> </span><span class="kt">0x01</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">Audio</span><span class="o">:</span><span class="w"> </span><span class="kt">0x02</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">Cursor</span><span class="o">:</span><span class="w"> </span><span class="kt">0x03</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">ClipImage</span><span class="o">:</span><span class="w"> </span><span class="kt">0x04</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">ClipImageUp</span><span class="o">:</span><span class="w"> </span><span class="kt">0x11</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">MicOpus</span><span class="o">:</span><span class="w"> </span><span class="kt">0x12</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">MicPcm</span><span class="o">:</span><span class="w"> </span><span class="kt">0x13</span><span class="p">,</span>
+<span class="p">}</span><span class="w"> </span><span class="kr">as</span><span class="w"> </span><span class="kd">const</span><span class="p">;</span>
+</code></pre></div>
+
+<p>서버의 텍스트는 JSON이고, 클라이언트의 텍스트는 <code>m,x,y</code> 같은 짧은 콤마 명령입니다. 비디오 헤더 16바이트에는 키프레임 비트, 프레임 번호, 캡처부터 송신까지의 파이프라인 시간(0.1ms 단위), 스트라이프 번호가 있습니다. <code>web/src/worker.ts</code>는 그 H.264를 <code>VideoDecoder</code>로 풀고, <code>configure</code>에 <code>optimizeForLatency: true</code>를 넣습니다. 오디오 타입 바이트는 Opus입니다. README 기본값은 데스크톱 오디오 켬, 장치 <code>output.monitor</code>, 비트레이트 128000입니다.</p>
+<p>FAQ가 웹소켓을 WebRTC 대신 고른 이유로 적는 문장은 이렇습니다. 웹소켓 하나는 웹 페이지가 가는 곳으로 가고, 리버스 프록시와 터널, 샌드박스 프리뷰 URL을 통과하며, TURN 서버나 열 UDP 포트가 필요 없습니다. 브라우저는 프레임이 도착하는 즉시 WebCodecs로 풀고, WebRTC의 지터 버퍼를 거치지 않으며, 레이트 컨트롤은 voxl이 합니다. 같은 답이 적은 대가는 TCP입니다. 패킷이 빠지는 링크에서는 뒤 프레임이 막히고, WebRTC는 앞으로 건너뛸 수 있습니다.</p>
+<p>그 문장에는 같은 README의 조건이 붙습니다. 호스트 이름이 IP와 <code>localhost</code>가 아니면 <code>--allowed-hosts</code>가 필요하고, 다른 사이트의 페이지가 붙으려면 <code>--allowed-origins</code>가 필요합니다. 거부되면 403이 어떤 플래그를 넣어야 하는지 알려 준다고 적혀 있습니다. WebCodecs는 HTTPS 페이지와 localhost에서만 허용되므로, 다른 기계에서 보려면 TLS 프록시 뒤에 두거나 SSH로 포트를 넘겨 <code>localhost</code>로 열라고 FAQ가 적습니다. Linux 기본 수신 주소는 <code>0.0.0.0</code>이고, macOS와 Windows는 <code>127.0.0.1</code>입니다. <code>SECURITY.md</code>는 로그인 없이 열리는 것이 페이지 스크립트·에셋과 <code>/healthz</code>뿐이라고 적고, 비밀번호를 주지 않으면 시작 때 128비트 난수를 만든다고 적습니다. 평문 HTTP이므로 localhost 밖에서는 TLS 프록시나 SSH 터널 뒤에 두라고 같은 문서가 적습니다.</p>
+<h2 id="screenshot-record-wait"><code>/screenshot</code>, <code>/record</code>, <code>/wait</code>는 그 소켓의 메시지가 아니다</h2>
+<p>에이전트용으로 README가 적는 호출은 같은 포트의 HTTP입니다. <code>server.rs</code>의 라우트는 <code>GET /screenshot</code>, <code>GET /record</code>, <code>POST /record/start</code>, <code>POST /record/stop</code>, <code>GET /wait</code>입니다. 비밀번호는 <code>Authorization: Bearer</code>, 또는 <code>curl -u :&lt;password&gt;</code>입니다. README의 예는 아래와 같고, 이 글은 그 명령을 실행하지 않았습니다.</p>
+<div class="highlight"><pre><span></span><code>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">":</span><span class="nv">$VOXL_PASSWORD</span><span class="s2">"</span><span class="w"> </span>-o<span class="w"> </span>shot.png<span class="w"> </span>localhost:6901/screenshot
+curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">":</span><span class="nv">$VOXL_PASSWORD</span><span class="s2">"</span><span class="w"> </span>-o<span class="w"> </span>clip.mp4<span class="w"> </span><span class="s2">"localhost:6901/record?seconds=10"</span>
+<span class="nv">id</span><span class="o">=</span><span class="k">$(</span>curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">":</span><span class="nv">$VOXL_PASSWORD</span><span class="s2">"</span><span class="w"> </span>-s<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span>localhost:6901/record/start<span class="w"> </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>.id<span class="k">)</span>
+curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">":</span><span class="nv">$VOXL_PASSWORD</span><span class="s2">"</span><span class="w"> </span>-o<span class="w"> </span>clip.mp4<span class="w"> </span>-X<span class="w"> </span>POST<span class="w"> </span><span class="s2">"localhost:6901/record/stop?id=</span><span class="nv">$id</span><span class="s2">"</span>
+curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">":</span><span class="nv">$VOXL_PASSWORD</span><span class="s2">"</span><span class="w"> </span>localhost:6901/wait
+curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">":</span><span class="nv">$VOXL_PASSWORD</span><span class="s2">"</span><span class="w"> </span><span class="s2">"localhost:6901/wait?idle=1000&amp;timeout=30000"</span>
+curl<span class="w"> </span>-u<span class="w"> </span><span class="s2">":</span><span class="nv">$VOXL_PASSWORD</span><span class="s2">"</span><span class="w"> </span><span class="s2">"localhost:6901/wait?change&amp;region=0,0,800,600"</span>
+</code></pre></div>
+
+<p><code>record.rs</code>의 주석은 녹화를 이미 인코딩된 H.264를 MP4로 다시 담는 일이라고 적습니다. 레코더는 프레임을 바로 확인하는 뷰어로 하나 더 붙으므로 CPU가 거의 늘지 않고, 커서는 빠지며, 화면이 바뀔 때만 프레임을 담습니다. 기본 포트는 6901, <code>--max-record-seconds</code> 기본은 300입니다.</p>
+<p>스크린샷 핸들러는 캡처에 스냅샷을 하나 요청하고, 5초 안에 프레임이 없으면 503과 <code>"no frame from capture"</code>를 돌려줍니다. 성공하면 <code>image/png</code>이고, 헤더 이름은 <code>x-voxl-seq</code>입니다. README가 적는 <code>X-Voxl-Seq</code>와 같은 헤더입니다. PNG 인코더는 RGB 8비트, <code>Compression::Fast</code>입니다.</p>
+<p><code>/wait</code>의 기본은 300ms 동안 변화가 없을 때 반환하는 것입니다. 고요한 시간은 요청 시각보다 앞으로 세지 않아서, 방금 한 동작이 화면에 나올 시간이 있습니다. <code>change</code>는 첫 변화에서 반환합니다. <code>region=x,y,w,h</code>는 그 사각형만, 16픽셀 블록 단위로 보고, <code>timeout</code> 기본은 10초입니다. 소스의 <code>MAX_WAIT</code>는 600초이고, 밀리초로 받은 <code>idle</code>과 <code>timeout</code>은 그 값으로 잘립니다. 응답 JSON의 키는 <code>changed</code>, <code>timed_out</code>, <code>seq</code>, <code>waited_ms</code>입니다. README가 예시로 적은 본문은 <code>{"changed":true,"timed_out":false,"seq":812,"waited_ms":340}</code>입니다. 변화가 요청보다 먼저 도착할 수 있으므로, 어떤 동작이 일으킨 변화를 기다릴 때는 이전 <code>/wait</code>의 <code>seq</code>나 스크린샷의 시퀀스 헤더를 <code>since</code>로 넘깁니다. 깜빡이는 캐럿은 대략 초당 두 번 다시 그려지므로, README는 <code>idle</code>을 500ms 미만으로 두거나 캐럿을 <code>region</code> 밖에 두라고 적습니다.</p>
+<h2 id="readme-rdp">README가 재는 자리와, RDP 문서가 따로 있는 자리</h2>
+<p>README 벤치마크 절의 요약 문장은 "아래의 모든 테스트에서 voxl은 평균 60 FPS, 중앙 지연 12–99ms이고, noVNC는 평균 8 FPS 미만"입니다. 기계는 GPU 없는 16 vCPU AMD EPYC 9334 VM, 데스크톱은 2560×1600 Xvfb, 디코더는 콘텐츠에 그린 픽셀 마커를 읽는 네이티브 클라이언트입니다. 칸은 FPS(최악 1초), 그다음 그림이 그려진 뒤부터 프레임이 디코드될 때까지의 p50/p99입니다. voxl 열은 각 테스트의 최선 실행이라고 그 절이 적습니다. 재현은 <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/bench/README.md"><code>bench/README.md</code></a>로 보내고, 이 글은 그 스크립트를 돌리지 않았습니다. 표의 숫자는 그 README에 적힌 그대로입니다.</p>
+<table>
+<thead>
+<tr>
+<th>테스트</th>
+<th>voxl</th>
+<th>noVNC</th>
+<th>KasmVNC</th>
+<th>Neko 기본</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chromium 스크롤, LAN</td>
+<td>60.1 (59.7), 55/60 ms</td>
+<td>6.7 (6.3), 198/301 ms</td>
+<td>51.7 (39.5), 99/135 ms</td>
+<td>25.0 (23.7), 156/217 ms</td>
+</tr>
+<tr>
+<td>스크롤, 10 Mbps / 40 ms</td>
+<td>60.0 (59.4), 82/94 ms</td>
+<td>2.6 (2.4), 426/678 ms</td>
+<td>8.3 (7.4), 229/249 ms</td>
+<td>24.6 (14.9), 221/737 ms</td>
+</tr>
+<tr>
+<td>스크롤, 5 Mbps / 60 ms</td>
+<td>60.1 (59.7), 99/109 ms</td>
+<td>1.6 (1.4), 637/937 ms</td>
+<td>4.9 (3.6), 306/415 ms</td>
+<td>21.7 (3.8), 1.2/3.6 s</td>
+</tr>
+<tr>
+<td>1080p 애니메이션, LAN</td>
+<td>60.1 (59.9), 12/16 ms</td>
+<td>7.7 (7.2), 149/210 ms</td>
+<td>56.7 (51.6), 51/82 ms</td>
+<td>24.8 (23.6), 122/202 ms</td>
+</tr>
+<tr>
+<td>애니메이션, 10 Mbps / 40 ms</td>
+<td>60.1 (59.5), 46/71 ms</td>
+<td>5.8 (5.2), 160/226 ms</td>
+<td>52.9 (49.2), 76/115 ms</td>
+<td>25.1 (9.1), 295/962 ms</td>
+</tr>
+<tr>
+<td>애니메이션, 5 Mbps / 60 ms</td>
+<td>60.0 (58.8), 66/92 ms</td>
+<td>5.1 (4.7), 174/240 ms</td>
+<td>34.1 (26.4), 104/156 ms</td>
+<td>15.2 (8.6), 5.0/9.4 s</td>
+</tr>
+<tr>
+<td>전체 화면 애니메이션, LAN</td>
+<td>59.8 (54.0), 18/25 ms</td>
+<td>5.9 (5.2), 184/279 ms</td>
+<td>34.2 (32.5), 83/102 ms</td>
+<td>22.7 (18.0), 2.9/3.3 s</td>
+</tr>
+</tbody>
+</table>
+<p>noVNC 열의 설명은 x11vnc와 noVNC를 E2B Desktop과 Daytona가 실어 보내는 플래그(<code>-forever -wait 50 -shared</code>, Tight)로 돌렸다는 것입니다. README는 x11vnc가 화면을 폴링해서 6–8 FPS에 막힌다고 적습니다. <a href="https://github.com/novnc/noVNC">noVNC</a> 저장소 설명은 "VNC client web application"이고, README는 이것을 HTML VNC 클라이언트 라이브러리이자 그 위의 앱이라고 적습니다. 같은 표의 KasmVNC 1.4.0은 LAN 스크롤에서 51.7 FPS입니다. <code>bench/README.md</code>는 Kasm 클라이언트가 웹 클라이언트와 같이 웹소켓 위의 RFB를 말한다고 적습니다. 그래서 이 표가 말하는 격차는 "VNC라는 글자가 60fps를 못 한다"가 아니라, 그 절이 적은 x11vnc 폴링 설정과 H.264 스트림의 차이입니다.</p>
+<p>WebRTC 열로 README가 이름을 거는 것은 Neko입니다. 링크 설명은 웹소켓 서버에는 TCP 프록시를, Neko의 WebRTC 미디어(UDP)에는 <code>tc netem</code>을 썼다고 적습니다. Neko 3.2 기본은 VP8, 25 FPS입니다. 맞춘 Neko는 60 FPS 캡처에 x264 <code>ultrafast</code>/<code>zerolatency</code>, 최대 30 Mbps이고, 기본으로 꺼진 추정기 때문에 느린 링크에서 프레임이 쌓입니다. "stalls"는 20초 동안 프레임이 없었다는 뜻이라고 그 절이 적습니다. Daytona 열은 voxl을 Daytona에 넣은 측정이 아닙니다. 기본 샌드박스(CPU 1개, x11vnc와 noVNC, 2560×1600)를 Daytona의 서명된 프리뷰 프록시로 본 열이고, 약 12ms 떨어진 그 경로의 지연이 포함된다고 적습니다.</p>
+<p>RDP와 맞댄 열은 이 README에 없습니다. Microsoft의 <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/5073f4ed-1e93-45e1-b039-6e30c385867c">MS-RDPBCGR</a>는 원격 컴퓨터의 그래픽을 사용자에게 보내고, 사용자의 입력을 원격 컴퓨터에 넣어 그 자리에서 주입하는 프로토콜이라고 적습니다. 공개된 개정은 2026-03-09의 62.0입니다. <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdsod/365317bb-e811-44f1-9ff3-d8036b34ae25">MS-RDSOD</a>는 RDP를 멀티채널 프로토콜로 적고, 전송은 TCP 또는 UDP이며, 가상 채널이 화면, 입력, 장치, 라이선스를 나눈다고 적습니다. 게이트웨이로 방화벽 뒤의 세션 호스트에 RDP를 터널링하는 프로토콜은 같은 개요의 MS-TSGU입니다. voxl이 "웹소켓 하나면 프록시를 탄다"고 적은 비교 대상은 이 문서가 아니라, TURN과 UDP가 필요한 WebRTC입니다. RDP보다 빠르다는 문장은 이 글이 읽은 voxl 문서에 없습니다.</p>
+<p>FAQ가 Moonlight·Sunshine에 대해 적는 자리는 자기 GPU 기계에서 게임을 하는 쪽이고, 그 용도에는 그쪽이 더 맞다고 합니다. RustDesk에 대해서는 TeamViewer·AnyDesk에 해당하는 자리로, 양쪽에 앱을 두고 ID 서버로 서로를 찾는다고 적습니다. 같은 답은 RustDesk가 Wayland 데스크톱을 실험적으로, Android 폰을 공유하며 voxl은 그 둘을 하지 않는다고 적습니다. RustDesk 웹 클라이언트도 ID와 릴레이를 통하며 셀프호스트 쪽은 RustDesk Server Pro가 따른다는 문장은 그 FAQ의 문장입니다. 이 글은 RustDesk 가격표를 다시 열지 않았습니다.</p>
+<p>GPU 인코딩은 FAQ가 "아직 없다"고 적습니다. H.264는 CPU의 x264이고, 바쁜 2560×1600 데스크톱에서 X 서버를 포함해 1.3–1.7코어라고 같은 답이 적습니다. CPU 표의 voxl 칸은 idle 0.00, 1080p 애니메이션 1.39, 스크롤 1.33, 전체 화면 1.68입니다. macOS 하드웨어 인코딩은 진행 중이라고 FAQ가 적습니다.</p>
+<p>브라우저 표는 WebCodecs가 되는 쪽입니다. Chromium 94+는 데스크톱과 Android에서 예, Firefox 130+ 데스크톱은 예, Safari 16.4+와 iPhone·iPad의 브라우저는 예(소리는 Safari 26), Firefox for Android는 아니오. 전화와 태블릿은 터치와 화면 키보드를 받는다고 적습니다.</p>
+<h2 id="_3">비즈니스 인사이트</h2>
+<p>숫자와 문서 사실은 위에 붙입니다. 원격 데스크톱 시장의 점유율은 이 글이 측정하지 않았습니다.</p>
+<p>회사 쪽 1차 출처는 제품 페이지입니다. <a href="https://www.tembo.io/about">tembo.io/about</a>는 Ry Walker를 CEO 겸 공동창업자, Darren Baldwin Jr.를 CTO 겸 공동창업자로 적고, "We've raised $20M to build the agent platform engineering teams can trust, including a $14M Series A led by GreatPoint Ventures"라고 적습니다. 이 글은 그 문장을 투자 공시나 보도자료와 다시 대조하지 않았습니다. 포스트 계정의 자기소개는 co-founder/cto @tembo이고, 이 커밋의 작성자 필드는 Darren Baldwin입니다. 계정과 그 이름의 사람이 같다는 확인은 그 공개 문자열까지입니다.</p>
+<p><a href="https://www.tembo.io/blog/announcing-tembo-computer">2026-09-15 Tembo Computer 글</a>은 작성자 줄을 Darren Baldwin으로 두고, 직접 만든 Linux VM에 60fps 데스크톱이 있으며 Computer 탭이 에이전트 채팅 옆에 그 화면을 연다고 적습니다. 같은 글의 가격표는 시간당 환산으로 Nano 2 vCPU·2 GiB가 $0.1066, Ultra 32 vCPU·128 GiB가 $2.9536이고, vCPU-시간 $0.0403에 GiB-시간 $0.0130을 더한다고 적습니다. "E2B와 Daytona 같은 제공자보다 20% 싸다"는 그 글의 문장이고, 이 글은 두 회사의 가격을 다시 받아 비율을 계산하지 않았습니다. 그 글은 voxl이라는 이름을 쓰지 않습니다. 이름을 잇는 줄은 <code>Cargo.toml</code> 주석입니다. 서버를 라이브러리로 넣는 예로 Tembo CLI의 <code>tembo voxl</code>을 적습니다. 9월 글의 스트리머 바이너리가 이 커밋이라는 문장은 그 주석에 없습니다.</p>
+<p>채택 비용으로 문서가 적는 것은 구독료가 아닙니다. 빌드에는 Rust, pkg-config, clang, x264, libyuv, libopus, libpulse, esbuild가 필요하고, README는 <code>nix-shell</code>이 그걸 맞춘다고 적습니다. macOS는 Homebrew의 x264·opus·pkgconf·esbuild, Windows는 vcpkg의 <code>x64-windows-static-md</code>와 LLVM, esbuild입니다. crates.io <code>voxl-server</code>의 <code>downloads</code>는 2026-11-05 조회에서 <strong>241</strong>이고, 그중 0.3.3이 22입니다. 버전 0.3.3의 <code>created_at</code>은 2026-11-04T15:43:25.388162Z, 라이선스 필드는 MIT입니다. 별 999는 같은 날 09:15 KST의 저장소 API 값입니다.</p>
+<p>라이선스는 소스와 배포 바이너리가 갈립니다. <code>LICENSE</code>는 MIT이고 저작권 줄은 "Copyright (c) 2026 Tembo"입니다. README의 마지막 FAQ는 코드가 MIT이고, 링크하는 x264가 GPL-2.0이므로 voxl 바이너리와 그것을 묶는 배포물은 GPL로 배포된다고 적습니다. 이 글이 연 <code>https://raw.githubusercontent.com/mirror/x264/master/COPYING</code>의 첫 제목은 "GNU GENERAL PUBLIC LICENSE Version 2, June 1991"입니다. 소스만 주고 받는 것과, x264를 링크한 바이너리를 제품에 넣는 것은 README가 다른 문장으로 둡니다. 이 글은 그 결합이 특정 배포 형태에서 GPL 의무를 만드는지를 판정하지 않습니다.</p>
+<p>CPU 표의 1.39–1.68코어는 그 VM, 그 해상도, 한 클라이언트에서의 프로젝트 측정입니다. 화면이 조용할 때의 voxl idle은 0.00입니다. GPU 인코딩이 아직 없다는 FAQ와 같이 읽으면, 바쁜 데스크톱의 비용은 인코더 코어이지 별도 GPU 칸이 아닙니다.</p>
+<p><strong>분석/의견.</strong> 이득이 가는 자리는 README가 적은 그 자리입니다. 화면이 있는 샌드박스를 이미 돌리고, 사람이 볼 탭은 URL 하나면 되며, 에이전트는 잠자기 대신 <code>/wait</code>의 시퀀스로 다음 스크린샷을 맞추고 싶은 쪽입니다. noVNC를 Tight와 폴링으로 실어 보내던 구성에게 이 표는, 프로토콜 이름보다 캡처가 손상을 알고 H.264로 나가는지가 프레임 수를 가른다는 문장입니다. KasmVNC LAN 51.7 FPS는 그 대체가 표 안의 유일한 답이 아니라는 칸입니다.</p>
+<p>손해는 세 문서가 이미 적습니다. Wayland 세션은 아직 입력이 아닙니다. localhost 밖에서는 TLS와 <code>--allowed-hosts</code>가 없으면 WebCodecs와 호스트 검사가 페이지를 세웁니다. 바이너리를 제품에 넣어 배포하는 쪽은 MIT 소스와 별도로 x264의 GPL을 README가 배포 조건으로 올립니다. crates.io 다운로드 241은 발표 다음 날의 설치 횟수이지, Tembo 세션이 이 라이브러리를 몇 번 불렀는지는 아닙니다. 그 호출 수는 이 글의 1차 출처에 없습니다.</p>
+<h2 id="_4">팩트 체크</h2>
+<p>✅ 사실 / ⚠️ 부분적으로 사실·범위가 다름·이 글이 다시 재지 못함 / ❌ 사실 아님</p>
+<h3 id="darrenjr">@darrenjr 포스트</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>voxl은 Rust로 쓴 원격 데스크톱 스트리밍이다</td>
+<td>✅</td>
+<td><a href="https://github.com/tembo/voxl">tembo/voxl</a> 주 언어 Rust, README 첫 문단, <code>Cargo.toml</code> 설명. 패키지 이름은 <code>voxl-server</code> 0.3.3. 웹 클라이언트는 TypeScript이고, 크레이트 이름 <code>voxl</code>은 보셀 CLI라서 README가 설치 이름에서 빼 둔다.</td>
+</tr>
+<tr>
+<td>extremely fast</td>
+<td>⚠️</td>
+<td>저장소 설명과 포스트의 형용사다. 숫자로 받은 비교는 README 벤치마크 절의 자체 표이고, voxl 열은 각 테스트의 최선 실행이다. 이 글은 <code>bench/</code>를 다시 돌리지 않았다.</td>
+</tr>
+<tr>
+<td>60 fps + low latency</td>
+<td>⚠️</td>
+<td>README 요약은 모든 테스트 평균 60 FPS, 중앙 지연 12–99 ms다. <code>--framerate</code> 기본값은 60이라는 상한이다. 표의 전체 화면 LAN 칸은 <strong>59.8 (54.0), 18/25 ms</strong>라서 최악 1초는 54.0 FPS다. 1080p LAN의 p50은 12 ms, 5 Mbps 스크롤의 p50은 99 ms, p99는 109 ms다. "낮다"의 기준선은 그 표 안에만 있다.</td>
+</tr>
+<tr>
+<td>macOS, Windows, Linux</td>
+<td>✅</td>
+<td>README의 세 절과 <code>Cargo.toml</code>의 x11rb, ScreenCaptureKit, DXGI 의존성. Linux는 X11·Xvfb이고 FAQ는 Wayland를 아직 아니라고 적는다. Windows는 10 이상, 사용자 세션이다. macOS와 Windows의 기본 수신 주소는 <code>127.0.0.1</code>이다.</td>
+</tr>
+<tr>
+<td>웹소켓 하나라서 프록시와 샌드박스 포털을 통과한다</td>
+<td>⚠️</td>
+<td>스트림 소켓이 하나인 것은 <code>protocol.ts</code>와 <code>GET /ws</code>가 맞다. FAQ는 리버스 프록시, 터널, 샌드박스 프리뷰 URL, TURN·UDP 없음을 이유로 적는다. 같은 README는 호스트 이름에 <code>--allowed-hosts</code>, localhost 밖에 WebCodecs용 HTTPS를 요구한다. 맞지 않으면 403이다. 표의 Daytona 열은 Daytona의 noVNC를 그 프리뷰 프록시로 본 열이지, voxl을 샌드박스 포털에 넣어 잰 열이 아니다.</td>
+</tr>
+<tr>
+<td>에이전트 API <code>/screenshot</code>, <code>/record</code>, <code>/wait</code></td>
+<td>✅</td>
+<td><code>server.rs</code>의 <code>GET /screenshot</code>, <code>GET /record</code>, <code>POST /record/start</code>, <code>POST /record/stop</code>, <code>GET /wait</code>. README의 curl과 같다. 이 경로는 웹소켓 프레임이 아니라 같은 포트의 HTTP이고, 기본으로 비밀번호가 필요하다. <code>/healthz</code>와 페이지 스크립트만 비밀번호 없이 열린다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> voxl은 Rust 서버가 X11·ScreenCaptureKit·DXGI로 화면을 받아 x264 H.264를 웹소켓 하나에 싣고, 스크린샷·녹화·대기는 HTTP로 여는 프로그램이 맞다. 느슨한 곳은 60fps다. 그 숫자는 기본 프레임 상한이고, README가 공개한 표에서 voxl 열은 최선 실행이며, 전체 화면 테스트의 최악 1초는 54.0 FPS다. 프록시 문장도 플래그 없이 어떤 포털이든 열린다는 측정은 이 문서에 없다.</p>
+<h2 id="_5">참고 자료</h2>
+<ul>
+<li>계기 포스트 — <a href="https://x.com/darrenjr/status/2117647994300387396">@darrenjr, 2026-11-03 16:00 UTC</a> · <a href="https://x.com/i/status/2117647994300387396">i/status</a> · 이 환경에서 읽은 사본 <a href="https://api.fxtwitter.com/status/2117647994300387396">fxtwitter</a></li>
+<li>voxl main <code>9d004076f73cb374bdb87ff96d2e23e44b9f47b9</code>, 2026-11-04T23:14:16Z — <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/README.md">README</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/bench/README.md">bench/README.md</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/SECURITY.md">SECURITY.md</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/LICENSE">LICENSE</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/Cargo.toml">Cargo.toml</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/capture.rs">capture.rs</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/mac/capture.rs">mac/capture.rs</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/win/capture.rs">win/capture.rs</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/encoder.rs">encoder.rs</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/server.rs">server.rs</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/record.rs">record.rs</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/src/wait.rs">wait.rs</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/web/src/protocol.ts">protocol.ts</a> · <a href="https://github.com/tembo/voxl/blob/9d004076f73cb374bdb87ff96d2e23e44b9f47b9/web/src/worker.ts">worker.ts</a></li>
+<li>별·포크·라이선스 — 2026-11-05 00:15:01 GMT <code>GET /repos/tembo/voxl</code>. <code>stargazers_count</code> 999, <code>forks_count</code> 43, <code>license.spdx_id</code> MIT, <code>open_issues_count</code> 10</li>
+<li>crates.io <code>voxl-server</code> 0.3.3 — <a href="https://crates.io/crates/voxl-server">crates.io/crates/voxl-server</a>, <code>created_at</code> <code>2026-11-04T15:43:25.388162Z</code>, 버전 라이선스 MIT, 크레이트 <code>downloads</code> 241. 이름 <code>voxl</code>은 <a href="https://crates.io/crates/voxl">별개의 보셀 CLI</a> (<code>tyleo/tyt</code>, 0.1.0)</li>
+<li>x264 <code>COPYING</code> — <a href="https://raw.githubusercontent.com/mirror/x264/master/COPYING">mirror/x264 COPYING</a>, 첫 제목은 GNU GPL Version 2, June 1991. 바이너리가 GPL로 배포된다는 문장은 voxl README FAQ</li>
+<li>noVNC — <a href="https://github.com/novnc/noVNC">novnc/noVNC</a>, 저장소 설명 "VNC client web application"</li>
+<li>RDP — <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdpbcgr/5073f4ed-1e93-45e1-b039-6e30c385867c">MS-RDPBCGR</a> 개정 62.0 (2026-03-09) · <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdsod/365317bb-e811-44f1-9ff3-d8036b34ae25">MS-RDSOD 기능 구조</a> · 게이트웨이 <a href="https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-rdsod/adcb72b1-ede2-4c73-a9f2-dd13adb0c6b8">MS-TSGU</a>는 같은 개요의 프로토콜 표에 있다</li>
+<li>Tembo — <a href="https://www.tembo.io/">tembo.io</a> · <a href="https://www.tembo.io/about">about</a> · <a href="https://www.tembo.io/blog/announcing-tembo-computer">Announcing Tembo Computer, 2026-09-15</a></li>
+<li>E2B Desktop — <a href="https://github.com/e2b-dev/desktop">e2b-dev/desktop</a>, README 제목 "Open Source Virtual Computer for Computer Use"</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
