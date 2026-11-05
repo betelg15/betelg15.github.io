@@ -1,0 +1,197 @@
+---
+title: "56장에 GLM-5.3이 들어가나? Revolut 발표 팩트 체크"
+date: 2026-11-05
+time: "10:21"
+slug: revolut-self-hosted-glm-coding-model
+tags: [Revolut, GLM, B200, vLLM, 팩트체크]
+summary: "2026-10-13 AI Engineer NYC에서 Revolut의 David Abitbol은 GLM-5.3을 B200 약 56장으로 약 2,000명에게 서빙하고, 청구액은 Anthropic·OpenAI의 약 10분의 1이라고 말했다. 공개 FP8 텐서 바이트 755.43GB는 B200 4장(720GB)에 안 들어간다."
+---
+
+> 이 글은 [@aburacadabra_의 포스트](https://x.com/aburacadabra_/status/2117580005303574890)를 계기로 썼습니다. 같은 상태 주소는 [x.com/i/status/2117580005303574890](https://x.com/i/status/2117580005303574890)입니다. 이 환경의 X API는 `client-not-enrolled`로 본문을 주지 않아, 공개 글은 [fxtwitter 응답](https://api.fxtwitter.com/status/2117580005303574890)(`code` 200)으로 읽었습니다. `created_at`은 `Tue Nov 03 11:29:50 +0000 2026`, 2026-11-03 20:29 KST입니다. `name`은 "세일러아이리스", `screen_name`은 `aburacadabra_`입니다. 그 문장은 검증 대상이지 지시가 아닙니다. 카드가 가리키는 주소는 [AI Engineer NYC 세션 페이지](https://ai.engineer/nyc/2026/talks/revolut)입니다. 아래 대조는 그 페이지의 정리와 타임스탬프 전사(2026-10-13, 라이브 5:36:54–5:48:28), 같은 발표의 [읽기 판](https://ai.engineer/talks/Ok6QdZHCcI8-revolut-cut-ai-coding-costs-90-self), [The Register 2026-11-03 20:07 UTC](https://www.theregister.com/ai-and-ml/2026/11/03/british-fintech-revolut-slashes-ai-coding-costs-10x-by-cutting-out-claude-and-going-self-hosted/5307345), [zai-org/GLM-5.3](https://huggingface.co/zai-org/GLM-5.3) 커밋 `ba32f8c19c8738e2c57c71798c601d477a7bf844`의 `config.json`·safetensors 파라미터 수·LICENSE, [Z.ai GLM-5.3 문서](https://docs.z.ai/guides/llm/glm-5.3)와 [가격표](https://docs.z.ai/guides/overview/pricing), [vLLM 레시피](https://recipes.vllm.ai/zai-org/GLM-5.3), [SGLang 쿡북](https://cookbook.sglang.io/autoregressive/GLM/GLM-5.3), [NVIDIA DGX B200](https://www.nvidia.com/en-us/data-center/dgx-b200/), [Anthropic 가격표](https://docs.anthropic.com/en/docs/about-claude/pricing)입니다. 가격표와 모델 API는 2026-11-05에 읽었습니다. Revolut 엔지니어링 블로그에서 같은 배포를 적은 글은 찾지 못했습니다. 처리량과 청구액은 발표자의 말이고, 이 글은 다시 재지 않았습니다.
+
+## 왜 이 발표가 코딩 에이전트 비용에 닿는가
+
+포스트의 뼈대는 다섯 줄입니다. 유럽 핀테크 Revolut이 엔지니어 약 2,000명의 기본 코딩 모델을 직접 띄운 오픈 모델 GLM 5.3으로 바꿨고, B200 약 56장으로 돌리며, 비용은 예전 Anthropic·OpenAI 청구액의 약 10분의 1이고, Claude Code와 Codex는 필요할 때만 쓰는 예외로 남았으며, 출처는 10월 AI Engineer NYC 발표라는 것입니다.
+
+그 발표는 있습니다. [세션 페이지](https://ai.engineer/nyc/2026/talks/revolut)는 2026-10-13, 연사는 Revolut Ops & Infrastructure Leader David Abitbol, 제목은 "Shipping like a startup, regulated like a bank"입니다. 정리는 이렇게 적습니다. 이 워크로드의 기본은 오픈 모델이 됐고 프런티어 서비스는 예외로 남았으며, B200 56장으로 GLM 5.3을 약 2,000명에게 서빙한다고 그가 말했다고 적습니다. 타임스탬프 5:41:18은 "to serve 2,000 engineers, we roughly need 56 B200."이고, 5:41:23은 "And that's to host GLM 5.3."입니다.
+
+개발자에게 닿는 지점은 "은행이 오픈 소스를 선언했다"가 아닙니다. 코딩 에이전트의 모델과 하네스는 분리된다는 문장입니다. 전사 5:45:52는 엔드포인트가 OpenAI 호환 API이고 Responses API라고 말하고, 5:45:59가 그 엔드포인트를 OpenCode, Codex, Codex 앱 안에서 쓸 수 있다고 말합니다. [읽기 판](https://ai.engineer/talks/Ok6QdZHCcI8-revolut-cut-ai-coding-costs-90-self)은 그 목록에 Claude Code를 넣습니다. 가중치를 어디서 돌리든, 엔지니어가 여는 프로그램은 그대로일 수 있다는 배치입니다.
+
+청구액이 10분의 1이라는 문장도 그 발표에 있습니다. 5:42:19는 "our blended cost of token is 30 cents per million"이고, 이어 "our invoice is one-tenth of what we were spending on Anthropic and OpenAI"입니다. 읽기 판은 슬라이드를 이렇게 읽습니다. 입력과 출력이 100만 토큰당 $0.30이고, 캐시된 토큰은 공짜라고 적혀 있다고 합니다. 비교 기간과 사용량이 맞는 표는 그 슬라이드에 없다고 같은 페이지가 적습니다. 회의 쪽 주석도 따로 있습니다. 리드 타임 비교는 모델 교체를 다른 원인과 분리하지 않습니다.
+
+Revolut이 자기 블로그에 같은 숫자를 올려 둔 글은 이 글을 쓰는 동안 찾지 못했습니다. 1차 확인은 연사의 발표와, 그 발표를 인용한 The Register입니다. The Register는 2026-11-03 20:07 UTC에 "self-hosted models its default"와 "GLM-5.3, which it now serves using 56 Nvidia B200 GPUs"를 적습니다.
+
+## 체크포인트는 753.3B이고, 한 토큰이 만지는 전문가는 일부다
+
+[Hugging Face 모델 API](https://huggingface.co/api/models/zai-org/GLM-5.3)가 커밋 `ba32f8c`에 대해 주는 safetensors 합은 **753,329,940,480**입니다. dtype 분할은 F8_E4M3 **751,226,191,872**, BF16 **2,103,729,152**, F32 **19,456**입니다. `config.json`의 `architectures`는 `GlmMoeDsaForCausalLM`, `quantization_config.quant_method`는 `fp8`, `fmt`는 `e4m3`, `weight_block_size`는 `[128, 128]`입니다. 같은 파일의 `dtype` 필드는 `bfloat16`입니다. 저장 dtype과 그 필드는 한 칸이 아닙니다.
+
+층과 전문가는 같은 config에 있습니다.
+
+| 필드 | 값 |
+|---|---|
+| `num_hidden_layers` | 78 |
+| `first_k_dense_replace` | 3 |
+| `n_routed_experts` | 256 |
+| `num_experts_per_tok` | 8 |
+| `n_shared_experts` | 1 |
+| `hidden_size` | 6144 |
+| `moe_intermediate_size` | 2048 |
+| `index_topk` | 2048 |
+| `index_topk_freq` | 4 |
+| `max_position_embeddings` | 1,048,576 |
+| `vocab_size` | 154880 |
+
+앞 3개 층은 밀집 MLP이고 나머지는 MoE입니다. 라우터가 토큰마다 고르는 전문가 수는 8이고, 공유 전문가는 설정상 1개입니다. 이 글은 포워드가 공유 전문가를 8개 안에 넣는지 밖에 더하는지를 실행해 보지 않았습니다. [SGLang 쿡북](https://cookbook.sglang.io/autoregressive/GLM/GLM-5.3)은 "256 routed experts (8 active per token)"과 MTP 층 하나를 적습니다. [vLLM 레시피](https://recipes.vllm.ai/zai-org/GLM-5.3)의 머리말은 "~743B-parameter MoE (39B active)"입니다. 743B와 허브의 753.3B는 같은 문장이 아닙니다. 활성 39B를 이 config에서 다시 더하지는 않았습니다.
+
+어텐션은 전체 과거를 매번 보지 않습니다. `index_topk` 2048은 인덱서가 고르는 키의 개수고, `index_topk_freq` 4는 그 인덱서를 네 층에 한 번 새로 돌리겠다는 주기입니다. SGLang 쿡북은 이 구조를 DeepSeek Sparse Attention으로 부르고, 문맥이 길어져도 어텐션 비용이 그 top-k 근처에 머문다고 적습니다. 발표자가 "1M을 서빙할 수 있어도 필요한 것은 256"이라고 한 뒤, 세션 정리와 The Register가 그 256을 256K로 읽는 이유입니다. 모델이 1,048,576 위치를 선언하는 것과, Revolut이 그 창을 다 연다는 것은 다른 문장입니다. Z.ai 문서는 입력을 텍스트만, 문맥 1M, 최대 출력 128K로 적습니다. 발표의 "GLM은 텍스트 전용"과 같은 제한입니다.
+
+가중치 바이트는 파라미터 수에 dtype 폭을 곱한 값입니다. 아래는 이 글의 산수이고, Revolut 클러스터의 측정이 아닙니다.
+
+```python
+# Hugging Face safetensors 파라미터 수 × dtype 폭.
+# F8 1바이트, BF16 2바이트, F32 4바이트. 블록 스케일 바이트는 여기 없다.
+weight_bytes = 751_226_191_872 + 2_103_729_152 * 2 + 19_456 * 4
+# 755_433_728_000 bytes = 755.43 GB (10^9 기준)
+```
+
+755.43GB는 스케일 팩터와 런타임 버퍼를 뺀 텐서 바이트입니다. vLLM 레시피가 FP8 변형의 크기로 적는 숫자는 **893GB**이고, BF16 변형은 **1786GB**입니다. 1786은 893의 두 배입니다. SGLang 쿡북은 BF16을 **약 1.5TB**로 적고, 그 빌드는 8장 B200 한 노드에 들어가지 않는다고 적습니다. 세 숫자는 한 표의 한 칸이 아닙니다. 이 글은 755.43GB를 허브 dtype에서 계산한 값으로만 씁니다.
+
+## 56장과 TP4·TP8
+
+[DGX B200 페이지](https://www.nvidia.com/en-us/data-center/dgx-b200/)의 GPU 메모리는 시스템 합계 **1,440GB**, HBM3e 대역폭 합계 **64 TB/s**, GPU는 Blackwell 8장입니다. 장당으로 나누면 180GB, 8 TB/s입니다. 나눗셈은 이 글의 것이고, 페이지는 장당 칸을 따로 적지 않습니다. NVIDIA HGX 참조 구조는 B200 SXM을 **180GB HBM3e**, 대역폭은 **최대 8 TB/s**로 적습니다. vLLM 레시피의 하드웨어 칸도 B200을 180GB로 적습니다.
+
+56이라는 수는 발표의 "roughly 56"입니다. 56 ÷ 8 = 7이라, The Register는 GPU 개수가 DGX B200 일곱 대와 같다고 적습니다. 연사는 섀시 수를 말하지 않았습니다. 56 × 180GB = **10,080GB**. 이것도 이 글의 곱셈입니다.
+
+한 복제본을 몇 장에 올릴지는 그가 열어 둔 선택입니다. 전사 5:44:34는 GLM이 TP4에 들어가도 KV 캐시가 부족하고, 워크로드에 따라 TP8이 나을 수 있다고 말합니다. "들어가므로 그렇게 운영한다"가 아닙니다.
+
+180GB 네 장은 720GB입니다. 755.43GB는 720GB보다 **35.43GB** 큽니다. vLLM이 적은 FP8 893GB는 720GB보다 **173GB** 큽니다. 공개된 FP8 크기 두 개 모두, 이 글의 180GB×4에는 가중치만으로도 넘칩니다. 여덟 장은 1,440GB입니다. 755.43GB를 올리면 가중치 밖에 **684.57GB**, 893GB를 올리면 **547GB**가 남습니다. KV, 활성화, 단편화가 이 나머지에서 나갑니다. vLLM 레시피는 FP8 KV를 쓰면 8장 B200에서 1M 문맥에 닿는다고 적고, 동시 시퀀스 수는 `--max-num-seqs 32`에서 시작하라고 적습니다.
+
+4비트 쪽 크기는 다릅니다. vLLM은 Inferact의 NVFP4에 대해, MoE 전문가 선형 층만 NVFP4이고 공유 전문가·어텐션·임베딩·앞쪽 밀집 층은 BF16이며, 체크포인트가 **약 465GB**라고 적습니다. 같은 페이지의 변형 칸은 NVFP4를 **558GB**로 적습니다. SGLang은 RadixArk NVFP4를 **약 0.45TB**로 적고, 라우팅된 전문가의 선형 가중치와 활성화만 4비트라고 적습니다. 465GB, 558GB, 450GB는 모두 720GB 아래입니다. "TP4에 들어간다"는 문장은, 오늘 공개된 FP8 바이트가 아니라 이런 4비트 발자국과 맞습니다. 연사가 그 체크포인트 이름을 말한 기록은 이 글이 읽은 전사에 없습니다. 그가 한 말은 "Blackwell이면 FP4보다 높은 정밀도로 돌리고 싶지 않다"입니다.
+
+그 다음 문장은 방향이 반대입니다. 전사는 "going from FP4 to FP8 is a 40% saving in GPU footprint for zero loss in precision"이라고 들립니다. FP8이 FP4보다 작아진다는 뜻으로 읽히면, 위의 공개 크기와 맞지 않습니다. 읽기 판도 말한 방향과 권하는 방향이 어긋난다고 적고, 40%를 재현 가능한 환산 규칙으로 받지 않습니다. 이 글이 크기만으로 계산한 감소는, 755.43GB에서 465GB로 가면 38.4%, 893GB에서 558GB로 가면 37.5%, 755.43GB에서 0.45TB(450GB)로 가면 40.4%입니다. 근처의 비율은 나눗셈으로 나오지만, 그가 말한 화살표는 큰 형식에서 작은 형식으로 가는 쪽이 아닙니다. "정밀도 손실 0"을 재는 표는 발표에 없고, SGLang은 NVFP4 칸의 정확도·처리량 벤치가 아직 없다고 적습니다.
+
+같은 56장에서 그가 보여 준 운영 숫자는 장비를 더 산 결과가 아닙니다. 슬라이드는 이주 중 첫 토큰까지 14.26초에서 안정 구간의 1.68초로, 88% 줄었다고 세션 페이지가 읽습니다. 말은 4월에 초당 요청 약 3, 첫 토큰 10초 초과, 8월에 초당 7 초과, 약 1.6초입니다. 장 수는 56 그대로입니다. 인터랙티브 생성은 초당 약 200토큰이면 충분하고, 오후 5시 이후 한 사람이 GPU를 거의 혼자 쓰면 800까지 간다고 말합니다. 200은 클러스터 합이 아닙니다. 5초를 넘으면 슬랙이 찬다는 문장도 그 자리의 경험칙입니다.
+
+프리필과 디코드를 나누는 일은 그가 "볼 것"으로 나열한 항목입니다. 전사 5:44:54는 speculative decoding, sequential prefill, PD disaggregation을 한 줄에 넣습니다. SGLang 쿡북은 GLM-5.3의 PD 분리를 지원한다고 적지만, 그 문장의 주어는 SGLang입니다. The Register는 NVFP4로 바꾸고 PD를 구현했다고 씁니다. 연사의 단어는 FP4와 "look into"입니다.
+
+## 공개 레시피의 서빙 스택
+
+발표는 vLLM이나 SGLang이라는 이름을 말하지 않습니다. 아래 명령은 [vLLM 레시피](https://recipes.vllm.ai/zai-org/GLM-5.3)가 8장 B200, 공개 FP8 체크포인트, 1M 문맥에 대해 적은 예입니다. Revolut의 플래그가 아닙니다. 레시피가 요구하는 빌드는 GLM5Next가 들어 있는 vLLM 0.29.0 이상입니다.
+
+```bash
+# recipes.vllm.ai/zai-org/GLM-5.3 의 "FP8 on 8xB200". Revolut 설정이 아니다.
+VLLM_USE_RUST_FRONTEND=1 vllm serve zai-org/GLM-5.3 \
+  --tokenizer-mode glm5_next \
+  --kv-cache-dtype fp8_e4m3 \
+  --tensor-parallel-size 8 \
+  --speculative-config.method mtp \
+  --speculative-config.num_speculative_tokens 5 \
+  --max-num-seqs 32 \
+  --tool-call-parser glm47 \
+  --reasoning-parser glm47 \
+  --enable-auto-tool-choice \
+  --served-model-name glm-5.3
+```
+
+이 프로세스는 OpenAI 호환 `/v1`을 엽니다. 레시피의 클라이언트 예는 `base_url`을 `http://localhost:8000/v1`로 두고 `chat.completions`를 호출합니다. MTP 5토큰은 그 레시피가 지연을 낮추려고 켜 둔 speculative decoding이고, 발표자가 자기 클러스터에서 5를 골랐다는 문장은 없습니다. `--max-num-seqs 32`는 1M 창을 KV에 맞추는 손잡이로 적혀 있습니다. 발표자가 실제로 연 창은 256K 쪽으로 읽힙니다. 창을 줄이면 같은 KV로 더 많은 시퀀스를 넣을 수 있지만, 그 트레이드오프의 Revolut 쪽 측정은 슬라이드의 14.26초와 1.68초입니다.
+
+SGLang 쿡북이 같은 모델에 대해 적는 운영 점은 세 가지입니다. 블랙웰에서 DSA의 KV dtype은 따로 주지 않으면 `fp8_e4m3`로 잡히고, MTP는 `--speculative-algorithm EAGLE`로 켜며, PD 분리는 프리필 역할과 디코드 역할을 나눈 뒤 라우터로 잇습니다. 쿡북의 에이전트 절은 코딩 에이전트처럼 접두사가 턴마다 반복되는 워크로드에서 KV를 재사용하라고 적습니다. 발표자가 코딩 캐시 적중을 90% 위로 두라고 한 것과 같은 축입니다. 그 90%는 목표이고, 달성한 적중률은 전사에 없습니다. 읽기 판은 비용 슬라이드의 캐시 토큰을 공짜로 읽습니다. 적중이 높을수록, 그가 30센트로 부른 구간 밖에 토큰이 많이 쌓입니다.
+
+Z.ai가 자기 API에 적어 둔 프로토콜은 세 개입니다. OpenAI Chat Completions, OpenAI Responses, Anthropic Messages입니다. 셀프호스트가 이 세 개를 자동으로 가진다는 문장은 그 문서에 없습니다. vLLM 레시피가 보여 주는 것은 Chat Completions입니다. 발표자는 자기 엔드포인트가 OpenAI 호환이고 Responses API라고 말합니다.
+
+하네스를 붙이는 형식은 프로그램마다 다릅니다. 타임스탬프 5:45:52는 엔드포인트가 OpenAI 호환이고 Responses API라고 말하고, 5:45:59가 OpenCode, Codex, Codex 앱을 이름합니다. [Claude Code 게이트웨이 문서](https://code.claude.com/docs/en/llm-gateway-connect)의 `ANTHROPIC_BASE_URL`은 Anthropic Messages를 기대하고, 확인 요청은 `POST $ANTHROPIC_BASE_URL/v1/messages`입니다. [호환 표](https://code.claude.com/docs/en/llm-gateway-protocol)도 그 변수의 엔드포인트를 `/v1/messages`로 적습니다. 위의 vLLM 명령을 그대로 이 변수에 넣으면 와이어가 다릅니다.
+
+```bash
+# code.claude.com 문서의 형태. 게이트웨이가 /v1/messages 를 말할 때의 예.
+# vLLM의 /v1/chat/completions 와 같은 경로가 아니다.
+export ANTHROPIC_BASE_URL=https://llm-gateway.example.com
+export ANTHROPIC_AUTH_TOKEN=sk-gateway-key
+```
+
+Codex는 사용자 설정 `~/.codex/config.toml`의 커스텀 프로바이더입니다. [공식 설정 문서](https://learn.chatgpt.com/docs/config-file/config-advanced)는 `base_url`과 `wire_api = "responses"`를 적습니다. 발표자가 말한 "response API"와 이름이 같습니다. 아래 호스트는 문서의 모양을 보여 주려고 적은 자리표시자입니다.
+
+```toml
+# learn.chatgpt.com 의 model_providers 형태. Revolut 파일이 아니다.
+model = "glm-5.3"
+model_provider = "self-hosted"
+
+[model_providers.self-hosted]
+name = "Self-hosted endpoint"
+base_url = "https://glm.example.internal/v1"
+env_key = "GLM_API_KEY"
+wire_api = "responses"
+```
+
+같은 문서는 프로젝트 로컬 `.codex/config.toml`이 `model_provider`와 `model_providers`를 무시한다고 적습니다. 게이트웨이 주소는 사용자 설정에 둡니다. 읽기 판이 Claude Code까지 하네스 목록에 넣는 것과, 타임스탬프 전사가 그 문장에서 OpenCode·Codex·Codex 앱만 말하는 것은 회의 쪽 두 페이지가 이미 어긋나는 지점입니다. 어느 쪽이든, 프런티어 모델을 예외로 남긴다는 말과 하네스를 셀프호스트에 붙인다는 말은 양립합니다. 프로그램 이름과 가중치는 다른 스위치입니다.
+
+이미지는 그 텍스트 모델 밖에 있습니다. 전사는 로컬 라우터로 이미지 인식을 Gemini 또는 Luna에 보내고, 본 작업은 GLM에 둔다고 말합니다. 비전 모델로는 "GLM 5G flash"가 들리고, UI 디자이너가 쓴다고 말합니다. 허브 컬렉션에 있는 비전 체크포인트 이름은 `zai-org/GLM-5.3-Flash`입니다. "5G"가 그 이름의 음성 인식인지는 전사가 풀어 쓰지 않습니다. The Register는 이 라우트를 Gemini 또는 GPT Luna로 적습니다.
+
+## 비즈니스 인사이트
+
+숫자와 회사 사실은 방금 연 페이지에 붙입니다. 시장 점유율은 이 글이 측정하지 않았습니다.
+
+발표자가 회사 소개로 말한 것은 유럽의 디지털 은행, 고객 8,000만, 45개 시장, 지난 한 해 유럽에서 가장 많이 내려받은 금융 앱, 7월 기준 유럽 최대 비상장사입니다. 이 환경에서 `revolut.com`의 연례 보고서와 고객 수 글은 HTTP 403 보안 확인 페이지만 돌아와, 그 다섯 줄을 회사 페이지로 대조하지 못했습니다. 아래 라이선스 문턱과 견주는 매출 숫자도 그래서 적지 않습니다.
+
+가중치 라이선스는 OSI 오픈 소스가 아닙니다. 허브 `license`는 `other`, `license_name`은 `glm-5.3`입니다. [LICENSE](https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE)는 사용·배포·파인튠·판매를 허용하되, "Model as a Service"를 제3자가 입력·파라미터·학습 데이터를 실질적으로 통제하는 추론·파인튠 제공으로 정의합니다. 특정 기능 안에만 심은 최종 사용자 제품과, 남이 호스팅한 모델로 요청을 넘기는 일은 그 정의에서 뺍니다. 피허가자가 그 MaaS를 하면서 자신과 계열사의 연속 12개월 매출이 100억 달러를 넘으면, 상업적 사용 전에 Z.AI 보안 검토를 통과해야 한다고 적습니다. 그 매출이 오늘 문턱을 넘는지 이 글은 확인하지 못했습니다. 발표자가 반복한 단어는 open source입니다.
+
+토큰 단가의 비교 대상은 두 종류입니다. 하나는 그가 말한 청구서이고, 다른 하나는 오늘 공개된 리스트 가격입니다. 후자를 전자로 바꾸면 안 됩니다.
+
+| 가격 (100만 토큰, USD) | 입력 | 캐시 적중 | 출력 | 출처 |
+|---|---:|---:|---:|---|
+| 발표 슬라이드 (읽기 판) | 0.30 | 0 (공짜로 적힘) | 0.30 | [읽기 판](https://ai.engineer/talks/Ok6QdZHCcI8-revolut-cut-ai-coding-costs-90-self) |
+| 말한 "blended" | 0.30에 무엇을 넣었는지 슬라이드와 불일치 | | | 전사 5:42:19 |
+| Z.ai GLM-5.3 | 1.40 | 0.26 | 4.40 | [가격표](https://docs.z.ai/guides/overview/pricing) |
+| Claude Opus 5 | 5 | 0.50 | 25 | [Anthropic](https://docs.anthropic.com/en/docs/about-claude/pricing) |
+| Claude Sonnet 5 | 2 | 0.20 | 10 | 같은 표 |
+
+Z.ai 캐시 입력 $0.26은 슬라이드의 $0.30 바로 옆입니다. Z.ai 출력 $4.40은 $0.30의 14.7배입니다. Opus 5 캐시 적중 $0.50은 $0.30의 1.7배이고, 출력 $25는 83배입니다. Sonnet 5 캐시 적중 $0.20은 $0.30보다 쌉니다. 캐시가 90%를 넘는 코딩 워크로드라면, 리스트 가격의 입력 적중만 놓고 10배 차이가 나지 않습니다. 10배는 그가 청구서 전체에 대해 말한 비율입니다. 읽기 판은 그 90% 절감이 청구서 비교이고, 맞춘 사용 기간도, 서비스를 운영하는 인건비도 슬라이드에 없다고 적습니다. OpenAI 리스트 가격 페이지는 이 글이 열지 않았습니다. 예전에 어떤 모델 혼합이 청구서에 있었는지도 발표가 적지 않습니다. 전사에 나오는 과거 모델 이름은 Claude Code 출시 무렵의 Sonnet 3.7입니다.
+
+**분석/의견.** 이득이 가는 자리는 코드가 회사 밖으로 나가면 안 되고, 접두사가 반복되며, GPU를 운영할 사람과 시간이 있는 조직입니다. 발표가 그 자리의 통제로 말한 것은 미국 서비스에 가중치를 올리는 것(중국 추론 엔드포인트를 부르지 않는 것), 코딩 작업을 자율 에이전트가 아니라 사람 개입으로 분류하는 것, 샌드박스에서 `grep`은 허용하고 Gradle은 거부하는 것, 추론·GPU 제공자의 기본 무보존, OpenTelemetry입니다. "GPU provider"와 "US-based service"가 전사에 있으므로, 전용 GPU는 말해도 자산 대장에 있는 기계인지는 말하지 않습니다.
+
+손해가 생기는 읽기는 세 가지입니다. 청구서가 10분의 1이므로 토큰 단가도 어디서나 10분의 1이라고 보면, 캐시를 공짜로 둔 슬라이드와 Sonnet 5 캐시 적중 $0.20이 빠집니다. 56장이 2,000명의 동시 세션이라고 보면, 그가 말한 초당 요청이 한 자릿수인 사실이 빠집니다. 하네스 이름이 곧 프런티어 가중치라고 보면, 예외로 남긴 Codex·Claude Code와, 그 프로그램을 셀프호스트 Responses 엔드포인트에 붙인다는 문장이 한 줄로 붙습니다.
+
+가중치를 가져가는 쪽은 Z.ai의 호스티드 출력 토큰($4.40)을 안 삽니다. 그 대신 NVIDIA 메모리와 운영 시간을 삽니다. 라이선스의 100억 달러 문턱은 추론을 제3자에게 파는 사업을 겨냥하고, 은행이 자기 엔지니어의 하네스 안에서 쓰는 형태는 정의가 빼 둔 쪽에 가깝습니다. 이 문장은 라이선스 문장을 읽은 의견이고, Z.AI의 검토 결정이 아닙니다. Revolut의 최근 매출이 그 문턱의 어디쯤인지는 이 글이 연 페이지에 없습니다.
+
+엔지니어의 일에 대해 발표자가 강조한 것은 코딩 시간보다 리드 타임입니다. 리드 타임은 기능을 집어 든 때부터 머지되어 배포 준비가 될 때까지이고, 단위는 일입니다. 코딩 시간은 시간입니다. 말은 GLM 5.1을 셀프호스팅하기 시작한 2026년 4월 무렵 코딩 시간 60%, 리드 타임 70%입니다. 읽기 판은 슬라이드가 리드 타임을 60%로 적는다고 하고, 두 숫자를 화해시킬 비교 구간이 없다고 적습니다. 그의 해석은 병목이 에디터 밖(받은편지함, Jira, Confluence)이고, 토큰이 비싸면 그 일을 아낀다는 것입니다. 회의 페이지는 이 비교가 모델 교체만 떼어 낸 실험이 아니라고 적습니다. 초기에 본 지출은 "a thousand a month, 10,000 a month"입니다. 통화 기호는 전사에 없고, The Register가 달러로 적습니다.
+
+## 팩트 체크
+
+✅ 사실 / ⚠️ 부분적으로 사실·범위가 다름 / ❌ 사실 아님
+
+### @aburacadabra_ 포스트
+
+| 주장 | 판정 | 근거 |
+|---|---|---|
+| Revolut이 엔지니어 약 2,000명의 기본 코딩 모델을 셀프호스트 GLM 5.3으로 바꿨다 | ⚠️ | [세션 페이지](https://ai.engineer/nyc/2026/talks/revolut)는 오픈 모델이 이 워크로드의 기본이 됐고, B200 56장으로 GLM 5.3을 약 2,000명에게 서빙한다고 연사가 말했다고 적습니다. 전사 5:41:23은 "GLM 5.3"입니다. 5:38:12의 2,000명은 지난 1년 성과 차트의 표본이기도 합니다. 프런티어는 예외로 남습니다. Revolut 블로그의 같은 배포 글은 찾지 못했고, 청구·장부 감사는 없습니다. |
+| B200 GPU 약 56장으로 돌린다 | ✅ | 전사 "we roughly need 56 B200". 세션 페이지와 The Register도 56입니다. 일곱 대라는 섀시 등치는 The Register의 문장입니다. |
+| 비용은 예전 Anthropic·OpenAI 청구액의 약 10분의 1 | ⚠️ | 전사 5:42:22가 그 문장입니다. 30센트는 "blended"로 말하고, 읽기 판은 슬라이드의 입력·출력이 $0.30, 캐시는 공짜라고 읽습니다. 맞춘 기간과 운영비가 없습니다. 오늘 리스트 가격에서 Sonnet 5 캐시 적중은 $0.20, Z.ai 캐시 입력은 $0.26이라, 토큰 종류를 가리지 않은 10배는 이 표에서 나오지 않습니다. |
+| Claude Code와 Codex는 필요할 때만 쓰는 예외로 남았다 | ⚠️ | 5:40:59는 "we keep using codex, code code"와 "we keep them as exception"입니다. 읽기 판은 Codex, Claude Code, Gemini를 계속 쓴다고 적습니다. 같은 발표는 그 하네스를 셀프호스트 엔드포인트에도 붙인다고 하므로, 프로그램이 사라진 것은 아닙니다. |
+| 10월 AI Engineer NYC 발표이고, 이번 주에 다시 이야기가 됐다 | ✅ | 세션 페이지의 날짜는 2026-10-13입니다. 포스트 `created_at`은 2026-11-03 11:29 UTC이고, The Register는 같은 날 20:07 UTC입니다. "이번 주"는 그 작성 시점의 말입니다. |
+
+발표 안에 있지만 포스트가 압축하지 않은 문장도 갈립니다.
+
+| 주장 | 판정 | 근거 |
+|---|---|---|
+| 모델이 약 8,000억 파라미터다 | ⚠️ | [읽기 판](https://ai.engineer/talks/Ok6QdZHCcI8-revolut-cut-ai-coding-costs-90-self)은 연사가 800B로 말했다고 적습니다. 타임스탬프 전사는 "8.500 billion"으로 들립니다. 허브 safetensors 합은 753,329,940,480입니다. vLLM 레시피 머리말은 ~743B입니다. |
+| GLM-4.3을 56장에 올렸다 | ❌ | [공식 세션 페이지](https://ai.engineer/nyc/2026/talks/revolut)의 정리와 전사 5:41:23은 GLM 5.3입니다. "GLM-4.3"은 그 페이지에 없습니다. [다이제스트](https://aie-nyc-2026.vercel.app/sessions/036-shipping-like-a-startup-regulated-like-a-bank-self-hosting/)는 "Read the official edition"으로 그 세션을 가리키면서, 자기 TL;DR에는 "GLM-4.3"과 "800 billion"을 같이 적습니다. |
+| FP8 가중치가 B200 네 장(TP4)에 들어간다 | ❌ | 장당 180GB × 4 = 720GB. 이 글이 허브 dtype으로 계산한 텐서 바이트는 755.43GB이고, vLLM이 적은 FP8 크기는 893GB입니다. 둘 다 720GB를 넘습니다. 여덟 장 1,440GB에는 둘 다 들어갑니다. |
+| FP4로 가면 발자국이 줄고, FP4에서 FP8로 가도 40%가 줄며, 정밀도 손실은 0이다 | ❌ | 더 작은 쪽으로 공개된 크기는 4비트 쪽(vLLM 약 465GB와 칸의 558GB, SGLang 약 0.45TB)입니다. "FP4에서 FP8로"는 그 방향이 아닙니다. 40% 근처는 일부 쌍의 나눗셈에서 나오지만 환산 규칙으로 발표되지 않았습니다. SGLang은 NVFP4 정확도 벤치가 아직 없다고 적습니다. |
+| The Register가 적은 대로 NVFP4로 바꾸고 PD 분리를 구현했다 | ⚠️ | 기사는 그렇게 요약합니다. 전사의 단어는 FP4이고, speculative decoding·sequential prefill·PD disaggregation은 "look into"의 목록입니다. 구현 완료를 그가 말한 기록은 이 전사에 없습니다. |
+| 4월 GLM 5.1 이후 코딩 시간 60%, 리드 타임 70%는 모델이 만든 이득이다 | ⚠️ | 전사는 두 퍼센트를 말합니다. 읽기 판은 슬라이드의 리드 타임이 60%라고 적습니다. 세션 페이지는 비교가 모델 교체를 다른 원인과 분리하지 않는다고 적습니다. |
+| 가중치를 회사 소유의 기계에 올렸다 | ⚠️ | "dedicated GPU"와 "US-based service", 그리고 추론·GPU 제공자의 무보존이 같이 있습니다. 소유와 임대를 구분하는 문장은 없습니다. 중국에 있는 Z.ai 엔드포인트를 부르지 않는다는 말은 있습니다. |
+
+**총평:** 2026-10-13 발표에서 Revolut 연사가, 약 2,000명을 GLM 5.3과 B200 약 56장으로 서빙하고 프런티어 모델은 예외로 둔다고 말한 뼈대는 회의 페이지의 전사와 맞습니다. 느슨한 곳은 청구 10분의 1(감사된 청구서가 없고, 슬라이드의 30센트는 캐시를 공짜로 둔 채 입력·출력에 붙어 있다), 800B라는 말과 체크포인트 753.3B, 그리고 "TP4에 들어간다"가 공개 FP8이 아니라 4비트 발자국과만 맞는다는 점입니다.
+
+## 참고 자료
+
+- 계기 포스트 — [@aburacadabra_, 2026-11-03 11:29 UTC](https://x.com/aburacadabra_/status/2117580005303574890) · [i/status](https://x.com/i/status/2117580005303574890) · 이 환경에서 읽은 사본 [fxtwitter](https://api.fxtwitter.com/status/2117580005303574890). 카드 링크는 [ai.engineer/nyc/2026/talks/revolut](https://ai.engineer/nyc/2026/talks/revolut)
+- 발표 공식 페이지, 2026-10-13, 라이브 5:36:54–5:48:28 — [세션](https://ai.engineer/nyc/2026/talks/revolut) · [읽기 판](https://ai.engineer/talks/Ok6QdZHCcI8-revolut-cut-ai-coding-costs-90-self)
+- The Register, Tobias Mann, 2026-11-03 20:07 UTC — [British fintech Revolut slashes AI coding costs 10x…](https://www.theregister.com/ai-and-ml/2026/11/03/british-fintech-revolut-slashes-ai-coding-costs-10x-by-cutting-out-claude-and-going-self-hosted/5307345)
+- 제3자 다이제스트. 공식 페이지가 아니며 TL;DR에 GLM-4.3이 있다 — [aie-nyc-2026.vercel.app 세션 036](https://aie-nyc-2026.vercel.app/sessions/036-shipping-like-a-startup-regulated-like-a-bank-self-hosting/)
+- 체크포인트 — [zai-org/GLM-5.3](https://huggingface.co/zai-org/GLM-5.3), 커밋 `ba32f8c19c8738e2c57c71798c601d477a7bf844`, API `lastModified` 2026-10-14T12:22:48Z, safetensors `total` 753329940480. [config.json](https://huggingface.co/zai-org/GLM-5.3/raw/main/config.json) · [LICENSE](https://huggingface.co/zai-org/GLM-5.3/raw/main/LICENSE) · [모델 API](https://huggingface.co/api/models/zai-org/GLM-5.3)
+- Z.ai — [GLM-5.3](https://docs.z.ai/guides/llm/glm-5.3) · [가격](https://docs.z.ai/guides/overview/pricing). 2026-11-05에 GLM-5.3은 입력 $1.4, 캐시 입력 $0.26, 출력 $4.4
+- 서빙 레시피. Revolut 설정이 아니다 — [vLLM GLM-5.3](https://recipes.vllm.ai/zai-org/GLM-5.3) · [SGLang GLM-5.3](https://cookbook.sglang.io/autoregressive/GLM/GLM-5.3)
+- GPU — [NVIDIA DGX B200](https://www.nvidia.com/en-us/data-center/dgx-b200/), 8장 합계 1,440GB, HBM3e 64 TB/s · [HGX B200 180GB](https://docs.nvidia.com/enterprise-reference-architectures/hgx-ai-factory-h100-h200-b200/latest/components.html)
+- 하네스 — [Claude Code 게이트웨이](https://code.claude.com/docs/en/llm-gateway-connect) · [와이어 형식](https://code.claude.com/docs/en/llm-gateway-protocol) · [Codex model providers](https://learn.chatgpt.com/docs/config-file/config-advanced)
+- 리스트 가격 — [Anthropic pricing](https://docs.anthropic.com/en/docs/about-claude/pricing), 2026-11-05. Opus 5는 입력 $5, 캐시 적중 $0.50, 출력 $25. Sonnet 5는 $2, $0.20, $10
+- Revolut 회사 소개 다섯 줄(고객 8,000만, 45개 시장, 최다 다운로드 금융 앱, 유럽 최대 비상장사)은 발표 전사에만 있다. 2026-11-05에 이 환경이 받은 [annual-report-2025](https://www.revolut.com/annual-report-2025/)와 [고객 수 글](https://www.revolut.com/blog/post/revolut-number-of-customers/)은 HTTP 403 보안 확인 페이지였다
