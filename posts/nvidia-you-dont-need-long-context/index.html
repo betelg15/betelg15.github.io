@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>긴 기록 없이 에이전트가 되나? NVIDIA &#x27;You don&#x27;t need long context&#x27;</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-06 · <span class="chip">#NVIDIA</span><span class="chip">#에이전트</span><span class="chip">#컨텍스트</span><span class="chip">#논문리뷰</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">긴 기록 없이 에이전트가 되나? NVIDIA &#x27;You don&#x27;t need long context&#x27;</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">하네스를 만드는 사람에게 왜 닿는가</a></li>
+<li><a href="#_2">세 방식으로 기록을 다루는 법</a><ul>
+<li><a href="#_3">압축은 앞을 보는 인수인계다</a></li>
+<li><a href="#_4">긴 문서는 통째로 넣지 않는다</a></li>
+<li><a href="#sssm">SSSM은 제안이다</a></li>
+</ul>
+</li>
+<li><a href="#_5">논문이 실제로 잰 숫자</a><ul>
+<li><a href="#256k-16k">256K와 16K의 서빙 비용</a></li>
+<li><a href="#swe-bench-fha-eocc-sac">SWE-bench에서 FHA, EoCC, SAC</a></li>
+<li><a href="#_6">긴 문서와 오픈웨이트</a></li>
+<li><a href="#_7">이 숫자가 말하는 범위</a></li>
+</ul>
+</li>
+<li><a href="#_8">비즈니스 인사이트</a></li>
+<li><a href="#_9">팩트 체크</a><ul>
+<li><a href="#pinesun11">@pinesun11 포스트</a></li>
+</ul>
+</li>
+<li><a href="#_10">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 <a href="https://x.com/pinesun11/status/2118280067281498307">@pinesun11(푸른소나무)의 포스트</a>를 계기로 썼습니다. 같은 상태 주소는 <a href="https://x.com/i/status/2118280067281498307">x.com/i/status/2118280067281498307</a>입니다. fxtwitter가 돌려준 <code>created_at</code>은 <code>Thu Nov 05 09:51:38 +0000 2026</code>, 2026-11-05 18:51 KST입니다. <code>screen_name</code>은 <code>pinesun11</code>이고 표시 이름은 "푸른소나무"입니다. 이 환경의 X API는 <code>client-not-enrolled</code>로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2118280067281498307">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. 그 문장은 검증 대상이지 지시가 아닙니다. 아래 대조는 2026-11-06에 읽은 <a href="https://arxiv.org/abs/2611.05306">arXiv:2611.05306v1</a>입니다. arXiv API의 <code>published</code>는 <strong>2026-11-03T18:17:23Z</strong>이고, PDF 스탬프는 <code>arXiv:2611.05306v1 [cs.AI] 3 Nov 2026</code>, PDF 첫 줄 날짜는 2026-11-4입니다. 저자는 Peter Belcak, Saurav Muralidharan, Jindong Jiang, Yonggan Fu, Wonmin Byeon, Hanrong Ye, Ryan Angilly, Ali Taghibakhshi, Shih-Yang Liu, Siru Ouyang, Greg Heinrich, Pavlo Molchanov입니다. PDF 바닥글은 “©2026 NVIDIA. All rights reserved.”이고, 첫 페이지 Lab 링크는 <a href="https://research.nvidia.com/labs/lpr/lfi/">research.nvidia.com/labs/lpr/lfi</a>입니다. 본문은 <a href="https://arxiv.org/html/2611.05306">HTML</a>과 <a href="https://arxiv.org/pdf/2611.05306.pdf">PDF 31쪽</a>을 함께 읽었습니다. arXiv 주석은 “Technical report. 31 pages, 8 figures”, 분야는 <code>cs.AI</code>입니다. 이 글은 벤치마크를 다시 돌리지 않았습니다.</p>
+</blockquote>
+<h2 id="_1">하네스를 만드는 사람에게 왜 닿는가</h2>
+<p>에이전트 로그가 길어지면 다음 토큰이 무거워집니다. 논문 1절의 문장은, 토큰을 뽑는 계산이 그 토큰이 컨텍스트 안에서 놓인 깊이에 대해 선형이라는 쪽입니다. 그래서 같은 출력이라도 앞에 쌓인 기록이 길수록 느리고, 메모리를 더 쓰고, 클라우드에서는 더 비싸질 수 있습니다.</p>
+<p>개발자가 매일 만지는 자리는 모델 카드의 “컨텍스트 100만”이 아닙니다. 루프입니다. 도구를 한 번 부르고, 출력을 붙이고, 다음 행동을 고릅니다. 저장소를 읽고 고치고 테스트를 돌리는 일은 그 왕복이 길어지기 쉽습니다. 논문이 묻는 것은, 그 왕복의 <strong>전부</strong>를 매 호출의 입력에 남겨 둬야 일이 끝나는가입니다.</p>
+<p>실험의 일꾼은 <strong>Claude Opus 4.5</strong>와 <strong>GPT 5.6 Sol</strong>입니다. 하네스는 소프트웨어·터미널 과제에 <a href="https://github.com/SWE-agent/mini-swe-agent">mini-swe-agent</a> <strong>v2.4</strong>, 나머지에는 그걸 일반화한 mini-agent입니다. 둘 다 최소한의 ReAct입니다. 과제는 첫 사용자 메시지에 있고, 모델은 Bash 행동을 한 번에 하나 내고, 표준출력·종료 코드·오류가 관찰로 돌아옵니다. 이 글의 숫자는 그 루프 위에서 기록을 어떻게 치우느냐의 차이입니다. Claude Code나 사내 코딩 에이전트의 측정이 아닙니다.</p>
+<p>논문 결론은 범위를 같이 적습니다. 긴 컨텍스트가 이득인 과제가 있을 수 있다는 가능성을 배제하지 않고, 모든 과제를 짧은 컨텍스트로 풀 수 있다는 증명도 아니라고 적습니다. 저자들이 부족하다고 본 것은, “입력이 길다”와 “행동이 길다”에서 긴 컨텍스트가 <strong>필요하다</strong>는 표준 논증이 자기들이 시험한 설정에서는 성립하지 않았다는 쪽입니다.</p>
+<h2 id="_2">세 방식으로 기록을 다루는 법</h2>
+<p>논문은 컨텍스트를 이렇게 가릅니다. 이 연구를 쓸 때 많은 프런티어 모델의 창이 대략 <strong>256K</strong> 이상인 쪽에 가까우면 길고, 이 실험이 강조하는 짧은 구간은 대략 <strong>16K–50K</strong>입니다. 16K가 언어적으로 작다는 뜻은 아닙니다. Table 1에서 <em>The Old Man and the Sea</em>는 약 3.7만 토큰으로 잡혀 있습니다. 단어–토큰은 영어 단어당 약 1.33이라는 대략값입니다.</p>
+<table>
+<thead>
+<tr>
+<th>방식</th>
+<th>한 호출에 무엇을 넣나</th>
+<th>호출이 끝난 뒤</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>FHA</strong> (Full-History Accumulation)</td>
+<td>과제 이후의 행동과 관찰을 한 대화에 계속 붙임</td>
+<td>아무것도 지우지 않음. mini-swe-agent와 mini-agent의 기본</td>
+</tr>
+<tr>
+<td><strong>EoCC</strong> (End-of-Conversation Compaction)</td>
+<td>같은 ReAct를 하다가, 길이가 압축 임계값을 넘으면 그 대화 안에서 상태 메모를 쓰게 함</td>
+<td>시스템 프롬프트와 원래 과제, 그 메모만 가진 <strong>새 대화</strong>로 다시 시작. 임계값을 넘을 때마다 반복</td>
+</tr>
+<tr>
+<td><strong>SAC</strong> (Single-Action Compaction)</td>
+<td>과제와 현재의 짧은 의미 상태. 환경 행동은 <strong>정확히 하나</strong></td>
+<td>결과를 보고 의미 상태를 고친 뒤 그 대화를 버리고, 다음 행동도 새 대화</td>
+</tr>
+</tbody>
+</table>
+<p>EoCC의 두 숫자는 “총 컨텍스트 한도 / 압축 임계값”입니다. 임계값에 가까워지면 압축을 시키고, 총 한도는 그 압축 턴의 자리를 남긴 채 대화를 끊는 천장입니다. SWE-bench Verified, Terminal-Bench 2.1, SWE-bench Multilingual, FRAMES에서는 <strong>48K/36K, 32K/24K, 24K/18K, 16K/12K</strong>를 봤습니다.</p>
+<p>길이는 두 가지로 나눕니다. <strong>피크</strong>는 한 과제 안에서 가장 길었던 대화 하나입니다. <strong>총 길이</strong>는 EoCC와 SAC에서 만들어진 대화들의 끝 길이를 더한 값입니다. 대화를 여러 번 새로 열면 총 토큰은 피크보다 클 수 있습니다. “창을 16K로 막았다”와 “과제 전체에 쓴 토큰이 16K다”는 다른 문장입니다.</p>
+<h3 id="_3">압축은 앞을 보는 인수인계다</h3>
+<p>Appendix A는 압축을 요약의 특수한 경우로 두면 손해라고 적습니다. 요약은 입력에 있는 사실을 고르게 남기려 하고, 트레이스에서 반복된 구간을 실제 관련과 무관하게 키우기 쉽다는 이유입니다. 저자들이 정확도를 가장 잘 지킨다고 적은 메모는 지나간 이야기의 줄거리가 아니라, <strong>아직 할 일</strong>에 필요한 사실을 고른 브리프입니다.</p>
+<p>mini-swe-agent에 실제로 넣은 압축 프롬프트(Appendix G.1)는 도구를 멈추고 짧은 handoff recap만 쓰라고 합니다. 대화는 시스템 프롬프트, 과제, 이 메모로 리셋된다고 알려 줍니다. 남기라고 적은 여섯 칸은 이렇습니다.</p>
+<div class="highlight"><pre><span></span><code>1. Objective          필요한 결과를 한 줄
+2. Established facts  경로, 심볼, 명령, 관측값, 중요한 오류.
+                      관측과 아직 검증하지 않은 생각을 나눔
+3. Applied changes    만들거나 고친 파일, 무엇을 바꿨는지, 검증했는지
+4. Verification       돌린 검사, 결과, 실패, 장애, 우회
+5. Dead ends          다시 하지 않을 실패한 접근
+6. Remaining plan     남은 하위 목표(실행 순서), 바로 다음 명령이나 편집,
+                      완료로 볼 조건
+</code></pre></div>
+
+<p>같은 부록의 mini-agent용 프롬프트는 네 칸으로 더 짧습니다. 지금까지의 최선 답과 검증된 사실, 근거와 변경, 된 일과 실패한 일, 남은 계획입니다. 소프트웨어·터미널은 G.1, 그 밖은 G.2입니다. Appendix A는 과제 유형과 상관없이 같은 뼈대를 썼다고 적고, 그 뼈대에는 과제의 거의 원문, 지금 하려는 일과 다음 계획, 앞으로의 실행에 직접 닿는 산출물(쪼갠 계획, 완료 조건, 그걸 가리키는 포인터)이 들어갑니다. 하네스가 원래 과제를 새 대화에 다시 붙이는 것과, 메모 안에도 목표를 한 줄 적게 하는 것이 같이 있습니다.</p>
+<p>출력이 잘렸으면 그 출력을 다시 가져올 <strong>좁은 명령</strong>을 적으라고 합니다. 관찰을 지어내라는 칸은 없습니다.</p>
+<h3 id="_4">긴 문서는 통째로 넣지 않는다</h3>
+<p>긴 입력은 대화 첫머리에 붙이지 않고 <code>input01.txt</code> 같은 파일로 환경에 둡니다. 과제 메시지는 파일이 있다는 것만 알리고, 에이전트는 <code>sed</code>, <code>awk</code>, <code>head</code>, <code>grep</code>과 논문이 덧붙인 <code>doc-read</code>로 필요한 창만 읽습니다. Appendix E의 <code>doc-read</code> 기본 창은 <strong>6000자</strong>, 하드 캡은 <strong>8000자</strong>입니다. 시스템 프롬프트는 문서 전체를 덤프하지 말라고 적습니다. 이렇게 하면 긴 입력 과제가 “파일이 밖에 있는 긴 호라이즌 과제”가 됩니다.</p>
+<p>Section 3.1은 이 경계의 반대쪽도 적습니다. 동전 던지기 결과를 모아야 하는 과제라면, 예산이 정해진 손실 압축은 언젠가 몇 번째 결과를 잃습니다. 그 과제가 긴 창을 증명하지는 않는다고 논문은 적습니다. 모든 메시지를 컨텍스트 밖 기록으로 남기고, 필요할 때만 골라 읽게 하면 그 실패는 “긴 입력” 문제로 돌아갑니다. 논문의 문장은 “대화 기록을 아예 다시 볼 필요가 없다”가 아니라, “긴 호라이즌을 끝내려면 기록 <strong>전체</strong>를 매 호출의 컨텍스트에 둘 필요는 없다”에 가깝습니다.</p>
+<h3 id="sssm">SSSM은 제안이다</h3>
+<p>Section 5.1은 Semantic State Space Model을 제안합니다. 한 인스턴스가 상태의 언어 기술을 읽고, 다음 행동을 정하고, 행동하고, 결과를 받은 뒤, 그 상태 기술을 고쳐 써서 <strong>다른 추론 인스턴스</strong>가 이어서 끝낼 수 있게 하는 후훈련입니다. SSM이 토큰 사이에 신경망 상태를 숨겨 두는 것과 달리, SSSM의 상태는 자연어라서 읽을 수 있다고 적습니다. 논문이 보인 것은 SAC라는 하네스 동작이고, SSSM이라는 가중치를 학습해 공개한 결과는 아닙니다. 짧은 컨텍스트가 데이터 효율적일 것이라는 문장은 저자들이 “surmise”라고 적은 추정입니다.</p>
+<h2 id="_5">논문이 실제로 잰 숫자</h2>
+<h3 id="256k-16k">256K와 16K의 서빙 비용</h3>
+<p>Figure 1은 이미 만들어 둔 입력 KV 위에서 출력 100만 토큰을 뽑는 달러 비용입니다. 입력 길이는 공유 토큰열의 접두에서 균등하게 뽑습니다. 처리량은 vLLM으로 잰 피크 디코드이고, 비용은 그 처리량을 <strong>H100 시간당 $3.85</strong>(Nebius, 2026년 9월)로 바꾼 값입니다. GLM 5.2와 Kimi K2.6은 INT4 가중치·BF16 활성화, Qwen 3 Coder Next는 BF16입니다. Figure 4는 Kimi에 FP8 KV 캐시를 더해 적고, GLM·Kimi는 INT4 expert라고도 적습니다. GPU는 Qwen이 H100 8장, GLM과 Kimi가 16장입니다. 예열 뒤 동시성을 훑어 KV 선점 없이 가장 높은 처리량을 보고, 반복 측정 차이는 최대 2%라고 합니다. 각 요청은 1024토큰을 생성합니다.</p>
+<p>그 조건에서 창을 256K로 서빙하는 쪽이 16K보다 생성 토큰당 <strong>GLM 3.6배, Kimi 5.6배, Qwen 7배</strong> 비쌉니다. Figure 4는 같은 비를 처리량으로 적습니다. 256K에서 16K로 줄이면 같은 하드웨어에서 초당 디코드 토큰이 그 배수만큼 늘어납니다. Appendix B의 처리량 비 T(256K)/T(16K)는 GLM <strong>0.2772</strong>, Kimi <strong>0.1777</strong>, Qwen <strong>0.1439</strong>이고, 역수가 그 3.6·5.6·7에 대응합니다. 논문은 이 셋의 반올림 평균으로 r = 0.20을 잡아, 뒤의 “최적화된 소매 비용” 추정에 씁니다.</p>
+<p>이 배수는 Opus와 GPT의 API 청구 단가가 아닙니다. 1절은 소매 가격이 입력 길이와 무관하게 100만 토큰당 고정으로 적혀, 이 차이가 사용자에게 숨는다고 적습니다.</p>
+<p>Figure 2는 NVIDIA DGX Spark에서 로컬 모델의 지연·처리량·메모리입니다. 통합 메모리 128GB 중 LM 서빙에 약 109GB가 남습니다. 여러 모델에서 나중 토큰의 토큰 간 지연이 앞 토큰의 약 <strong>2배</strong>라고 적습니다. 모델별 곡선 위의 개별 밀리초는 이 글이 그림에서 다시 읽지 않았습니다.</p>
+<h3 id="swe-bench-fha-eocc-sac">SWE-bench에서 FHA, EoCC, SAC</h3>
+<p>Table 2의 정확도는 해결 비율입니다. mini 열이 FHA입니다. Best EoCC 옆의 괄호는 그 정확도가 나온 한도/임계값입니다. 피크 컨텍스트는 과제별 중앙값/최대값, 단위는 K토큰입니다.</p>
+<table>
+<thead>
+<tr>
+<th>모델</th>
+<th>벤치</th>
+<th>FHA</th>
+<th>Best EoCC</th>
+<th>SAC</th>
+<th>FHA 피크</th>
+<th>EoCC 피크</th>
+<th>SAC 피크</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Opus 4.5</td>
+<td>SWE-bench Verified</td>
+<td>70.0%</td>
+<td>74.8% (24K/18K)</td>
+<td>70.2%</td>
+<td>32 / 200</td>
+<td>19 / 22</td>
+<td>8 / 16</td>
+</tr>
+<tr>
+<td>Opus 4.5</td>
+<td>Terminal-Bench 2.1</td>
+<td>47.2%</td>
+<td>52.8% (32K/24K)</td>
+<td>51.8%</td>
+<td>27 / 130</td>
+<td>24 / 31</td>
+<td>9 / 19</td>
+</tr>
+<tr>
+<td>GPT 5.6 Sol</td>
+<td>SWE-bench Verified</td>
+<td>84.4%</td>
+<td>88.8% (48K/36K)</td>
+<td>82.4%</td>
+<td>18 / 173</td>
+<td>22 / 35</td>
+<td>7 / 15</td>
+</tr>
+<tr>
+<td>GPT 5.6 Sol</td>
+<td>Terminal-Bench 2.1</td>
+<td>87.6%</td>
+<td>88.8% (48K/36K)</td>
+<td>84.3%</td>
+<td>17 / 133</td>
+<td>23 / 40</td>
+<td>8 / 37</td>
+</tr>
+</tbody>
+</table>
+<p>SAC에서 Opus는 SWE-bench Verified의 70.0%를 70.2%로 유지하고, Terminal-Bench는 4.6퍼센트포인트 올립니다. GPT의 SAC는 82.4%와 84.3%(89과제 중 75)로, FHA보다 2.0과 3.3퍼센트포인트 낮습니다. 두 모델·두 벤치에서 SAC의 피크 중앙값은 <strong>7–9K</strong>, 최대는 FHA의 130–200K대에서 <strong>15–37K</strong>로 내려갑니다. “매 행동마다 압축해도 점수가 같다”의 종이 위 자리는 이 표입니다. Opus의 SWE-bench는 0.2포인트 차이고, GPT는 몇 포인트 아래입니다.</p>
+<p>긴 호라이즌 여섯 벤치 전체에서 EoCC의 상대 정확도는 Opus가 <strong>−3.7에서 +5.6퍼센트포인트</strong>, GPT가 <strong>−3.3에서 +4.4</strong>입니다. 두 모델 모두 22개 임계값 설정 가운데 2포인트를 넘게 잃은 설정은 5개를 넘지 않는다고 3절이 적습니다. 같은 절의 추정 비용 절감 배수는 Opus <strong>2.2–8.8배</strong>, GPT <strong>2.4–5.0배</strong>입니다. 이 배수는 Appendix B의 추정이고, 청구서에 찍힌 금액이 아닙니다.</p>
+<p>손실이 모인 곳도 있습니다. FRAMES(Table 6)에서 압축은 Opus를 기준 81.0% 대비 1.3–3.7포인트, GPT를 90.2% 대비 1.5–3.3포인트 내립니다. 가장 낮은 칸은 24K/18K의 77.3%와 86.9%입니다.</p>
+<p>SWE-bench Verified 500과제의 토큰과 달러는 Table 3입니다. 토큰은 벤치 전체 합이고 새 입력 / 캐시 입력 / 출력, 단위는 백만입니다. 명목 소매 비용은 2026-09-29 기준 논문이 인용한 표준 단가입니다. Opus 4.5는 새 입력 $5, 캐시 입력 $0.50, 출력 $25. GPT 5.6 Sol은 $4 / $0.40 / $20. 추정 비용은 같은 토큰에 Appendix B의 길이 계수를 곱한 값입니다.</p>
+<table>
+<thead>
+<tr>
+<th>설정</th>
+<th>Opus 정확도</th>
+<th>Opus 토큰 (M)</th>
+<th>Opus 명목</th>
+<th>Opus 추정</th>
+<th>GPT 정확도</th>
+<th>GPT 명목</th>
+<th>GPT 추정</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FHA</td>
+<td>70.0%</td>
+<td>20.0 / 420.0 / 4.4</td>
+<td>$420.00</td>
+<td>$420.00</td>
+<td>84.4%</td>
+<td>$167.68</td>
+<td>$167.68</td>
+</tr>
+<tr>
+<td>48K/36K</td>
+<td>73.6%</td>
+<td>20.0 / 334.7 / 4.5</td>
+<td>$379.85</td>
+<td>$130.20</td>
+<td>88.8%</td>
+<td>$186.08</td>
+<td>$55.82</td>
+</tr>
+<tr>
+<td>32K/24K</td>
+<td>72.0%</td>
+<td>23.0 / 255.9 / 4.7</td>
+<td>$360.45</td>
+<td>$97.82</td>
+<td>85.0%</td>
+<td>$184.16</td>
+<td>$46.04</td>
+</tr>
+<tr>
+<td>24K/18K</td>
+<td>74.8%</td>
+<td>22.0 / 166.5 / 4.1</td>
+<td>$295.75</td>
+<td>$69.71</td>
+<td>85.0%</td>
+<td>$188.96</td>
+<td>$42.52</td>
+</tr>
+<tr>
+<td>16K/12K</td>
+<td>68.8%</td>
+<td>28.3 / 127.3 / 4.3</td>
+<td>$312.65</td>
+<td>$62.53</td>
+<td>84.6%</td>
+<td>$203.12</td>
+<td>$40.62</td>
+</tr>
+</tbody>
+</table>
+<p>Opus는 16K/12K만 1.2포인트 낮고(68.8%), 그 위 설정은 기준 이상입니다. 가장 높은 74.8%는 가장 빡빡한 창이 아니라 24K/18K입니다. GPT는 Table 3의 모든 EoCC 칸이 기준 84.4% 이상이고, 가장 높은 88.8%는 48K/36K입니다. 출력 토큰은 압축할 때 대체로 늘어난다고 Appendix C가 적습니다. GPT의 최고 정확도 칸은 그래서 명목 청구가 $167.68에서 $186.08로 <strong>오르고</strong>, 추정 서빙 비용은 $55.82로 내려갑니다.</p>
+<h3 id="_6">긴 문서와 오픈웨이트</h3>
+<p>긴 입력 일곱 벤치에서 EoCC(선택적 읽기 포함)의 상대 정확도는 Opus <strong>−0.4에서 +40.0퍼센트포인트</strong>, GPT <strong>+1.0에서 +30.9</strong>입니다. +40.0은 NIAH에서 Opus가 60.0%에서 100%로 올라간 칸이고, +30.9는 RULER 평균 recall이 GPT 65.5%에서 96.4%로 올라간 칸입니다. 논문은 NIAH의 큰 폭을, 바늘과 질문 사이의 어휘 겹침이 검색을 쉽게 만들기 때문이라고 돌립니다. 두 모델 모두 NIAH에서는 압축 횟수가 0입니다. 정확도가 오른 일의 상당 부분은 메모를 여러 번 쓴 결과가 아니라, 문서 전체를 컨텍스트에 넣지 않은 결과입니다.</p>
+<p>같은 절의 추정 비용 절감은 Opus 6.5–54.6배, GPT 4.4–233.3배입니다. 논문은 이 배수를 선택적 읽기와 짧은 창 서빙이 <strong>같이</strong> 만든 값이라고 적습니다. 호라이즌 쪽의 2–9배와 같은 레버로 읽으면 문서 전체를 붙이던 기준선이 빠집니다.</p>
+<p>선택적 읽기가 거의 본전과 가까운 현실 문서도 있습니다. LongBench v2(Table 11)에서 16K/12K는 Opus 68.0% → 67.6%(−0.4), GPT 70.8% → 72.6%입니다.</p>
+<p>Appendix D는 양자화한 오픈웨이트 다섯 개를 SWE-bench Verified와 Terminal-Bench 2.1에 올립니다. 압축 후훈련이 없는 모델도 짧은 창에서 과제의 상당 부분을 끝내긴 합니다. 다만 16K/12K에서는 모든 모델이 SWE-bench 정확도를 기준보다 잃습니다. Qwen 3 Coder Next는 53.0%에서 <strong>3.6%</strong>로 무너지고, 논문은 말이 긴 궤적이 압축 사이에 일을 할 자리를 거의 남기지 않기 때문이라고 적습니다. Qwen 3.6 27B는 68.6%에서 65.0%, MiniMax M2.7은 72.6%에서 67.8%입니다. “메모로 바꾸면 프런티어와 같이 버틴다”를 로컬 양자화 모델 전체로 옮긴 문장은 이 표와 어긋납니다.</p>
+<h3 id="_7">이 숫자가 말하는 범위</h3>
+<ul>
+<li>과제 정확도의 주 실험은 <strong>Opus 4.5</strong>와 <strong>GPT 5.6 Sol</strong>이고, 하네스는 mini-swe-agent v2.4와 mini-agent입니다.</li>
+<li>3.6·5.6·7배는 GLM 5.2, Kimi K2.6, Qwen 3 Coder Next의 <strong>디코드 처리량</strong>을 H100 시간당 $3.85로 환산한 생성 토큰 비용입니다.</li>
+<li>“최적화된 소매 비용”은 Appendix B의 추정입니다. 기준 창(Opus 20만, GPT는 표준 단가 천장 272K. 모델 자체는 105만 토큰을 지원한다고 적음)의 출력 단가 $25와 $20에 닻을 내리고, 16K에서는 그 단가의 0.20배가 되도록 선형으로 보간합니다. 16K보다 짧은 창은 16K 가격에 고정합니다. 입력 단가는 출력의 1/5, 캐시 입력은 비캐시 입력의 1/10이라는 원래 비율을 유지합니다. SAC의 피크 중앙값 7–9K는 이 식에서 16K보다 더 싸게 계산되지 않습니다.</li>
+<li>결론은 시험한 과제에서 긴 입출력 호라이즌이 긴 컨텍스트의 <strong>필요</strong>까지 보여 주지는 않았다는 주장입니다. 긴 컨텍스트가 이득인 과제가 없다는 증명도, 모든 과제가 짧은 컨텍스트로 풀린다는 증명도 아니라고 같은 절이 적습니다.</li>
+</ul>
+<h2 id="_8">비즈니스 인사이트</h2>
+<p>숫자와 단가는 위 표가 출처입니다. 논문은 매출, 점유율, 구독 플랜을 재지 않습니다. 아래 단락의 이해관계 문장은 그 표 위에 올린 <strong>분석/의견</strong>입니다.</p>
+<p>2026년 모델 카드는 긴 창을 제품 문장으로 씁니다. Table 1이 적은 토큰 창만 봐도 MiniMax M2.7과 Claude Opus 4.5가 20만, Gemma 4 31B·Kimi K2.6이 256K, Qwen 3 Coder Next가 262K, Gemini 3.8 Flash와 GLM 5.2가 100만, GPT 5.6 Sol이 105만입니다. 옆의 문학 작품 칸만 영어 단어당 약 1.33토큰으로 환산돼 있습니다. 같은 논문의 Figure 1은 그 창을 실제로 열어 두면 오픈웨이트 세 모델의 생성 토큰 서빙 비용이 16K 대비 3.6–7배가 된다고 적습니다. 마케팅 문장의 창과, 디코드가 비싼 창이 한 숫자로 겹칩니다.</p>
+<p>청구서가 그 배수를 그대로 보여 주지는 않습니다. 1절은 소매 단가가 입력 길이와 상관없이 100만 토큰당 고정이라고 적습니다. 2026-09-29에 논문이 쓴 Opus·GPT 단가도 길이 구간 없이 한 벌입니다. 이 구조에서 256K 디코드는 GPU 시간을 더 쓰고, 16K 디코드는 같은 토큰 가격에 더 많은 출력을 뽑습니다. <strong>분석/의견.</strong> 단가를 길이로 나누지 않는 API는 짧은 컨텍스트 요청에서 서빙 마진이 두껍고, 긴 컨텍스트 요청에서 얇습니다. 긴 창은 그 얇은 요청을 팔 수 있는 상품 문장이 됩니다. 길이 할인을 이미 넣는 가격표가 있는지는 이 논문이 조사하지 않았습니다.</p>
+<p>에이전트 제품을 만드는 쪽에서 지금 바로 움직이는 레버는 Appendix B의 배수가 아닙니다. Table 3의 <strong>명목</strong> 열입니다. SWE-bench Verified에서 Opus FHA의 $420은 캐시 입력 420.0M 토큰이 큰 부분을 차지합니다(420.0 × $0.50 = $210). 24K/18K로 정확도가 74.8%가 된 칸은 캐시 입력이 166.5M으로 줄고 명목 비용이 $295.75입니다. 같은 토큰을 길이 계수로 다시 매긴 추정은 $69.71입니다. 개발자의 현재 청구서에 있는 것은 앞의 명목이고, 3.6–7배와 $69.71은 단가가 창 길이를 반영한다고 가정한 뒤의 숫자입니다.</p>
+<p>그 명목조차 항상 내려가지는 않습니다. GPT는 정확도가 가장 높은 48K/36K에서 명목이 $167.68에서 $186.08로 오릅니다. 출력 단가가 비싸고, 압축이 출력 토큰을 늘리는 칸이 있기 때문입니다. <strong>분석/의견.</strong> “메모를 쓰면 API 청구가 즉시 3.6배 줄어든다”로 읽으면 Table 3의 명목 열이 사라집니다. 메모가 줄이는 것이 확실한 쪽은 매 호출에 다시 실리는 과거 기록이고, 청구가 주는지는 출력 토큰이 그 감소를 잡아먹는지에 달립니다.</p>
+<p>로컬 추론은 청구서 대신 지연과 메모리입니다. Figure 2의 약 2배는 DGX Spark에서 여러 오픈 모델의 토큰 간 지연입니다. 짧은 작업 기억은 여기서 응답 시간과 상주 메모리의 레버입니다. Appendix D는 그 레버의 품질 하한을 보여 줍니다. 16K/12K에서 Qwen 3 Coder Next의 SWE-bench가 53.0%에서 3.6%로 떨어진 이유는, 논문이 적기로 말이 긴 궤적이 압축과 압축 사이에 진전을 만들 자리를 거의 남기지 않기 때문입니다. <strong>분석/의견.</strong> 컨텍스트를 줄이는 제품은 창 숫자만 내리면 되는 것이 아니라, 압축 임계값과 모델이 한 스트레치에 쓰는 말의 양 사이에 일을 할 공간을 남겨야 합니다. 그 공간은 모델마다 다릅니다.</p>
+<p>누가 이 결과로 편해지는지에 대한 <strong>분석/의견</strong>은 이렇습니다. 파일과 로그를 컨텍스트 밖에 둘 수 있는 에이전트 루프는, 시험된 코딩·문서 과제에서 전체 기록을 창에 유지하지 않고도 Opus·GPT의 정확도를 대체로 지켰습니다. 창 크기 자체를 상품으로 두는 포지션은, 구매자가 “그 창이 없으면 이 과제가 안 끝나는가”를 묻기 시작하면 Table 1의 큰 숫자만으로는 답이 약해집니다. 반대로 로컬에서 말이 긴 양자화 모델을 16K 안으로 접는 설정은 Appendix D의 붕괴 행이 경고합니다. 논문은 그 경고를 시장 점유로 환산하지 않았습니다.</p>
+<h2 id="_9">팩트 체크</h2>
+<p>✅ 사실 / ⚠️ 부분적으로 사실·범위가 다름·추정·이 글이 확인하지 못함 / ❌ 사실 아님</p>
+<p>확인 시각은 2026-11-06입니다. 정확도와 달러는 논문이 적은 값이고, 이 글은 다시 재지 않았습니다.</p>
+<h3 id="pinesun11">@pinesun11 포스트</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>엔비디아 논문이고 제목이 “You don't need long context”다</td>
+<td>✅</td>
+<td><a href="https://arxiv.org/abs/2611.05306">arXiv 제목</a>은 그 문장이다. PDF 바닥글은 “©2026 NVIDIA. All rights reserved.”이고, 첫 페이지 Lab 링크는 <a href="https://research.nvidia.com/labs/lpr/lfi/">research.nvidia.com/labs/lpr/lfi</a>다. 저자 이름 옆에 “NVIDIA”라는 소속 문장이 본문에 한 줄로 적혀 있지는 않다. v1 게재 시각은 2026-11-03T18:17:23Z, PDF 스탬프는 3 Nov 2026, PDF 첫 줄 날짜는 2026-11-4다.</td>
+</tr>
+<tr>
+<td>일정 길이마다 짧은 인수인계 메모를 쓰게 하고, 과제와 메모만으로 새로 시작하면 정확도가 거의 그대로다</td>
+<td>⚠️</td>
+<td>EoCC가 그 절차다. 임계값을 넘으면 handoff recap을 쓰고, 새 대화에는 시스템 프롬프트·원래 과제·메모가 남는다(2.4.1절, Appendix G). 초록은 짧은 컨텍스트에서 정확도를 거의 또는 전혀 잃지 않는다고 적는다. 3절의 실측 범위는 Opus −3.7~+5.6, GPT −3.3~+4.4퍼센트포인트이고, 22개 설정 중 2포인트를 넘게 잃은 것은 모델당 5개 이하다. SWE-bench Verified에서 Opus 최고는 70.0%가 아니라 74.8%(24K/18K)이고, 16K/12K는 68.8%다. FRAMES는 최대 3.7·3.3포인트 하락이다. Qwen 3 Coder Next는 16K/12K에서 53.0%→3.6%다(<a href="https://arxiv.org/html/2611.05306">HTML</a>).</td>
+</tr>
+<tr>
+<td>매 행동마다 압축해도 점수가 전체 기록을 들고 갈 때와 같은 수준이다</td>
+<td>⚠️</td>
+<td>SAC가 그 설정이다. Table 2에서 Opus SWE-bench는 70.0%와 70.2%, Terminal-Bench는 47.2%→51.8%로 오른다. GPT는 84.4%→82.4%(−2.0), 87.6%→84.3%(−3.3, 89개 중 75)다. 5절은 Opus는 유지하거나 개선하고 GPT는 작은 하락이라고 적는다. 피크 중앙값은 7–9K다. “같은 점수”로 읽으면 GPT의 2–3포인트가 빠진다(<a href="https://arxiv.org/pdf/2611.05306.pdf">PDF Table 2</a>).</td>
+</tr>
+<tr>
+<td>256K 컨텍스트가 16K보다 토큰 하나를 만드는 데 3.6–7배 비싸다</td>
+<td>⚠️</td>
+<td>배수는 Figure 1에 있다. GLM 3.6배, Kimi 5.6배, Qwen 7배. 이미 있는 KV 위에서 출력 토큰을 뽑는 <strong>서빙</strong> 비용이고, H100 시간당 $3.85(Nebius, 2026년 9월)로 피크 디코드 처리량을 환산했다. Opus·GPT의 API 단가가 길이에 따라 그 배수로 달라진다는 측정은 아니다. 1절은 소매 단가가 길이와 무관하게 고정이라 이 차이가 숨는다고 적는다(<a href="https://arxiv.org/html/2611.05306">HTML Figure 1</a>).</td>
+</tr>
+<tr>
+<td>어제 Claude Code가 상태 줄을 짧은 메모로 바꾼 것도 같은 흐름일 것이다</td>
+<td>⚠️</td>
+<td>포스트 문장 자체가 “같아요”다. 논문에는 Claude Code의 상태 줄이 없다. 이 글이 2026-11-06에 연 <a href="https://code.claude.com/docs/en/changelog">Claude Code changelog</a>에서 그 변경을 찾지 못했다. 확인하지 못한 제품 변경이다.</td>
+</tr>
+<tr>
+<td>다들 100만 토큰을 자랑하지만, 잘 쓴 메모 한 장이 더 효과적일 수도 있다</td>
+<td>⚠️</td>
+<td>Table 1은 Gemini 3.8 Flash·GLM 5.2를 100만, GPT 5.6 Sol을 105만 토큰 창으로 적는다. “더 효과적일 수도”는 포스트의 의견이다. 논문은 시험한 긴 입력·긴 호라이즌에서 전체 기록을 창에 둘 필요가 없었다고 결론내고, 동시에 긴 컨텍스트가 이득인 과제를 배제하지 않는다고 적는다. NIAH의 +40포인트처럼 선택적 읽기가 크게 이긴 칸과, GPT SAC의 −2.0포인트처럼 전체 기록이 더 높은 칸이 같이 있다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 제목과 엔비디아 저작 표시, “임계값마다 메모를 쓰고 과제와 함께 새 대화를 연다”는 절차, 256K 대 16K의 3.6·5.6·7배는 논문에 있습니다. 느슨한 곳은 범위를 지운 읽기입니다. 정확도는 두 프런티어 모델에서 대체로 비슷하거나 조금 나아지며, FRAMES와 GPT의 SAC에서는 몇 포인트 낮고, 오픈웨이트 한 모델은 16K에서 무너집니다. 3.6–7배는 세 오픈웨이트 배포의 서빙 비용이지 오늘 API 청구서의 단가가 아닙니다. Claude Code 상태 줄은 논문 밖이고, 이 글은 changelog에서 확인하지 못했습니다. 결론 자신이 긴 컨텍스트가 전혀 필요 없다는 증명은 아니라고 적습니다.</p>
+<h2 id="_10">참고 자료</h2>
+<ul>
+<li>Belcak, Muralidharan, Jiang, Fu, Byeon, Ye, Angilly, Taghibakhshi, Liu, Ouyang, Heinrich, Molchanov, <em>You don't need long context</em>, arXiv:2611.05306v1 (published 2026-11-03T18:17:23Z, PDF 스탬프 3 Nov 2026) — <a href="https://arxiv.org/abs/2611.05306">abs</a> · <a href="https://arxiv.org/html/2611.05306">HTML</a> · <a href="https://arxiv.org/pdf/2611.05306.pdf">PDF</a> · <a href="https://export.arxiv.org/api/query?id_list=2611.05306">arXiv API</a></li>
+<li>PDF가 가리키는 프로젝트 페이지 — <a href="https://nv-dler.github.io">Lab</a> · <a href="https://research.nvidia.com/labs/lpr/lfi/">Project Moonshot: Local Frontier Intelligence</a>. 이 글은 그 페이지의 추가 주장을 벤치 숫자로 쓰지 않았습니다.</li>
+<li>실험 하네스 — mini-swe-agent v2.4. 논문이 인용한 주소는 SWE-agent 팀의 <a href="https://github.com/SWE-agent/mini-swe-agent">mini-swe-agent</a>입니다. 정확도 표의 하네스 버전은 논문 Appendix G.1의 “v2.4”입니다.</li>
+<li>원본 X 포스트: <a href="https://x.com/pinesun11/status/2118280067281498307">@pinesun11</a> · <a href="https://x.com/i/status/2118280067281498307">상태 주소</a> (2026-11-05 09:51 UTC, fxtwitter <code>code</code> 200)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
