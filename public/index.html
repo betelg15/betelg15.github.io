@@ -8,7 +8,8 @@
 <link rel="stylesheet" href="assets/code.css">
 </head><body>
 <header class="site"><a class="brand" href="index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
-<main><h1 class="title">글 목록</h1><ul class="list"><li class="card"><a href="posts/betelgeuse-moe-inference-engine-rtx-3060/index.html">
+<main><h1 class="title">글 목록</h1><ul class="list"><li class="card"><a href="posts/qwenbend-bend-in-forward-pass/index.html">
+<p class="meta">2026-11-05</p><h2>도구 호출 없이 Bend가 실행되나? 포워드 안의 QwenBend</h2><p>QwenBend는 Qwen3.5-0.8B LoRA가 BendLite를 쓰고, 학습하지 않은 엔진이 정적 규칙을 본 뒤 명령마다 한 포워드로 실행한다. README의 0이 아닌 엔진 가중치는 52.9M이고, 같은 200문항에서는 어댑터 없이 바로 답한 0.8B가 49%로 더 자주 맞는다.</p></a></li><li class="card"><a href="posts/betelgeuse-moe-inference-engine-rtx-3060/index.html">
 <p class="meta">2026-11-05</p><h2>RTX 3060 12GB가 68GB MoE를 22 tok/s로 도나? Betelgeuse</h2><p>Betelgeuse main 0101d796의 22.03 tok/s는 커밋 be9328717 반복 측정의 두 번째 요청이다. 문서가 고친 llama.cpp 기준은 0.9 tok/s이고, 가지치기 없이 계산하는 것은 IQ2_XS 라우팅 10개다.</p></a></li><li class="card"><a href="posts/qwenfs-filesystem-in-llm-weights/index.html">
 <p class="meta">2026-11-05</p><h2>모델 밖에는 아무것도 없나? 가중치에 넣은 파일시스템 qwenFS</h2><p>qwenFS는 Qwen3.5-2B 앞에 학습하지 않은 8개 층을 붙인다. 파일 본문은 copy 층 어텐션 로그에, 표는 Gated DeltaNet 행에 둔다. ‘아무것도 모델 밖에서 돌지 않는다’는 문장은 같은 저장소 README의 디스크 페이징과 어긋난다.</p></a></li><li class="card"><a href="posts/pixelfx-code-pixel-effects/index.html">
 <p class="meta">2026-11-05</p><h2>몇 줄짜리가 아닌가? 코드로 그리는 픽셀 이펙트 pixelfx</h2><p>patch-gg/pixelfx 0.3.0(커밋 a841596)에서 meta를 가진 이펙트 파일은 244개다. 그 파일의 중앙 길이는 133줄이고, 132개는 120Hz로 스텝하는 파티클 시뮬레이션이다. 런타임 npm 의존성은 없고 갤러리는 Canvas 2D다.</p></a></li><li class="card"><a href="posts/ava-on-device-webgpu-voice-assistant/index.html">
