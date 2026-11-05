@@ -1,7 +1,7 @@
 ---
 title: "56장에 GLM-5.3이 들어가나? Revolut 발표 팩트 체크"
 date: 2026-11-05
-time: "10:21"
+time: "10:22"
 slug: revolut-self-hosted-glm-coding-model
 tags: [Revolut, GLM, B200, vLLM, 팩트체크]
 summary: "2026-10-13 AI Engineer NYC에서 Revolut의 David Abitbol은 GLM-5.3을 B200 약 56장으로 약 2,000명에게 서빙하고, 청구액은 Anthropic·OpenAI의 약 10분의 1이라고 말했다. 공개 FP8 텐서 바이트 755.43GB는 B200 4장(720GB)에 안 들어간다."
