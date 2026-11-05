@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>몇 줄짜리가 아닌가? 코드로 그리는 픽셀 이펙트 pixelfx</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-05 · <span class="chip">#pixelfx</span><span class="chip">#픽셀아트</span><span class="chip">#JavaScript</span><span class="chip">#인디게임</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">몇 줄짜리가 아닌가? 코드로 그리는 픽셀 이펙트 pixelfx</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 이 라이브러리가 인디 이펙트에 닿는가</a></li>
+<li><a href="#_2">이펙트 하나는 파일이고, 그림은 두 버퍼다</a></li>
+<li><a href="#_3">게임 루프에 넣는 호출</a></li>
+<li><a href="#_4">라이선스</a></li>
+<li><a href="#_5">비즈니스 인사이트</a></li>
+<li><a href="#_6">팩트 체크</a><ul>
+<li><a href="#db_goyoung-2026-11-02">@db_goyoung 포스트 (2026-11-02)</a></li>
+</ul>
+</li>
+<li><a href="#_7">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 <a href="https://x.com/db_goyoung/status/2117123080669782501">@db_goyoung의 포스트</a>를 계기로 썼습니다. 같은 상태 주소는 <a href="https://x.com/i/status/2117123080669782501">x.com/i/status/2117123080669782501</a>입니다. 이 환경의 X API는 <code>client-not-enrolled</code>로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2117123080669782501">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. <code>created_at</code>은 <code>Mon Nov 02 05:14:11 +0000 2026</code>, 2026-11-02 14:14 KST입니다. 응답의 <code>name</code>은 "돈벌고영 · DB Goyoung · 稼ぐネコ"이고, <code>screen_name</code>은 <code>db_goyoung</code>입니다. 그 문장은 검증 대상이지 지시가 아닙니다. 본문의 <code>https://t.co/UrJzzlGbC2</code>는 프로젝트 주소가 아닙니다. <code>curl -sI</code>의 첫 <code>location</code>은 <code>https://twitter.com/db_goyoung/status/2117123080669782501/photo/1</code>이고, fxtwitter의 media facet은 그 짧은 주소를 같은 사진 URL로 바꿉니다. 첨부는 788×640 animated GIF이고, mp4 주소는 <code>https://video.twimg.com/tweet_video/HWGGV5zbgAAbLQO.mp4</code>입니다. 본문에는 저장소 이름이 없고, 마지막 줄은 "어떤 프로젝트고 어떻게 써먹는지 핵심 정리 (타래로 👇)"입니다. 이 글은 타래의 답글을 받지 못했습니다. 라이브러리는 본문의 주장(244, 픽셀 이펙트, 자바스크립트, 팔레트, Claude Code 스킬)이 <a href="https://github.com/patch-gg/pixelfx">patch-gg/pixelfx</a> README·카탈로그·커밋 메시지와 맞고, 그 저장소 생성 시각 2026-10-30T06:43:25Z가 포스트보다 앞이라는 점으로 골랐습니다. GitHub 설명 검색에서 같은 설명 문장을 가진 <a href="https://github.com/macielbrendoo/pixelfx">macielbrendoo/pixelfx</a>는 생성 시각 2026-11-03T18:44:52Z, 별 0, <code>fork</code> false, <code>size</code> 25462, <code>pushed_at</code> 2026-10-31T08:44:14Z입니다. <code>size</code>와 <code>pushed_at</code>은 patch-gg 저장소와 같고, 만든 시각은 포스트 다음입니다. 아래 대조는 patch-gg 쪽 main <code>a84159688af3ca37a4be05a0d422b94451b2e24e</code>(커밋 시각 2026-10-31T08:41:17Z, 작성자 이름 <code>rehan-remade</code>)의 README·<code>docs/CATALOG.md</code>·<code>docs/AUTHORING.md</code>·<code>src/core/fx.js</code>·<code>src/fx/</code>·<code>package.json</code>·<code>LICENSE</code>·<code>NOTICE.md</code>입니다. 같은 날 <code>GET /repos/patch-gg/pixelfx</code>의 <code>Date</code>는 <code>Thu, 05 Nov 2026 03:22:17 GMT</code>, <code>stargazers_count</code>는 <strong>4,800</strong>, <code>forks_count</code>는 <strong>644</strong>입니다. 이 글은 이펙트를 렌더하거나 <code>tools/render.mjs</code>를 실행하지 않았습니다.</p>
+</blockquote>
+<h2 id="_1">왜 이 라이브러리가 인디 이펙트에 닿는가</h2>
+<p>포스트의 본문은 인디 게임을 만드는 사람에게 244가지 픽셀 이펙트가 오픈소스로 나왔고, PNG 에셋 대신 짧은 자바스크립트가 실시간으로 그리며, 팔레트는 코드 한 줄이고, Claude Code용 스킬이 새 이펙트를 만든다는 문장입니다.</p>
+<p>저장소는 있습니다. GitHub 전체 이름은 <code>patch-gg/pixelfx</code>, 설명 문장은 "244 pixel art effects, every one a small piece of code. Plus a Claude Code skill to make your own.", SPDX는 MIT, 기본 브랜치는 <code>main</code>, 생성 시각은 2026-10-30T06:43:25Z, <code>pushed_at</code>은 2026-10-31T08:44:14Z, 아카이브 상태는 아닙니다. 주 언어 필드는 JavaScript입니다. <code>homepage</code>는 <a href="https://patch-gg.github.io/pixelfx/">patch-gg.github.io/pixelfx</a>입니다. 조직 <code>patch-gg</code>의 API <code>blog</code>는 <code>https://patch.gg/</code>이고, 그 페이지를 2026-11-05에 열었을 때 보이는 문장은 "Coming soon."과 "Patch is almost ready."입니다. 직원 수나 매출은 그 페이지에 없습니다. <code>package.json</code> 버전은 <code>0.3.0</code>이고, 그 문자열은 커밋 메시지 "pixelfx 0.3.0: give the effects a body that performs them"에도 있습니다. 릴리스 목록과 태그 목록은 이 날 API에서 빈 배열이었습니다. npm 레지스트리 <code>GET /pixelfx</code>는 <code>Date: Thu, 05 Nov 2026 03:19:50 GMT</code>에 HTTP 404, 본문 <code>{"error":"Not found"}</code>였습니다.</p>
+<p>개발자에게 닿는 지점은 "고퀄리티 이펙트 244개"라는 형용사보다, 프레임을 그림 파일로 들고 있지 않다는 점입니다. README가 브라우저 쪽으로 적는 이름은 canvas, Phaser, PixiJS, Kaplay, three.js이고, 그 경로는 코드를 직접 부릅니다. Godot, Unity, GameMaker, Defold, LÖVE, Bevy 쪽으로 적는 경로는 <code>node tools/render.mjs ice/frost-nova --sheet</code>가 만드는 투명 PNG와 Aseprite 스타일 JSON입니다.</p>
+<h2 id="_2">이펙트 하나는 파일이고, 그림은 두 버퍼다</h2>
+<p>README의 개수 마커는 <code>&lt;!-- count --&gt;244&lt;!-- /count --&gt;</code>이고, <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/docs/CATALOG.md">docs/CATALOG.md</a> 첫 문장은 "244 effects in 21 categories"입니다. 카탈로그 표의 범주 합도 244입니다. moves 12, fire 12, explosions 12, water 12, ice 10, lightning 11, sci-fi 12, melee 12, impacts 11, projectiles 13, spawn &amp; death 10, arcane 12, holy 10, shadow 12, status 13, nature 13, weather 12, ui 12, pickups 11, transitions 10, critters 12. <code>src/fx/categories.js</code>의 배열도 이 21개입니다.</p>
+<p><code>src/fx</code> 아래 <code>.js</code> 파일은 266개입니다. 그중 <code>export const meta</code>가 있는 파일은 244개입니다. 나머지 22개는 범주 20곳의 <code>_lib.js</code> 20개, 생성 파일 <code>src/fx/index.js</code>, 범주 목록 <code>src/fx/categories.js</code>입니다. moves에는 <code>_lib.js</code>가 없습니다. <code>src/fx/fire/_lib.js</code> 첫 주석은 앞의 <code>_</code>가 도구가 그 파일을 이펙트로 세지 않게 한다고 적고, 불꽃 혀·연기 레시피가 Sprite Fusion의 오픈소스 fire에서 왔으며 MIT, Copyright (c) 2026 Hugo Duprez라고 적습니다.</p>
+<p>커밋 메시지는 "244 effects, 73 of them acted."입니다. <code>export const act</code>가 있는 파일은 73개이고, 그 가운데 moves 12개는 전부 act를 가집니다. 나머지 61개가 README가 "61 effects with a character, and the 12 moves"라고 적는 61과 같습니다. <code>.claude-plugin/plugin.json</code>의 description은 "ready-made effects in 20 categories"라고 적습니다. 카탈로그와 <code>categories.js</code>의 범주는 21개입니다.</p>
+<p>그리는 방식은 두 가지이고, README "how it works"와 <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/docs/AUTHORING.md">docs/AUTHORING.md</a>가 이름을 붙입니다.</p>
+<ul>
+<li><strong>Pure.</strong> <code>draw(p, t, o)</code>를 내보냅니다. 시각 <code>t</code>만으로 그 프레임이 정해져서 루프가 이음새 없이 이어진다고 README가 적습니다. 이 커밋에서 <code>export function draw</code> 또는 <code>export const draw</code>가 있고 <code>create</code> export는 없는 meta 파일은 <strong>112개</strong>입니다.</li>
+<li><strong>Simulated.</strong> <code>create(o)</code>를 내보냅니다. 파티클과 파편, 빛을 상태로 두고 스텝합니다. meta 파일 중 <code>create</code> export만 있는 것은 <strong>132개</strong>입니다. 둘 다 내보내거나 둘 다 없는 meta 파일은 0개입니다.</li>
+</ul>
+<p>라이브 인스턴스는 <code>src/core/fx.js</code>의 <code>createFx</code>입니다. 시뮬레이션의 <code>update</code>는 호출자의 <code>dt</code>를 120Hz 이하로 나눕니다. 주석의 이유는 프레임 레이트가 달라도 같게 보이게 한다는 것입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="nx">update</span><span class="p">(</span><span class="nx">dt</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">t</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nx">dt</span><span class="p">;</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">impl</span><span class="p">.</span><span class="nx">update</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="p">;</span>
+<span class="w">  </span><span class="c1">// simulations step at 120 Hz or finer whatever the caller's frame rate, so they look the same everywhere</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">n</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">max</span><span class="p">(</span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">ceil</span><span class="p">(</span><span class="nx">dt</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">120</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">1e-9</span><span class="p">));</span>
+<span class="w">  </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">n</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="nx">impl</span><span class="p">.</span><span class="nx">update</span><span class="p">(</span><span class="nx">dt</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="nx">n</span><span class="p">,</span><span class="w"> </span><span class="nx">opts</span><span class="p">);</span>
+<span class="p">},</span>
+</code></pre></div>
+
+<p>버퍼는 두 개입니다. <code>createFrame</code>이 만드는 객체는 <code>{ w, h, ox, oy, color, light }</code>이고, <code>color</code>와 <code>light</code>는 <code>Uint32Array</code>입니다. 주석은 Sprite Fusion VFX 프레임과 같은 모양이라고 적습니다. <code>color</code>는 불투명·디더·반투명 픽셀이고, <code>light</code>는 위에 더하는 글로우입니다. <code>composite</code>는 그 둘을 RGBA 바이트로 섞습니다. <code>bg</code>가 <code>null</code>이면 투명입니다.</p>
+<p>갤러리 <code>gallery/app.js</code>는 <code>canvas.getContext("2d")</code>, <code>createImageData</code>, <code>putImageData</code>입니다. <code>src/</code> 안에서 <code>WebGL</code>이나 <code>getContext</code> 문자열은 검색되지 않았습니다. WebGL이라는 단어가 있는 곳은 스킬 문서입니다. <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/skills/pixelfx/SKILL.md">skills/pixelfx/SKILL.md</a>는 Canvas나 WebGL 게임에서 코드를 직접 쓰고, WebGL 엔진이면 합성된 RGBA를 텍스처로 올리라고 적습니다. 생성기가 셰이더를 컴파일한다는 문장은 그 파일에 없습니다.</p>
+<p>시드는 이펙트 옵션입니다. AUTHORING.md는 <code>Math.random()</code>과 <code>Date</code>를 쓰지 말라고 적습니다. 이 커밋의 <code>src/fx</code>에서 <code>Math.random</code> 문자열은 검색되지 않았습니다.</p>
+<p>팔레트는 이펙트 파일을 고치지 않는 옵션입니다. <code>ice/frost-nova.js</code>의 meta는 어두운 색에서 밝은 색으로 가는 hex 배열을 기본값으로 가집니다.</p>
+<div class="highlight"><pre><span></span><code><span class="k">export</span><span class="w"> </span><span class="kd">const</span><span class="w"> </span><span class="nx">meta</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">name</span><span class="o">:</span><span class="w"> </span><span class="s2">"Frost nova"</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">desc</span><span class="o">:</span><span class="w"> </span><span class="s2">"Frost spirals into a spinning snowflake, then a wave blooms three rings of ice crystals round the caster; snow drifts, frost creeps, and the ice melts back into the floor."</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">tags</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"ice"</span><span class="p">,</span><span class="w"> </span><span class="s2">"nova"</span><span class="p">,</span><span class="w"> </span><span class="s2">"aoe"</span><span class="p">,</span><span class="w"> </span><span class="s2">"frost"</span><span class="p">,</span><span class="w"> </span><span class="s2">"magic"</span><span class="p">,</span><span class="w"> </span><span class="s2">"one-shot"</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">size</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="mf">288</span><span class="p">,</span><span class="w"> </span><span class="mf">192</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">origin</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="mf">144</span><span class="p">,</span><span class="w"> </span><span class="mf">150</span><span class="p">],</span>
+<span class="w">  </span><span class="nx">duration</span><span class="o">:</span><span class="w"> </span><span class="mf">3.4</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">loop</span><span class="o">:</span><span class="w"> </span><span class="kc">false</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">fps</span><span class="o">:</span><span class="w"> </span><span class="mf">30</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">bg</span><span class="o">:</span><span class="w"> </span><span class="s2">"ground"</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">actor</span><span class="o">:</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span>
+<span class="w">  </span><span class="nx">options</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">palette</span><span class="o">:</span><span class="w"> </span><span class="p">[</span><span class="s2">"#151a3d"</span><span class="p">,</span><span class="w"> </span><span class="s2">"#212f6b"</span><span class="p">,</span><span class="w"> </span><span class="s2">"#2c58aa"</span><span class="p">,</span><span class="w"> </span><span class="s2">"#3a8bd8"</span><span class="p">,</span><span class="w"> </span><span class="s2">"#62c8f4"</span><span class="p">,</span><span class="w"> </span><span class="s2">"#a6ecff"</span><span class="p">,</span><span class="w"> </span><span class="s2">"#dcfbff"</span><span class="p">,</span><span class="w"> </span><span class="s2">"#ffffff"</span><span class="p">],</span><span class="w"> </span><span class="nx">reach</span><span class="o">:</span><span class="w"> </span><span class="mf">104</span><span class="p">,</span><span class="w"> </span><span class="nx">seed</span><span class="o">:</span><span class="w"> </span><span class="mf">4</span><span class="w"> </span><span class="p">},</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p><code>resolveOptions</code>는 호출자가 넘긴 램프의 길이가 기본값과 다르면 <code>fit</code>으로 기본 길이에 다시 샘플합니다. 그래서 이펙트 안의 <code>C[6]</code> 같은 인덱스가 호출자의 배열 길이와 어긋나지 않습니다. README의 파란 불꽃 예는 렌더 도구의 <code>--opts</code>입니다.</p>
+<div class="highlight"><pre><span></span><code>node<span class="w"> </span>tools/render.mjs<span class="w"> </span>fire/torch<span class="w"> </span>--gif<span class="w"> </span>--opts<span class="w"> </span><span class="s1">'{"palette": ["#102","#215","#43a","#8cf","#cff","#fff"]}'</span>
+</code></pre></div>
+
+<p>같은 README는 힐이 분홍으로 빛날 수 있다고 적습니다. "1초"라는 측정은 README, AUTHORING, <code>fx.js</code>에 없습니다.</p>
+<p>줄 수는 이 커밋의 meta 파일 244개를 <code>wc -l</code>과 같이 개행 수로 센 값입니다. 최솟값은 <code>moves/pistol-shots.js</code> <strong>38줄</strong>입니다. 그 파일은 자기 픽셀 루프가 없고 <code>chain()</code>으로 <code>muzzle-pistol</code>, <code>bullet-tracer</code>, <code>hit-spark</code>를 시각에 맞춰 부릅니다. 정렬했을 때 122번째와 123번째가 둘 다 <strong>133줄</strong>(<code>arcane/blink-out.js</code>, <code>melee/thrust.js</code>)이라 중앙값은 133줄입니다. 평균은 147.4줄, 합은 35,965줄, 최댓값은 <code>spawn/summon-rise.js</code> <strong>412줄</strong>입니다. 카탈로그가 예로 드는 <code>ice/frost-nova.js</code>는 215줄입니다. README의 "small piece of code"는 저장소의 표현이고, 포스트의 "단 몇 줄"과 같은 문장은 아닙니다.</p>
+<h2 id="_3">게임 루프에 넣는 호출</h2>
+<p>README의 브라우저 예는 의존성 없이 <code>pixelfx</code>와 <code>pixelfx/fx/ice/frost-nova</code>를 import합니다. <code>package.json</code>의 <code>exports</code>는 <code>"."</code>가 <code>./src/core/index.js</code>, <code>"./fx/*"</code>가 <code>./src/fx/*.js</code>입니다. 설치 줄은 <code>npm i github:patch-gg/pixelfx</code>이거나, <code>src/core</code>와 쓸 이펙트 파일을 복사하는 것입니다. <code>engines.node</code>는 <code>&gt;=18</code>입니다. <code>dependencies</code> 키는 없고, <code>devDependencies</code>는 <code>esbuild</code> <code>^0.25.10</code> 하나입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="k">import</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">createFrame</span><span class="p">,</span><span class="w"> </span><span class="nx">clearFrame</span><span class="p">,</span><span class="w"> </span><span class="nx">createFx</span><span class="p">,</span><span class="w"> </span><span class="nx">composite</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"pixelfx"</span><span class="p">;</span>
+<span class="k">import</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="kr">as</span><span class="w"> </span><span class="nx">frostNova</span><span class="w"> </span><span class="kr">from</span><span class="w"> </span><span class="s2">"pixelfx/fx/ice/frost-nova"</span><span class="p">;</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">frame</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">createFrame</span><span class="p">(</span><span class="mf">320</span><span class="p">,</span><span class="w"> </span><span class="mf">180</span><span class="p">);</span><span class="w">                   </span><span class="c1">// your game's pixel resolution</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">img</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">ImageData</span><span class="p">(</span><span class="mf">320</span><span class="p">,</span><span class="w"> </span><span class="mf">180</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">fx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">createFx</span><span class="p">(</span><span class="nx">frostNova</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">x</span><span class="o">:</span><span class="w"> </span><span class="mf">160</span><span class="p">,</span><span class="w"> </span><span class="nx">y</span><span class="o">:</span><span class="w"> </span><span class="mf">140</span><span class="w"> </span><span class="p">});</span><span class="w">   </span><span class="c1">// also: flip, angle, seed, palette, light...</span>
+
+<span class="kd">function</span><span class="w"> </span><span class="nx">tick</span><span class="p">(</span><span class="nx">dt</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">fx</span><span class="p">.</span><span class="nx">update</span><span class="p">(</span><span class="nx">dt</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">clearFrame</span><span class="p">(</span><span class="nx">frame</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">fx</span><span class="p">.</span><span class="nx">draw</span><span class="p">(</span><span class="nx">frame</span><span class="p">,</span><span class="w"> </span><span class="s2">"back"</span><span class="p">);</span><span class="w">                              </span><span class="c1">// behind characters</span>
+<span class="w">  </span><span class="nx">drawCharacters</span><span class="p">();</span>
+<span class="w">  </span><span class="nx">fx</span><span class="p">.</span><span class="nx">draw</span><span class="p">(</span><span class="nx">frame</span><span class="p">,</span><span class="w"> </span><span class="s2">"front"</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">composite</span><span class="p">(</span><span class="nx">frame</span><span class="p">,</span><span class="w"> </span><span class="nx">img</span><span class="p">.</span><span class="nx">data</span><span class="p">,</span><span class="w"> </span><span class="nx">backgroundColor</span><span class="p">);</span><span class="w">         </span><span class="c1">// color, then light added on top</span>
+<span class="w">  </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">putImageData</span><span class="p">(</span><span class="nx">img</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">);</span><span class="w">                         </span><span class="c1">// scale up with image-rendering: pixelated</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><code>createFx</code>가 돌려주는 객체의 메서드는 <code>update(dt)</code>, <code>draw(frame, layer)</code>, <code>stop()</code>, <code>done()</code>입니다. <code>draw</code>의 <code>"back"</code>은 캐릭터 뒤, <code>"front"</code>는 앞이고, layer를 생략하면 둘 다입니다. <code>stop()</code> 이후 페이드 상수는 <code>FADE = 0.3</code>초입니다. <code>done()</code>은 그 페이드가 끝났거나, 루프가 아닌 이펙트가 <code>duration</code>에 도달했을 때 참입니다.</p>
+<p>캐릭터가 있는 이펙트는 <code>createAct</code>로 몸과 타격을 같이 재생합니다. README가 예로 든 <code>melee/sword-slash</code>의 act 데이터는 준비 자세, 스냅, 0.14초 히트스톱을 가집니다.</p>
+<div class="highlight"><pre><span></span><code><span class="k">export</span><span class="w"> </span><span class="kd">const</span><span class="w"> </span><span class="nx">act</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">target</span><span class="o">:</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">x</span><span class="o">:</span><span class="w"> </span><span class="mf">58</span><span class="w"> </span><span class="p">},</span>
+<span class="w">  </span><span class="nx">poses</span><span class="o">:</span><span class="w"> </span><span class="p">[</span>
+<span class="w">    </span><span class="p">[</span><span class="o">-</span><span class="mf">0.55</span><span class="p">,</span><span class="w"> </span><span class="nx">GUARD</span><span class="p">],</span>
+<span class="w">    </span><span class="p">[</span><span class="o">-</span><span class="mf">0.3</span><span class="p">,</span><span class="w"> </span><span class="nx">WIND_UP</span><span class="p">],</span>
+<span class="w">    </span><span class="p">[</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="nx">CUT</span><span class="p">,</span><span class="w"> </span><span class="s2">"snap"</span><span class="p">],</span>
+<span class="w">    </span><span class="p">[</span><span class="mf">0.06</span><span class="p">,</span><span class="w"> </span><span class="nx">FOLLOW_THROUGH</span><span class="p">,</span><span class="w"> </span><span class="s2">"snap"</span><span class="p">],</span>
+<span class="w">    </span><span class="p">[</span><span class="mf">0.86</span><span class="p">,</span><span class="w"> </span><span class="nx">GUARD</span><span class="p">],</span>
+<span class="w">  </span><span class="p">],</span>
+<span class="w">  </span><span class="nx">hits</span><span class="o">:</span><span class="w"> </span><span class="p">[{</span><span class="w"> </span><span class="nx">t</span><span class="o">:</span><span class="w"> </span><span class="mf">0.06</span><span class="p">,</span><span class="w"> </span><span class="nx">stop</span><span class="o">:</span><span class="w"> </span><span class="mf">0.14</span><span class="p">,</span><span class="w"> </span><span class="nx">shake</span><span class="o">:</span><span class="w"> </span><span class="mf">0.18</span><span class="p">,</span><span class="w"> </span><span class="nx">amp</span><span class="o">:</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="nx">push</span><span class="o">:</span><span class="w"> </span><span class="mf">2.8</span><span class="p">,</span><span class="w"> </span><span class="nx">straw</span><span class="o">:</span><span class="w"> </span><span class="mf">18</span><span class="w"> </span><span class="p">}],</span>
+<span class="p">};</span>
+</code></pre></div>
+
+<p><code>src/core/rig.js</code>는 고정 길이 뼈의 3D 골격을 픽셀로 그린다고 README가 적고, 포즈는 12fps 스텝, 파티클은 풀 레이트입니다. 스톡 캐릭터 크기는 AUTHORING.md의 24×38 px(<code>actor: 2</code>)입니다. 이 글은 그 골격을 실행해 보지 않았습니다.</p>
+<p>다른 엔진용 시트는 <code>tools/render.mjs</code>입니다. <code>--sheet</code>는 투명 PNG와 JSON을 쓰고, README는 그 JSON을 Aseprite 스타일(프레임 사각형, duration, <code>meta.pixelfx</code>의 fps·loop·columns·pivot)이라고 적습니다. Phaser의 atlas 로더와 Godot·Unity의 Aseprite 임포터가 읽는다고 같은 문단이 적습니다. <code>node tools/sheets.mjs</code>는 라이브러리 전체를 <code>sheets/</code>로 내보냅니다. 저장소에 미리 구워 둔 이펙트 PNG는 없습니다. 이미지 파일은 <code>docs/readme/montage.gif</code>와 <code>docs/readme/acts.gif</code> 두 개입니다.</p>
+<p>새 이펙트의 공식 루프는 <code>node tools/new.mjs</code>, <code>node tools/render.mjs</code>(콘택트 시트), <code>node tools/check.mjs</code>(새어 나감, 이음새, 시드 없는 난수, 느린 프레임)입니다. Claude Code 스킬은 <code>skills/pixelfx</code>이고, README의 설치는 <code>/plugin marketplace add patch-gg/pixelfx</code> 다음 <code>/plugin install pixelfx@pixelfx</code>이거나 그 디렉터리를 <code>~/.claude/skills/</code>에 복사하는 것입니다. 스킬 본문이 방법을 돌리는 문장은 draft, render, look, refine입니다. 한 번의 프롬프트가 끝난다는 초 단위 측정은 그 파일에 없습니다.</p>
+<h2 id="_4">라이선스</h2>
+<p><code>LICENSE</code>는 MIT입니다. 저작권 줄은 <code>Copyright (c) 2026 Patch</code>와 <code>Copyright (c) 2026 Hugo Duprez</code>입니다. README는 코드와 이펙트를 상업 이용을 포함해 뭐든 쓸 수 있다고 적습니다. 조건은 저작권 고지와 허가 고지를 사본에 남기는 것입니다.</p>
+<p><a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/NOTICE.md">NOTICE.md</a>는 세 갈래를 나눕니다. <code>src/core/sim.js</code>와 파일 머리에 그렇게 적은 이펙트는 Hugo Duprez의 Sprite Fusion 픽셀 VFX를 고친 것이고 MIT입니다. <code>src/core/act.js</code>는 Hollow Crown(<code>github.com/rehan-remade/hollow-crown</code>, Copyright (c) 2026 rehan-remade, MIT)의 스킬 재생을 고친 것입니다. <code>gallery/fonts</code>의 Patch Pixel은 Patch 소유이고 이 저장소의 MIT에 포함되지 않습니다. 폰트 NOTICE의 문장은 "© 2026 Patch. All rights reserved."입니다.</p>
+<p>이 커밋의 작성자 이메일은 <code>rehan@remade.ai</code>입니다. 그 사실과 Hollow Crown 저장소 이름의 사용자 이름이 같다는 것 이상으로, 회사 관계를 이 글은 적지 않습니다.</p>
+<h2 id="_5">비즈니스 인사이트</h2>
+<p>숫자와 문서 사실은 위에 붙입니다. 에셋 스토어 판매량과 점유율은 이 글이 측정하지 않았습니다.</p>
+<p>비용으로 문서가 적는 것은 라이선스 가격이 아닙니다. MIT는 사용·복제·수정·배포·판매를 허락하고, 고지를 남기라고 합니다. 돈으로 확인한 비교 대상은 스프라이트 편집기 Aseprite의 Steam 목록입니다. 2026-11-05 <code>Date: Thu, 05 Nov 2026 03:22:57 GMT</code>의 <code>store.steampowered.com/api/appdetails?appids=431730&amp;cc=us</code>에서 <code>price_overview.final</code>은 1999, <code>final_formatted</code>는 <code>$19.99</code>, <code>discount_percent</code>는 0, <code>currency</code>는 USD입니다. <a href="https://www.aseprite.org/">aseprite.org</a>는 스프라이트 시트를 <code>.png</code>와 <code>.json</code>으로 내보낸다고 적습니다. pixelfx README가 <code>--sheet</code> 산출물을 Aseprite 스타일 JSON이라고 부르는 이유와 그 페이지의 내보내기 항목은 같은 파일 형식 이름입니다. $19.99는 그 편집기의 Steam 미국 표시 가격이고, 픽셀 VFX 팩의 가격이 아닙니다. aseprite.org 다운로드 HTML에서 이 글이 금액 문자열을 찾지는 못했습니다.</p>
+<p>npm에 패키지가 없는 상태에서 README의 설치는 GitHub 의존성입니다. 버전 문자열 <code>0.3.0</code>은 <code>package.json</code>과 커밋 메시지에 있고, 태그된 GitHub 릴리스는 이 날 목록에 없습니다. 커밋을 고정하지 않으면 <code>github:patch-gg/pixelfx</code>가 가리키는 트리는 이동할 수 있습니다. 이 글이 읽은 트리는 <code>a841596</code>입니다.</p>
+<p><strong>분석/의견.</strong> 바로 이득이 가는 자리는 이미 Canvas나 Phaser, PixiJS 위에서 픽셀 해상도로 그리는 인디 게임입니다. 불꽃을 파랑으로, 힐을 분홍으로 바꾸는 일이 시트 전체를 다시 그리는 일이 아니라 <code>palette</code> 배열을 넘기는 일이 됩니다. 그 배열이 보기 좋은지는 저장소가 보장하지 않고, AUTHORING.md는 콘택트 시트를 보고 고치라고 적습니다.</p>
+<p>Godot나 Unity로 가는 자리는 다릅니다. 런타임에 자바스크립트 이펙트를 호출하는 API는 README의 그 엔진 절에 없습니다. 그 절의 산출물은 PNG 시트입니다. 시트는 용량이 다시 생기고, 팔레트를 바꾸면 시트를 다시 구워야 합니다. 라이브 경로에서 사라진 PNG가, 비JS 경로에서는 빌드 산출물로 돌아옵니다. 유료 픽셀 팩과 같은 자리에 넣는 것은 코드 런타임이 아니라 그 시트입니다.</p>
+<p>손해가 생기는 읽기는 세 가지입니다. 갤러리 폰트까지 MIT라고 보면 NOTICE의 All rights reserved가 빠집니다. "순수"를 저장소의 Pure로 읽으면 132개의 <code>create()</code> 시뮬레이션이 빠집니다. 스킬이 한 번에 출고 품질을 만든다고 보면, 스킬과 AUTHORING이 적는 루프(그리고 초안을 눈으로 보는 단계)가 빠집니다. 별 4,800은 2026-11-05 12:22 KST의 API 값이고, 도입 비용의 측정이 아닙니다.</p>
+<h2 id="_6">팩트 체크</h2>
+<p>✅ 사실 / ⚠️ 부분적으로 사실·범위가 다름 / ❌ 사실 아님</p>
+<h3 id="db_goyoung-2026-11-02">@db_goyoung 포스트 (2026-11-02)</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>불꽃, 폭발, 얼음 마법, 베기, 날씨 효과가 들어 있다</td>
+<td>✅</td>
+<td><a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/docs/CATALOG.md">카탈로그</a>와 README 표. fire 12, explosions 12, ice 10, melee 12(<code>sword-slash</code>, <code>double-slash</code> 포함), weather 12. 범주는 21개.</td>
+</tr>
+<tr>
+<td>244가지다</td>
+<td>✅</td>
+<td>README 개수 마커, 카탈로그 첫 문장, 커밋 메시지, <code>export const meta</code> 파일 244개. <code>src/fx</code>의 <code>.js</code>는 266개이고 차이는 <code>_lib.js</code> 20개와 <code>index.js</code>, <code>categories.js</code>다. <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/src/fx/fire/_lib.js">fire/_lib.js</a>는 <code>_</code> 때문에 이펙트 집계에서 빠진다고 적는다.</td>
+</tr>
+<tr>
+<td>고퀄리티다</td>
+<td>⚠️</td>
+<td>포스트의 평가 단어다. AUTHORING.md의 기준 문장은 Sprite Fusion VFX 옆에서 디테일·빛·생기가 버텨야 한다는 것이다. 이 글은 244개를 렌더하거나 채점하지 않았다.</td>
+</tr>
+<tr>
+<td>오픈소스다</td>
+<td>✅</td>
+<td><a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/LICENSE">LICENSE</a> MIT. GitHub <code>license.spdx_id</code> MIT. README는 상업 이용을 포함한다고 적는다. 폰트는 <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/NOTICE.md">NOTICE</a>에서 MIT 밖이다.</td>
+</tr>
+<tr>
+<td>무거운 PNG 에셋이 아니라 코드로 실시간으로 그린다</td>
+<td>⚠️</td>
+<td>이펙트 소스는 JS이고, 저장소 이미지는 README용 GIF 2개다. 브라우저 경로는 <code>Uint32Array</code> 프레임을 <code>composite</code>한 뒤 Canvas 2D <code>putImageData</code>다. 갤러리 <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/gallery/app.js">app.js</a>가 그 호출을 한다. Godot·Unity 등 README가 적은 비JS 경로는 <code>--sheet</code> 투명 PNG다.</td>
+</tr>
+<tr>
+<td>단 몇 줄짜리 코드다</td>
+<td>❌</td>
+<td>meta 파일 244개의 개행 수. 최소 38(<code>moves/pistol-shots.js</code>, 본문은 <code>chain()</code>), 중앙 133, 평균 147.4, 최대 412(<code>spawn/summon-rise.js</code>). <code>ice/frost-nova.js</code>는 215줄.</td>
+</tr>
+<tr>
+<td>순수 자바스크립트다</td>
+<td>⚠️</td>
+<td><code>package.json</code>에 <code>dependencies</code>가 없고 devDependency는 esbuild 하나다. <code>src/</code>에 WebGL 호출은 없다. 저장소가 Pure라고 부르는 것은 <code>draw(p, t, o)</code> 112개다. 132개는 <code>create(o)</code>이고 <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/src/core/fx.js">fx.js</a>가 120Hz로 스텝한다.</td>
+</tr>
+<tr>
+<td>코드 한 줄로 파란 불꽃·분홍 힐로 바꾸고, 그 일이 1초다</td>
+<td>⚠️</td>
+<td><code>palette</code> 옵션과 <code>fit</code> 재샘플은 <code>resolveOptions</code>와 frost-nova meta, README <code>--opts</code> 예에 있다. 힐을 분홍으로 할 수 있다는 문장도 README에 있다. "1초"를 잰 숫자는 이 커밋의 README·AUTHORING·<code>fx.js</code>에 없다.</td>
+</tr>
+<tr>
+<td>Claude Code가 새 도트 이펙트를 만드는 전용 스킬이 있다</td>
+<td>✅</td>
+<td><a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/skills/pixelfx/SKILL.md">skills/pixelfx/SKILL.md</a>, <code>.claude-plugin/marketplace.json</code>, README의 <code>/plugin marketplace add patch-gg/pixelfx</code>. 스킬이 적는 절차는 draft, render, look, refine이다. "뚝딱"의 소요 시간은 저장소에 없다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 244개, MIT, 자바스크립트 소스, 팔레트 옵션, Claude Code 스킬은 저장소와 맞다. 어긋나는 문장은 "단 몇 줄"이다. meta 파일의 중앙 길이는 133줄이고, 가장 짧은 38줄은 다른 이펙트를 <code>chain()</code>으로 부르는 연출이다. "순수"를 의존성 없는 자바스크립트로 읽으면 맞고, 저장소 용어로 읽으면 112개만 Pure이며 132개는 120Hz 시뮬레이션이다. <code>t.co/UrJzzlGbC2</code>는 그 저장소가 아니라 포스트에 붙은 GIF다.</p>
+<h2 id="_7">참고 자료</h2>
+<ul>
+<li>계기 포스트 — <a href="https://x.com/db_goyoung/status/2117123080669782501">@db_goyoung, 2026-11-02 05:14 UTC</a> · <a href="https://x.com/i/status/2117123080669782501">i/status</a> · 이 환경에서 읽은 사본 <a href="https://api.fxtwitter.com/status/2117123080669782501">fxtwitter</a>. <code>t.co/UrJzzlGbC2</code>의 리다이렉트는 같은 상태의 <code>/photo/1</code></li>
+<li>pixelfx main <code>a84159688af3ca37a4be05a0d422b94451b2e24e</code>, 커밋 시각 2026-10-31T08:41:17Z — <a href="https://github.com/patch-gg/pixelfx/commit/a84159688af3ca37a4be05a0d422b94451b2e24e">커밋</a> · <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/README.md">README</a> · <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/docs/CATALOG.md">카탈로그</a> · <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/docs/AUTHORING.md">AUTHORING</a> · <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/src/core/fx.js">fx.js</a> · <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/src/fx/ice/frost-nova.js">frost-nova.js</a> · <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/LICENSE">LICENSE</a> · <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/NOTICE.md">NOTICE</a> · <a href="https://github.com/patch-gg/pixelfx/blob/a84159688af3ca37a4be05a0d422b94451b2e24e/skills/pixelfx/SKILL.md">스킬</a></li>
+<li>별·포크·라이선스 — 2026-11-05T03:22:17Z <code>GET /repos/patch-gg/pixelfx</code>. <code>stargazers_count</code> 4800, <code>forks_count</code> 644, <code>license.spdx_id</code> MIT, <code>created_at</code> 2026-10-30T06:43:25Z</li>
+<li>npm — <a href="https://registry.npmjs.org/pixelfx">registry.npmjs.org/pixelfx</a>, 2026-11-05T03:19:50Z HTTP 404</li>
+<li>갤러리 — <a href="https://patch-gg.github.io/pixelfx/">patch-gg.github.io/pixelfx</a></li>
+<li>방법이 나온 글과 원 코드 — <a href="https://www.spritefusion.com/blog/how-to-make-good-pixel-art-effects-with-claude">Hugo Duprez, How to make (good) pixel art effects with Claude</a> · <a href="https://www.spritefusion.com/pixel-art-vfx">Sprite Fusion pixel art VFX</a> · <a href="https://github.com/rehan-remade/hollow-crown">rehan-remade/hollow-crown</a></li>
+<li>Aseprite Steam 미국 표시 가격 — <code>appdetails?appids=431730&amp;cc=us</code>, <code>Date: Thu, 05 Nov 2026 03:22:57 GMT</code>, <code>final_formatted</code> <code>$19.99</code>. 공식 기능 설명의 시트 내보내기는 <a href="https://www.aseprite.org/">aseprite.org</a></li>
+<li>조직 페이지 — <a href="https://github.com/patch-gg">github.com/patch-gg</a> · <a href="https://patch.gg">patch.gg</a> (2026-11-05에 읽은 문장은 Coming soon)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
