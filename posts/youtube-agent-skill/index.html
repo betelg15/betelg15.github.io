@@ -1,0 +1,312 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Claude 스킬 11개로 유튜브 채널을? youtube-agent-skill 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-07 · <span class="chip">#YouTube</span><span class="chip">#Claude</span><span class="chip">#Claude Code</span><span class="chip">#Agent Skills</span><span class="chip">#OSS</span><span class="chip">#MIT</span><span class="chip">#Jake Schincariol</span></p>
+<h1 class="title">Claude 스킬 11개로 유튜브 채널을? youtube-agent-skill 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#youtube-agent-skill">기술 설명: youtube-agent-skill</a><ul>
+<li><a href="#github-api-2026-11-07-0815-kst">저장소·라이선스·규모 (GitHub API, 2026-11-07 08:15 KST 조회)</a></li>
+<li><a href="#readme">설치 (README 그대로)</a></li>
+<li><a href="#11">스킬 11개</a></li>
+<li><a href="#python-6">Python 도구 6개 (의존성 없음)</a></li>
+</ul>
+</li>
+<li><a href="#_2">비즈니스 인사이트</a></li>
+<li><a href="#_3">팩트 체크</a></li>
+<li><a href="#_4">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/dopamine_crypto/status/2118644566987526434">@dopamine_crypto의 포스트</a>(bookmark id <code>2118644566987526434</code>)를 계기로 썼습니다. X 글의 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다. 아래 대조는 2026-11-07(KST)에 클론·읽은 <a href="https://github.com/Jakeschincariol/youtube-agent-skill">Jakeschincariol/youtube-agent-skill</a> README·LICENSE·<code>.claude-plugin/</code>·<code>skills/*/SKILL.md</code>·<code>hooks.json</code>·6개 <code>.py</code> 도구, <a href="https://api.github.com/repos/Jakeschincariol/youtube-agent-skill">GitHub REST API</a>, <a href="https://code.claude.com/docs/en/skills">Claude Code skills 문서</a>입니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>유튜브를 “AI가 알아서 굴려준다”는 약속은 요즘 흔합니다. 실제로 막히는 지점은 보통 세 곳입니다.</p>
+<ol>
+<li><strong>프롬프트만 있으면</strong> — 훅·제목·썸네일·리텐션을 매번 같은 기준으로 검사하기 어렵습니다. 같은 채팅에서도 결과가 들쭉날쭉해집니다.</li>
+<li><strong>유튜브 강의·템플릿 팩</strong> — 훅 공식·썸네일 법칙·쇼츠 재가공을 <strong>유료</strong>로 파는 경우가 많고, 도구로 검증 가능한 형태가 아닌 “체크리스트 PDF”인 경우가 많습니다(가격·DAU는 이 글이 invent 하지 않습니다).</li>
+<li><strong>완전 자동화 봇</strong> — Data API + OAuth로 업로드까지 붙이면 “무인 채널”에 가까워지지만, 권한·약관·품질 리스크가 한 묶음으로 따라옵니다.</li>
+</ol>
+<p><code>youtube-agent-skill</code>은 그 중간을 노립니다. Claude Code <strong>Agent Skills</strong> 형식(<code>SKILL.md</code> + 보조 스크립트)으로 워크플로를 고정하고, 훅 점수·제목/썸네일 린트·EDL·리텐션 CSV 읽기처럼 <strong>stdlib-only Python</strong>으로 재현 가능한 검사를 붙입니다. README가 맨 앞에서 못 박는 문장은 이겁니다.</p>
+<blockquote>
+<p><strong>Nothing gets published until you do it.</strong> These skills write. You upload.</p>
+</blockquote>
+<p>개발자·부업 크리에이터 입장에서 확인할 질문은 마케팅 슬로건보다 다음입니다.</p>
+<ul>
+<li>스킬은 정말 11개인가? 훅 공식은 21개인가?</li>
+<li><code>hookscore.py</code>는 예측기인가, 휴리스틱인가?</li>
+<li>제목·썸네일을 “한 쌍”으로 린트한다는 말은 코드에 있나?</li>
+<li><code>/yt-viral</code>은 로그인·스크래핑을 하나?</li>
+<li>X가 말한 별 <strong>3,938</strong>개는 지금 API와 같은가?</li>
+</ul>
+<h2 id="youtube-agent-skill">기술 설명: youtube-agent-skill</h2>
+<h3 id="github-api-2026-11-07-0815-kst">저장소·라이선스·규모 (GitHub API, 2026-11-07 08:15 KST 조회)</h3>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>값</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>full_name</td>
+<td><code>Jakeschincariol/youtube-agent-skill</code></td>
+</tr>
+<tr>
+<td>description</td>
+<td>Eleven Claude skills that run a YouTube channel… Free, MIT.</td>
+</tr>
+<tr>
+<td>stargazers</td>
+<td><strong>4,826</strong></td>
+</tr>
+<tr>
+<td>forks</td>
+<td><strong>1,453</strong></td>
+</tr>
+<tr>
+<td>open issues</td>
+<td><strong>112</strong></td>
+</tr>
+<tr>
+<td>license</td>
+<td><strong>MIT</strong> (<code>LICENSE</code>, Copyright 2026 Jake Schincariol)</td>
+</tr>
+<tr>
+<td>language</td>
+<td>Python</td>
+</tr>
+<tr>
+<td>created_at</td>
+<td>2026-09-16T13:32:05Z → <strong>2026-09-16 22:32 KST</strong></td>
+</tr>
+<tr>
+<td>pushed_at</td>
+<td>2026-09-16T13:32:08Z → <strong>2026-09-16 22:32 KST</strong> (생성과 같은 날 단일 푸시)</td>
+</tr>
+<tr>
+<td>updated_at</td>
+<td>2026-11-06T23:00:05Z → <strong>2026-11-07 08:00 KST</strong> (메타/스타 갱신)</td>
+</tr>
+<tr>
+<td>size</td>
+<td>32 (API <code>size</code> 필드)</td>
+</tr>
+</tbody>
+</table>
+<p>플러그인 매니페스트(<code>.claude-plugin/plugin.json</code>)는 name <code>youtube-agent</code>, version <code>1.0.0</code>, author Jake Schincariol(<code>https://opusjake.ai</code>), marketplace는 <code>anthropic.com/claude-code/marketplace.schema.json</code> 스키마를 가리킵니다. 루트에는 <code>skills/</code>, <code>templates/voice.md</code>, LICENSE, README만 있고 <code>requirements.txt</code>·<code>pyproject.toml</code>은 <strong>없습니다</strong>.</p>
+<h3 id="readme">설치 (README 그대로)</h3>
+<p>Claude Code 기준 세 경로입니다(<a href="https://code.claude.com/docs/en/skills">skills 문서</a>: 개인 스킬은 <code>~/.claude/skills/&lt;name&gt;/SKILL.md</code>).</p>
+<div class="highlight"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>https://github.com/Jakeschincariol/youtube-agent-skill.git
+cp<span class="w"> </span>-r<span class="w"> </span>youtube-agent-skill/skills/yt-*<span class="w"> </span>~/.claude/skills/
+</code></pre></div>
+
+<p>또는 플러그인:</p>
+<div class="highlight"><pre><span></span><code>/plugin marketplace add Jakeschincariol/youtube-agent-skill
+/plugin install youtube-agent
+</code></pre></div>
+
+<p>프로젝트 로컬이면 저장소의 <code>.claude/skills/</code>로 복사하면 됩니다. Claude Code 없이 <code>SKILL.md</code>만 채팅 상단에 붙여도 “모드”로는 돌지만, README가 밝히듯 <strong>6개 Python 도구는 잃습니다</strong> — <code>/yt-script</code>·<code>/yt-retention</code>·<code>/yt-edit</code>의 핵심입니다.</p>
+<p>그다음 README가 가장 강조하는 파일이 <a href="https://github.com/Jakeschincariol/youtube-agent-skill/blob/main/templates/voice.md"><code>templates/voice.md</code></a>입니다. <code>~/.claude/youtube/voice.md</code>로 복사해 채우거나, 본인 영상 세 개를 주고 “voice.md를 써 달라”고 합니다. 대상 청자·실제 말투·절대 안 쓰는 말·주장하지 않을 숫자·포맷이 들어가며, <strong>모든 스킬이 이 파일을 읽습니다</strong>.</p>
+<h3 id="11">스킬 11개</h3>
+<p>클론 기준 <code>skills/</code> 하위 디렉터리는 정확히 <strong>11</strong>개입니다.</p>
+<table>
+<thead>
+<tr>
+<th>명령</th>
+<th>역할 (README·각 SKILL.md)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/yt-script</code></td>
+<td>아이디어 → 스크립트. <a href="https://github.com/Jakeschincariol/youtube-agent-skill/blob/main/skills/yt-script/hooks.json">21 훅 공식</a>에서 5개 후보 → <code>hookscore.py</code> 점수 → 리텐션 비트 표시</td>
+</tr>
+<tr>
+<td><code>/yt-package</code></td>
+<td>제목+썸네일을 <strong>한 쌍</strong>으로 린트(잘림·중복·모호함)</td>
+</tr>
+<tr>
+<td><code>/yt-edit</code></td>
+<td>타임스탬프 자막 → EDL(dead air / filler / retake)</td>
+</tr>
+<tr>
+<td><code>/yt-comment</code></td>
+<td>댓글 4분류 후 보이스에 맞는 답글·핀 추천</td>
+</tr>
+<tr>
+<td><code>/yt-plan</code></td>
+<td>실제 가용 시간에 맞춘 주간 플랜(앵커 1 + 저비용 1 + Shorts 3)</td>
+</tr>
+<tr>
+<td><code>/yt-viral</code></td>
+<td>니치에서 “채널 자체 중앙값 대비 배수”로 아웃라이어 순위</td>
+</tr>
+<tr>
+<td><code>/yt-retention</code></td>
+<td>Studio audience-retention CSV → hook leak / cliffs / slide</td>
+</tr>
+<tr>
+<td><code>/yt-shorts</code></td>
+<td>롱폼 안 Shorts 후보 + 새 첫 문장(<code>hookscore</code> 재사용)</td>
+</tr>
+<tr>
+<td><code>/yt-seo</code></td>
+<td>설명·태그(태그 약신호 명시)·이길 검색어 3개</td>
+</tr>
+<tr>
+<td><code>/yt-chapters</code></td>
+<td>자막 → 챕터(YouTube 규칙: <code>00:00</code> 시작, ≥3개, 각 ≥10초)</td>
+</tr>
+<tr>
+<td><code>/yt-audit</code></td>
+<td>채널 점검 후 <strong>고칠 것 하나</strong>로 끝냄</td>
+</tr>
+</tbody>
+</table>
+<p>모든 <code>SKILL.md</code>가 같은 게이트 문구를 반복합니다: 아무것도 publish하지 않고, 출력은 복사 블록으로 끝나며 마지막 질문은 <strong>ship it, or change it?</strong></p>
+<h3 id="python-6">Python 도구 6개 (의존성 없음)</h3>
+<p>README와 AST import 검사·로컬 실행으로 확인했습니다. 외부 패키지 import는 없고, <code>chapters.py</code>/<code>retention.py</code>만 형제 스킬의 <code>deadair</code> 파서를 재사용합니다.</p>
+<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>skills/yt-script/hookscore.py<span class="w"> </span>--hook<span class="w"> </span><span class="s2">"one line"</span>
+python3<span class="w"> </span>skills/yt-package/title.py<span class="w"> </span>--title<span class="w"> </span><span class="s2">"..."</span><span class="w"> </span>--thumb<span class="w"> </span><span class="s2">"..."</span>
+python3<span class="w"> </span>skills/yt-edit/deadair.py<span class="w"> </span>transcript.srt
+python3<span class="w"> </span>skills/yt-chapters/chapters.py<span class="w"> </span>transcript.srt
+python3<span class="w"> </span>skills/yt-retention/retention.py<span class="w"> </span>retention.csv
+python3<span class="w"> </span>skills/yt-viral/swipe.py<span class="w"> </span>collected.json<span class="w"> </span>--min<span class="w"> </span><span class="m">2</span>.0
+</code></pre></div>
+
+<h4 id="hookscore">예: hookscore (이 환경에서 실행한 출력)</h4>
+<p><code>hooks.json</code>의 The Statistic 예문을 그대로 넣었습니다.</p>
+<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>skills/yt-script/hookscore.py<span class="w"> </span>--hook<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span><span class="s2">"97% of the people who start a channel quit before video 30. Here is what the other 3% do differently."</span>
+</code></pre></div>
+
+<p>요지: SPECIFICITY 96 / ADDRESS 26 / STAKES 88 / CURIOSITY 58 / BREVITY 100 → <strong>VERDICT 55 WORKABLE</strong>, formula <code>The Statistic</code>, 약점 ADDRESS(“you”를 앞쪽에). README·독스트링이 같이 말하는 한계: 패널은 <strong>74개 실제 숏폼 훅</strong>(5개 채널의 조회 상위·하위 각 8개, 자동자막 첫 15초)으로 캘리브레이션한 <strong>휴리스틱</strong>이지 예측기가 아닙니다. 나쁜 훅 vs 진짜 훅은 잘 가르고, <strong>같은 크리에이터의 히트 vs 미스</strong>는 거의 가르지 못합니다. 낮은 점수는 다시 볼 이유, 높은 점수는 약속이 아닙니다.</p>
+<h4 id="titlethumbnail">예: title+thumbnail 쌍 린트</h4>
+<div class="highlight"><pre><span></span><code>python3<span class="w"> </span>skills/yt-package/title.py<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--title<span class="w"> </span><span class="s2">"I Quit My Job After This One Video Tip"</span><span class="w"> </span>--thumb<span class="w"> </span><span class="s2">"QUIT"</span>
+</code></pre></div>
+
+<p>이 환경 결과 요지: 38자·score 76/100, 이슈로 <strong>번호/날짜/이름 없음</strong>, <strong>썸네일이 제목의 quit을 반복</strong>. 도구가 “페어링이 단위”라는 README 주장을 코드로 강제합니다. 데스크톱 검색 잘림 ~60자, 모바일 홈 ~40자도 독스트링·SKILL에 명시됩니다.</p>
+<h4 id="hooksjson-21">hooks.json = 21</h4>
+<p><code>hooks</code> 배열 길이는 <strong>21</strong>. id 예: <code>the-statistic</code>, <code>someone-elses-result</code>, <code>the-mistake</code>, <code>contrarian-flip</code>, … <code>the-direct-address</code>. 각 항목에 shape·example·fails_when·<code>match</code> 정규식이 있고, <code>swipe.py</code>·<code>hookscore.py</code>가 같은 JSON을 읽습니다.</p>
+<h4 id="yt-viral"><code>/yt-viral</code>의 경계</h4>
+<p><code>SKILL.md</code>·README: <strong>Public listings only. never logs in … never touches your credentials.</strong> 입력은 사용자가 모은 JSON(<code>channel</code>, <code>title</code>, <code>views</code>, …). 채널당 최소 4개 영상이 있어야 중앙값 배수가 의미 있다고 도구가 말합니다. 공식명 분류는 <strong>제목 문자열 판단</strong>이지 “왜 터졌는지” 인과 주장이 아닙니다.</p>
+<h2 id="_2">비즈니스 인사이트</h2>
+<p>숫자·제품 서술은 문장 옆 출처에 붙입니다. 그 밖의 판단은 <strong>분석/의견</strong>으로 표시합니다. 펀딩·DAU·강의 가격·기업 가치는 invent 하지 않습니다.</p>
+<p><strong>크리에이터 툴이 파는 것 vs 이 팩이 주는 것.</strong> X 북마크는 “유튜브 강의가 훅 공식·썸네일 법칙·쇼츠 재가공을 돈 받고 판다”고 말합니다. 이 저장소는 그 체크리스트를 <strong>MIT 스킬 + 재실행 가능한 린터</strong>로 풀어 둔 형태입니다(README·LICENSE). <strong>분석/의견.</strong> “강의 결제 전에 스킬 목록을 보라”는 X의 조언은, <strong>지식을 프롬프트 자산으로 고정</strong>하려는 개발자·부업 크리에이터에게는 설득력 있는 진입 경로입니다. 다만 강의가 주는 코칭·피드백·커뮤니티는 이 팩이 대체하지 않습니다.</p>
+<p><strong>Claude skills 생태계 맥락.</strong> <a href="https://code.claude.com/docs/en/skills">Claude Code skills 문서</a> 기준 스킬은 <code>SKILL.md</code> + 보조 파일/스크립트이고, <code>~/.claude/skills/</code>(개인)·프로젝트 <code>.claude/skills/</code>·플러그인으로 배포합니다. Agent Skills 오픈 스탠더드를 따르며, 본문은 호출될 때만 로드됩니다. <strong>분석/의견.</strong> “유튜브 전용 SaaS”가 아니라 <strong>에이전트 워크플로 팩</strong>으로 포지셔닝한 점이 스타 급증(API 4,826, 2026-11-07)과 맞물려 읽힙니다. 스타는 관심 신호일 뿐 채택·품질 보증이 아닙니다.</p>
+<p><strong>누가 이득을 보나 / 누가 덜 맞나.</strong> (1) 퇴근 후 대본·패키징에 지치는 솔로·직장인 유튜버 — <code>/yt-script</code>·<code>/yt-package</code>·<code>/yt-edit</code>. (2) 얼굴 없는 정보 채널·블로그→영상 부업 — X가 지목한 세그먼트와 맞고, <code>voice.md</code>로 말투를 고정하는 설계와 잘 맞습니다. (3) 이미 스튜디오·에디터·리서치 팀이 있는 채널 — EDL·리텐션 CSV 도구는 쓸 수 있어도 “채널 통째 대체”는 README 스스로 거부합니다. <strong>분석/의견.</strong> 촬영·출연·최종 업로드·브랜드 리스크는 사람에게 남는 구조라, “무인 수익 채널” 기대와는 충돌합니다 — 그리고 그 충돌을 README가 의도적으로 드러냅니다.</p>
+<p><strong>비용·도입.</strong> 저장소 자체는 무료(MIT). YouTube Data API 키·OAuth는 <strong>불필요</strong>(업로드 미구현). 실질 비용은 Claude(또는 Claude Code) 사용료 + <code>voice.md</code> 작성 10분 + Studio에서 retention CSV를 뽑는 손동작입니다. Python 3 stdlib만 있으면 6도구가 돌아갑니다(이 환경에서 <code>hookscore</code>·<code>title</code> 실행 확인). <strong>분석/의견.</strong> 진입 장벽은 낮지만, 출력 품질은 <strong>voice.md 충실도</strong>와 사용자가 넣는 자막/CSV 품질에 크게 좌우됩니다.</p>
+<p><strong>분석/의견 — 리스크.</strong> (1) <code>pushed_at</code>이 생성일과 동일(2026-09-16) — <strong>이후 코드 푸시가 API상 없음</strong>. 이슈 112개는 관심/버그 제보는 있으나 메인테이너 응답은 별개. (2) <code>hookscore</code>를 CTR 보장처럼 쓰면 과신. (3) <code>/yt-viral</code> 입력 수집을 사용자가 잘못 자동화하면 ToS·스크래핑 문제로 번질 수 있음 — 팩 자체는 “읽기만, 로그인 금지”를 명시. (4) LinkedIn/Instagram 팩과 달리 YouTube는 Data API로 게시가 <em>가능</em>하다고 README가 말하지만, <strong>이 팩에는 안 넣었다</strong>는 구분이 “무인 채널” 마케팅과 섞이면 위험합니다.</p>
+<h2 id="_3">팩트 체크</h2>
+<p>✅ 1차 자료와 맞음 / ⚠️ 핵심은 맞거나 범위·수사·출처가 다름 / ❌ 1차 자료와 어긋남</p>
+<p>원본 X(<a href="https://x.com/dopamine_crypto/status/2118644566987526434">@dopamine_crypto</a>) 요지를 README·SKILL.md·hooks.json·로컬 실행·GitHub API와 대조했습니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>스킬 11개로 유튜브 채널 워크플로를 Claude에 맡긴다</td>
+<td>✅</td>
+<td><code>skills/yt-*</code> <strong>11</strong>개. README “Eleven Claude skills…”. 다만 “통째로 굴린다”는 <strong>작성·검사</strong> 범위 — 업로드/촬영은 사람(아래).</td>
+</tr>
+<tr>
+<td>대본·제목·썸네일·편집·쇼츠를 나눠 맡긴다</td>
+<td>✅</td>
+<td><code>/yt-script</code> <code>/yt-package</code> <code>/yt-edit</code> <code>/yt-shorts</code> 등. 표에 없는 감사·플랜·SEO·챕터·바이럴·리텐션도 포함.</td>
+</tr>
+<tr>
+<td>이름 youtube-agent-skill, 무료 MIT</td>
+<td>✅</td>
+<td>저장소명·LICENSE MIT·README “Free, MIT, no signup, no API key”.</td>
+</tr>
+<tr>
+<td>깃허브 별 <strong>3,938</strong>개</td>
+<td>⚠️</td>
+<td>X 시점 수치로 보임. <strong>2026-11-07 08:15 KST API = 4,826</strong>. 방향(수천 스타)은 맞으나 정확 인용은 API.</td>
+</tr>
+<tr>
+<td>훅 공식 21개 + 훅 점수</td>
+<td>✅</td>
+<td><code>hooks.json</code> hooks 길이 <strong>21</strong>. <code>hookscore.py</code> 5속성 패널.</td>
+</tr>
+<tr>
+<td>제목+썸네일을 한 세트로 검사</td>
+<td>✅</td>
+<td><code>/yt-package</code> + <code>title.py</code> — 중복·잘림·모호함. 로컬 실행으로 중복 이슈 확인.</td>
+</tr>
+<tr>
+<td>녹취록 → 편집 지시서(EDL)</td>
+<td>✅</td>
+<td><code>/yt-edit</code> + <code>deadair.py</code> (DEAD/FILLER/REPEAT). 미디어 파일은 건드리지 않음.</td>
+</tr>
+<tr>
+<td>시청 지속(리텐션)에서 이탈 지점</td>
+<td>✅</td>
+<td><code>/yt-retention</code> + <code>retention.py</code> (hook leak / cliffs / slide). Studio CSV 필요.</td>
+</tr>
+<tr>
+<td>쇼츠 자르기 + 바이럴 엔진</td>
+<td>✅</td>
+<td><code>/yt-shorts</code>, <code>/yt-viral</code>+<code>swipe.py</code>(채널 중앙값 대비 배수).</td>
+</tr>
+<tr>
+<td>찍고 올리는 건 결국 사람</td>
+<td>✅</td>
+<td>README: “Nothing gets published until you do it.” 모든 SKILL 게이트 동일.</td>
+</tr>
+<tr>
+<td>(부가) hookscore가 조회수/바이럴을 예측</td>
+<td>❌</td>
+<td>README: heuristic not predictor. 74훅 캘리브레이션; 같은 크리에이터 hit/miss 분리는 약함.</td>
+</tr>
+<tr>
+<td>(부가) <code>/yt-viral</code>이 로그인·스크래핑한다</td>
+<td>❌</td>
+<td>README·SKILL: public listings only, no login/credentials.</td>
+</tr>
+<tr>
+<td>(부가) 저장소가 활발히 커밋 중</td>
+<td>❌</td>
+<td><code>pushed_at</code>이 생성일과 동일(2026-09-16). 이후 푸시 없음(API).</td>
+</tr>
+<tr>
+<td>(부가) 태그가 SEO의 핵심</td>
+<td>❌</td>
+<td>README: “Tags barely matter”; <code>/yt-seo</code>도 약신호·15개면 충분이라고 명시.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> “11개 Claude 스킬 + 21 훅 공식 + 제목/썸네일 페어 린트 + EDL + 리텐션 + Shorts/바이럴, MIT, 자동 업로드 없음”이라는 X의 핵심은 1차 자료와 맞습니다. 별 3,938은 <strong>시점 차이(현 4,826)</strong> 로 읽고, hookscore·바이럴 공식명은 <strong>휴리스틱/제목 분류</strong>로 제한해 인용하세요.</p>
+<h2 id="_4">참고 자료</h2>
+<ul>
+<li>GitHub — <a href="https://github.com/Jakeschincariol/youtube-agent-skill">Jakeschincariol/youtube-agent-skill</a> (MIT; API 2026-11-07 08:15 KST: ★4826 / forks 1453 / issues 112 / created·pushed 2026-09-16)</li>
+<li>README — 설치·11 스킬 표·6 도구 CLI·fine print(비게시, hookscore 한계, yt-viral 비스크래핑)</li>
+<li><code>skills/yt-script/hooks.json</code> — 훅 공식 21 + rules</li>
+<li>Python 도구 — <code>hookscore.py</code>, <code>title.py</code>, <code>deadair.py</code>, <code>chapters.py</code>, <code>retention.py</code>, <code>swipe.py</code> (stdlib only)</li>
+<li><code>templates/voice.md</code> — 전 스킬 공통 보이스 프로필 템플릿</li>
+<li><code>.claude-plugin/plugin.json</code> · <code>marketplace.json</code> — plugin name <code>youtube-agent</code> v1.0.0, author Jake Schincariol / <a href="https://opusjake.ai">opusjake.ai</a></li>
+<li>Claude Code — <a href="https://code.claude.com/docs/en/skills">Extend Claude with skills</a> (<code>~/.claude/skills/</code>, Agent Skills)</li>
+<li>GitHub API — <a href="https://api.github.com/repos/Jakeschincariol/youtube-agent-skill">repos/Jakeschincariol/youtube-agent-skill</a></li>
+<li>원본 X 포스트 — <a href="https://x.com/dopamine_crypto/status/2118644566987526434">@dopamine_crypto</a> (bookmark id <code>2118644566987526434</code>)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
