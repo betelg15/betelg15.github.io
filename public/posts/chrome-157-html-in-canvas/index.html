@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Canvas에 HTML을 넣으면 Find·번역·a11y가 되나? Chrome 157 HTML-in-Canvas</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-06 · <span class="chip">#Chrome</span><span class="chip">#Web Platform</span><span class="chip">#Canvas</span><span class="chip">#HTML-in-Canvas</span><span class="chip">#웹개발</span></p>
+<h1 class="title">Canvas에 HTML을 넣으면 Find·번역·a11y가 되나? Chrome 157 HTML-in-Canvas</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#html-canvas">기술 설명: HTML을 canvas에 그리는 법</a><ul>
+<li><a href="#contentdrawable-drawable">준비: content="drawable" + drawable</a></li>
+<li><a href="#2d-paint-drawelementimage">2D: paint 이벤트와 drawElementImage()</a></li>
+<li><a href="#3d-updateelementgeometry">3D: 텍스처 + updateElementGeometry</a></li>
+<li><a href="#_2">좌표계 한 줄 요약</a></li>
+<li><a href="#google">프레임워크 쪽 (Google 공식 지원 아님)</a></li>
+<li><a href="#_3">기능 탐지</a></li>
+</ul>
+</li>
+<li><a href="#_4">비즈니스 인사이트</a></li>
+<li><a href="#_5">팩트 체크</a></li>
+<li><a href="#_6">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/clockmaker/status/2118490890927067597">@clockmaker의 포스트</a>(bookmark id <code>2118490890927067597</code>)를 계기로 썼습니다. X 글의 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다. 아래 대조는 2026-11-06(KST)에 읽은 <a href="https://developer.chrome.com/blog/html-in-canvas">Chrome 공식 블로그</a>(Natalia Markoborodova, 2026-10-26), <a href="https://developer.chrome.com/docs/web-platform/html-in-canvas/concepts">concepts</a>·<a href="https://developer.chrome.com/docs/web-platform/html-in-canvas/2d">2D 가이드</a>, <a href="https://learn.microsoft.com/en-us/microsoft-edge/web-platform/release-notes/157">Edge 157 릴리스 노트</a>(2026-11-05), <a href="https://github.com/whatwg/html/issues/10650">WHATWG HTML 이슈 #10650</a>, <a href="https://github.com/WICG/html-in-canvas">WICG html-in-canvas</a>입니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>캔버스 위에 UI를 올리는 웹앱을 만들면, 오래전부터 같은 갈림길에 섰습니다.</p>
+<ol>
+<li><strong><code>fillText()</code>로 글자를 픽셀로 그린다</strong> — GPU·커스텀 셰이더에는 잘 맞지만, 스크린 리더·Find-in-Page(Ctrl/Cmd+F)·브라우저 번역·자동완성·복사/붙여넣기가 기본으로 따라오지 않습니다. Chrome 블로그가 적는 대로, 접근성을 살리려면 보이지 않는 폴백 DOM을 따로 만들어 계속 맞춰야 합니다.</li>
+<li><strong>캔버스 위에 HTML을 띄운다(floating overlay)</strong> — DOM의 접근성·타이포는 살리지만, 스크롤·줌·3D 카메라와 <strong>프레임 타이밍이 어긋나</strong> 레이어가 밀리거나 찢어질 수 있고, 오버레이는 항상 캔버스 <strong>맨 위</strong>에만 앉습니다. 매 프레임 <code>style.transform</code>을 JS로 다시 쓰는 비용도 Chrome 블로그가 명시합니다.</li>
+</ol>
+<p>Chrome 157은 이 둘의 타협을 <strong>공식 안정 API</strong>로 줄이겠다는 발표입니다. 2026-10-26 Chrome for Developers 글의 첫 문장은 이렇게 시작합니다.</p>
+<blockquote>
+<p>Following a successful origin trial, Chrome 157 marks the official stable release of the HTML-in-Canvas API.</p>
+</blockquote>
+<p>요지는 단순합니다. <strong>진짜 DOM 서브트리를 canvas 안에 두고</strong>, 2D·WebGL·WebGPU에 그 픽셀을 그리면서도, 브라우저는 상호작용·접근성 트리·Find/번역 같은 플랫폼 기능을 유지한다는 것입니다. 개발자 입장에서 궁금한 건 "혁명" 수사보다 다음입니다.</p>
+<ul>
+<li>마크업·API가 오리진 트라이얼 때와 <strong>같은가</strong>? (<code>layoutsubtree</code> 등은?)</li>
+<li>2D에서는 히트테스트/a11y가 <strong>자동</strong>인가, 3D에서는 <strong>직접</strong> <code>updateElementGeometry</code>를 써야 하나?</li>
+<li>Edge는 따라왔는가? Firefox·Safari는?</li>
+<li>제품에 넣을 때 <strong>이중 경로(폴백)</strong> 비용은 어디에 생기나?</li>
+</ul>
+<h2 id="html-canvas">기술 설명: HTML을 canvas에 그리는 법</h2>
+<h3 id="contentdrawable-drawable">준비: <code>content="drawable"</code> + <code>drawable</code></h3>
+<p><a href="https://developer.chrome.com/docs/web-platform/html-in-canvas/concepts">concepts 문서</a> 기준으로, canvas에 HTML을 넣으려면 속성이 두 개입니다.</p>
+<ul>
+<li>canvas에 <strong><code>content="drawable"</code></strong> — 자손 DOM을 “숨긴 콘텐츠”가 아니라 <strong>레이아웃 대상</strong>으로 옵트인합니다.</li>
+<li>그리고 싶은 요소에 <strong><code>drawable</code></strong> — 독립 paint root로 표시합니다. <code>drawable</code> 요소는 자기 서브트리를 잡고, <strong>중첩된 다른 <code>drawable</code>은 부모 스냅샷에서 빠집니다.</strong></li>
+</ul>
+<p>오리진 트라이얼 시절의 불리언 <code>layoutsubtree</code>는 <a href="https://developer.chrome.com/blog/html-in-canvas-ot-changes">Chrome OT 변경 안내</a>에서 <code>content="drawable"</code>로 이름이 바뀌었습니다. 옛 튜토리얼만 보고 붙이면 157에서 조용히 안 됩니다. <strong>현재 Chrome 문서를 기준으로 맞추세요.</strong></p>
+<h3 id="2d-paint-drawelementimage">2D: <code>paint</code> 이벤트와 <code>drawElementImage()</code></h3>
+<p>2D에서는 <a href="https://developer.chrome.com/docs/web-platform/html-in-canvas/2d">2D 가이드</a>처럼 <code>paint</code> 핸들러 안에서 <code>drawElementImage()</code>를 호출합니다. 기본값으로는 <strong>히트테스트·접근성 기하가 자동으로 따라갑니다.</strong></p>
+<p>아래는 Chrome docs의 패턴을 합친 <strong>최소 2D 예제</strong>입니다(설명용. 프로덕션에서는 <code>ResizeObserver</code>로 canvas 그리드를 device pixel에 맞추는 편이 concepts가 권장합니다).</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">canvas</span> <span class="na">id</span><span class="o">=</span><span class="s">"canvas"</span> <span class="na">width</span><span class="o">=</span><span class="s">"600"</span> <span class="na">height</span><span class="o">=</span><span class="s">"300"</span> <span class="na">content</span><span class="o">=</span><span class="s">"drawable"</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">div</span> <span class="na">id</span><span class="o">=</span><span class="s">"card"</span> <span class="na">drawable</span> <span class="na">style</span><span class="o">=</span><span class="s">"box-sizing:border-box;width:220px;padding:12px;background:#0f172a;color:#e2e8f0;border-radius:8px;"</span><span class="p">&gt;</span>
+    <span class="p">&lt;</span><span class="nt">strong</span><span class="p">&gt;</span>Hello<span class="p">&lt;/</span><span class="nt">strong</span><span class="p">&gt;</span> from HTML
+    <span class="p">&lt;</span><span class="nt">input</span> <span class="na">type</span><span class="o">=</span><span class="s">"text"</span> <span class="na">value</span><span class="o">=</span><span class="s">"type here"</span> <span class="na">aria-label</span><span class="o">=</span><span class="s">"demo input"</span> <span class="p">/&gt;</span>
+  <span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">canvas</span><span class="p">&gt;</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code><span class="kd">function</span><span class="w"> </span><span class="nx">supportsHtmlInCanvas</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="ow">typeof</span><span class="w"> </span><span class="nb">document</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s2">"undefined"</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">test</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="s2">"canvas"</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">test</span><span class="p">.</span><span class="nx">setAttribute</span><span class="p">(</span><span class="s2">"content"</span><span class="p">,</span><span class="w"> </span><span class="s2">"drawable"</span><span class="p">);</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="nx">test</span><span class="p">.</span><span class="nx">content</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s2">"drawable"</span><span class="p">;</span>
+<span class="p">}</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">canvas</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">"canvas"</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">ctx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">canvas</span><span class="p">.</span><span class="nx">getContext</span><span class="p">(</span><span class="s2">"2d"</span><span class="p">);</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">card</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">"card"</span><span class="p">);</span>
+
+<span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="nx">supportsHtmlInCanvas</span><span class="p">())</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="c1">// 폴백: floating overlay / 대체 UI / html2canvas 계열 등</span>
+<span class="w">  </span><span class="nx">console</span><span class="p">.</span><span class="nx">warn</span><span class="p">(</span><span class="s2">"HTML-in-Canvas not supported; use a fallback path."</span><span class="p">);</span>
+<span class="p">}</span><span class="w"> </span><span class="k">else</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">canvas</span><span class="p">.</span><span class="nx">onpaint</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">reset</span><span class="p">();</span>
+<span class="w">    </span><span class="c1">// (element, dx, dy) — 기본 크기로 (20, 20)에 그림</span>
+<span class="w">    </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">drawElementImage</span><span class="p">(</span><span class="nx">card</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">,</span><span class="w"> </span><span class="mf">20</span><span class="p">);</span>
+<span class="w">  </span><span class="p">};</span>
+<span class="w">  </span><span class="c1">// DOM이 안 바뀌어도 한 번 paint를 예약하고 싶을 때</span>
+<span class="w">  </span><span class="nx">canvas</span><span class="p">.</span><span class="nx">requestPaint</span><span class="p">();</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p><code>drawElementImage()</code> 오버로드는 가이드에 4가지가 정리돼 있습니다. 위치만, 목적지 박스 스케일, 소스 크롭, 크롭+리사이즈. 옵션으로 <code>{ preserveElementGeometry: true }</code>를 주면 <strong>자동 기하 동기화를 끄고</strong> 직접 <code>updateElementGeometry()</code>로 맞출 수 있습니다.</p>
+<p>브라우저가 <code>drawable</code> 자손의 레이아웃·텍스트·스타일이 바뀔 때마다 canvas에 <strong><code>paint</code> 이벤트</strong>를 보냅니다. <code>CanvasPaintEvent</code>의 <code>changedElements</code>에는 이번 프레임에 시각적으로 바뀐 drawable만 들어갑니다. <code>paint</code> 안에서 그린 픽셀은 <strong>이번</strong> 렌더 업데이트에 반영되지만, <code>paint</code> 안에서 DOM 스타일을 바꾸면 <strong>다음</strong> 프레임에 보입니다 — 문서가 명시하는 프레임 생명주기입니다.</p>
+<h3 id="3d-updateelementgeometry">3D: 텍스처 + <code>updateElementGeometry</code></h3>
+<p>WebGL/WebGPU에서는 HTML이 텍스처로 복사된 뒤 셰이더가 임의로 매핑하므로, 브라우저가 클릭·a11y 경계를 스스로 알 수 없습니다. Chrome 블로그 quickstart는 대략 이렇게 적습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1">// 3D에서는 변환을 만들어 전달</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">transform</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="ow">new</span><span class="w"> </span><span class="nx">DOMMatrix</span><span class="p">().</span><span class="nx">translate</span><span class="p">(</span><span class="nx">x</span><span class="p">,</span><span class="w"> </span><span class="nx">y</span><span class="p">);</span>
+<span class="nx">canvas</span><span class="p">.</span><span class="nx">updateElementGeometry</span><span class="p">(</span><span class="nx">myElement</span><span class="p">,</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">canvasTransform</span><span class="o">:</span><span class="w"> </span><span class="nx">transform</span><span class="w"> </span><span class="p">});</span>
+</code></pre></div>
+
+<p>히트 스택은 기본으로 “마지막에 기하를 갱신한 요소가 위”입니다. 배경을 나중에 갱신하면서 포그라운드 클릭을 빼앗지 않으려면 <code>{ preserveHitTestOrder: true }</code>를 씁니다. 화면에서 빼려면 <code>clearElementGeometry()</code>.</p>
+<h3 id="_2">좌표계 한 줄 요약</h3>
+<p>concepts가 강조하는 함정은 <strong>CSS px · device px · canvas grid</strong>가 동시에 존재한다는 점입니다. <code>drawable</code> HTML은 CSS px로 레이아웃되고, <code>drawElementImage</code>의 <code>dx/dy</code> 등은 <strong>canvas grid</strong> 단위입니다. 그리드가 물리 픽셀과 1:1이 아니면 안티앨리어싱이 두 번 겹쳐 흐려질 수 있어, <code>ResizeObserver</code> + <code>devicePixelContentBoxSize</code>로 그리드를 맞추라고 합니다.</p>
+<h3 id="google">프레임워크 쪽 (Google 공식 지원 아님)</h3>
+<p>Chrome 블로그·docs는 Three.js / PlayCanvas / Babylon.js / PixiJS / CanvasUI 이름을 나열하면서, <strong>커뮤니티·서드파티이며 Google/Chrome 팀이 개발·유지·공식 지원하지 않는다</strong>고 두 번 못 박습니다.</p>
+<table>
+<thead>
+<tr>
+<th>라이브러리</th>
+<th>Chrome 블로그가 적은 진입점</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Three.js</td>
+<td>실험적 <code>THREE.HTMLTexture</code></td>
+</tr>
+<tr>
+<td>PlayCanvas</td>
+<td><code>setSource()</code> (+ <code>paint</code> 리스너)</td>
+</tr>
+<tr>
+<td>Babylon.js</td>
+<td><code>BABYLON.HtmlTexture</code></td>
+</tr>
+<tr>
+<td>PixiJS</td>
+<td><code>v8.19.0</code>의 <code>HTMLSource</code></td>
+</tr>
+<tr>
+<td>CanvasUI</td>
+<td>HTML-in-Canvas용 컴포넌트 라이브러리</td>
+</tr>
+</tbody>
+</table>
+<p>폴백으로 블로그가 적는 이름은 floating overlay, <code>three-html-render</code>, <code>html2canvas</code>, <code>dom-to-image</code>입니다. 역시 서드파티 고지입니다.</p>
+<h3 id="_3">기능 탐지</h3>
+<p>Chrome이 권장하는 탐지는 <code>content</code> 반영 여부입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="k">export</span><span class="w"> </span><span class="kd">function</span><span class="w"> </span><span class="nx">supportsHtmlInCanvas</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="ow">typeof</span><span class="w"> </span><span class="nb">document</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s2">"undefined"</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">canvas</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="s2">"canvas"</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">canvas</span><span class="p">.</span><span class="nx">setAttribute</span><span class="p">(</span><span class="s2">"content"</span><span class="p">,</span><span class="w"> </span><span class="s2">"drawable"</span><span class="p">);</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="nx">canvas</span><span class="p">.</span><span class="nx">content</span><span class="w"> </span><span class="o">===</span><span class="w"> </span><span class="s2">"drawable"</span><span class="p">;</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>Modern Web Guidance 쪽에는 <code>('content' in HTMLCanvasElement.prototype)</code> 형태도 보입니다. 프로덕션에서는 <strong>현재 Chrome docs의 권장 탐지 + 실제 <code>drawElementImage</code> 존재</strong>를 함께 보는 편이 안전합니다(<strong>분석/의견</strong>).</p>
+<h2 id="_4">비즈니스 인사이트</h2>
+<p>숫자·제품 서술은 문장 옆 출처에 붙입니다. 그 밖의 판단은 <strong>분석/의견</strong>으로 표시합니다. Chrome·Edge 사용자 수·점유율·매출은 이 글이  invent 하지 않습니다.</p>
+<p><strong>Chromium 엔진 먼저.</strong> Chrome 블로그는 157 안정 출시를 선언하고, <a href="https://learn.microsoft.com/en-us/microsoft-edge/web-platform/release-notes/157">Edge 157 릴리스 노트</a>(게시 기준 2026-11-05)는 “HTML-in-canvas”와 <code>drawElementImage</code>, paint 이벤트, 히트테스트/a11y용 geometry sync를 나열합니다. 같은 Chromium 계열이 제품 경로에 들어왔다는 1차 신호입니다.</p>
+<p><strong>Firefox·Safari 출하를 이 글은 주장하지 않습니다.</strong> WHATWG <a href="https://github.com/whatwg/html/issues/10650">html#10650</a>은 2024-09-26에 열린 “HTML-in-Canvas” 이슈로, WICG에서 배양 중이며 논의가 2026까지 이어집니다. 스펙 PR 언급은 이슈 스레드에 있으나, <strong>Baseline이거나 Firefox/Safari가 이미 실었다고 말할 1차 출하 공지는 이 글이 확인하지 못했습니다.</strong> 커뮤니티 사이트(html-in-canvas.dev 지원 표, Buildful 등)는 Firefox 미구현·Mozilla standards-positions #1076을 말하지만, 2차 자료로만 취급합니다.</p>
+<p><strong>분석/의견.</strong> 교차 브라우저 SaaS(디자인 툴, 화이트보드, 브라우저 게임, 크리에이티브 편집기)는 당분간 <strong>Chromium 경로 + 폴백(오버레이/대체 UI)</strong> 이중 유지비가 남습니다. Chrome 블로그가 줄이는 비용은 “매 프레임 <code>style.transform</code> 문자열 파싱·스타일 재계산”과 “invisible DOM a11y 동기화” 쪽이고, 그 이득은 <strong>Chromium 사용자 세그먼트</strong>에 먼저 옵니다. 표준 이슈가 열린 상태라, 엔진마다 세부 동작이 어긋날 <strong>이중 작성(dual-write) 리스크</strong>는 아직 닫히지 않았습니다.</p>
+<p><strong>누가 이득을 보나 (Chrome이 적은 use case 기준).</strong> 블로그 Primary use cases는 (1) 대형 canvas 기반 앱의 UI를 workspace에 직접 그려 접근성을 올리고 번들을 줄이는 것, (2) WebXR·게임에서 터미널·책 같은 <strong>장면 안 인터랙티브 DOM</strong>, (3) HTML 타이포 + 셰이더를 합성해 <code>toDataURL</code>/<code>toBlob</code>/<code>captureStream</code>으로 내보내는 미디어 툴, (4) HTML을 픽셀처럼 조작하는 표현적 UI입니다. Find·번역·autofill·확장 프로그램·DevTools·크롤러/AI 에이전트 인덱싱이 “캔버스 픽셀”이 아니라 <strong>실제 DOM</strong>에 붙는다는 점이, Figma류·문서형 canvas SaaS의 접근성·국제화 재구현 부담을 줄일 수 있는 자리입니다.</p>
+<p><strong>분석/의견 — 비용.</strong> 국제화·타이포 JS 엔진을 canvas용으로  bundling 하던 팀은, Chromium에서는 CSS 레이아웃에 기대는 쪽으로 옮길 여지가 있습니다(Chrome 블로그가 fillText 경로의 “큰 JS 레이아웃 엔진” 비용을 한계로 적음). 다만 Firefox/Safari 폴백을 유지하면 <strong>번들 절감은 전체 사용자 기준으로 부분적</strong>입니다. 3D 엔진은 Three/Babylon/Pixi/PlayCanvas 어댑터가 진입 비용을 낮추지만, 블로그 고지대로 <strong>Google 지원이 아니므로</strong> 버전 핀·실험 API 깨짐을 제품 리스크로 잡아야 합니다.</p>
+<p><strong>분석/의견 — 경쟁.</strong> 당장 “캔버스 UI + 플랫폼 a11y”를 Chromium에서 네이티브에 가깝게 쓸 수 있다는 건 엔진 기능 선점입니다. 동시에 WHATWG 이슈가 열려 있어, 스펙이 굳기 전에 API 표면이 또 바뀔 수 있습니다(이미 <code>layoutsubtree</code> → <code>content="drawable"</code>, WebGL 메서드 이름 변경이 OT 안내에 있습니다). 장기 베팅은 “Chrome 전용 최적화”보다 <strong>탐지 + 폴백 + 표준 트래킹</strong> 쪽에 가깝습니다.</p>
+<p>2차 자료인 <a href="https://buildful.ai/blog/html-in-canvas">Buildful</a>은 Chrome <code>157.0.8103.39</code>, 전체 안정 2026-11-03, Edge 157, Firefox/Safari 없음, WHATWG stage 3을 적습니다. <strong>버전 빌드 번호·stage 라벨은 Chrome/Edge/WHATWG 1차 문서보다 우선하지 않습니다.</strong> 인용할 때는 secondary로 표시하세요.</p>
+<h2 id="_5">팩트 체크</h2>
+<p>✅ 1차 자료와 맞음 / ⚠️ 핵심은 맞거나 범위·수사가 다름 / ❌ 1차 자료와 어긋남</p>
+<p>원본 X(<a href="https://x.com/clockmaker/status/2118490890927067597">@clockmaker</a>)의 요지를, 이 환경에서 읽은 공개 요약과 부모 에이전트가 정리한 주장 단위로 Chrome 블로그·Edge 노트와 대조했습니다. X 본문 전문을 이 글이 보증하지는 않습니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Chrome 157이 나왔고 HTML-in-Canvas가 공식(안정)으로 실렸다</td>
+<td>✅</td>
+<td>Chrome 블로그 2026-10-26: “Chrome 157 marks the official stable release of the HTML-in-Canvas API.” 오리진 트라이얼 성공 뒤 안정판이라는 문장.</td>
+</tr>
+<tr>
+<td>HTML/CSS 레이아웃을 canvas에 넣어 효과를 줄 수 있다</td>
+<td>✅</td>
+<td>블로그 benefits: CSS 타이포·멀티라인/양방향, 폼 컨트롤, 셰이더·픽셀 수준 조작 use case. concepts/<code>drawElementImage</code>로 DOM 서브트리를 canvas에 그림.</td>
+</tr>
+<tr>
+<td>선택·복사·Find·번역·a11y가 canvas 안 HTML에 붙는다</td>
+<td>✅</td>
+<td>블로그 Key benefits 목록(선택/복사/컨텍스트 메뉴, a11y 트리, translate·autofill·Find-in-Page, 확장, DevTools, 크롤/AI, export).</td>
+</tr>
+<tr>
+<td>Edge도 157에서 HTML-in-canvas를 적는다</td>
+<td>✅</td>
+<td>Edge 157 릴리스 노트(2026-11-05): HTML-in-canvas, <code>drawElementImage</code>, paint, geometry sync.</td>
+</tr>
+<tr>
+<td>Firefox·Safari에도 이미 있다 / Baseline이다</td>
+<td>❌</td>
+<td>이 글이 확인한 1차 출하 공지 없음. WHATWG #10650은 열린 이슈·WICG 배양. Baseline 주장 금지.</td>
+</tr>
+<tr>
+<td>API 이름은 예전부터 쓰던 <code>layoutsubtree</code> 그대로다</td>
+<td>❌</td>
+<td>OT 변경 안내: <code>layoutsubtree</code> → <code>content="drawable"</code>. 자손은 <code>drawable</code> 속성. 옛 속성만으로는 157 경로와 어긋남.</td>
+</tr>
+<tr>
+<td>2D·3D 모두 브라우저가 히트/a11y 기하를 알아서 맞춘다</td>
+<td>⚠️</td>
+<td>2D는 <code>drawElementImage</code> 기본 자동 동기화. WebGL/WebGPU는 <code>updateElementGeometry</code> 필요(블로그·concepts).</td>
+</tr>
+<tr>
+<td>Three.js 등이 “공식 지원”이다</td>
+<td>⚠️</td>
+<td>이름·진입점은 블로그에 있으나, <strong>커뮤니티/서드파티·Google 미지원</strong> 고지가 붙음. Three는 “experimental”.</td>
+</tr>
+<tr>
+<td>“혁명급”으로 웹 표현이 바뀐다</td>
+<td>—</td>
+<td><strong>의견/수사.</strong> 사실 표에서 ✅/❌하지 않음. 플랫폼 갭(DOM↔canvas)을 줄인다는 방향은 블로그와 맞지만, 교차 엔진·표준 미완은 그대로.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> Chrome 157 안정 출시와 “DOM을 canvas에 그리면서 브라우저 기능을 유지한다”는 핵심은 공식 글과 맞습니다. X의 “혁명”은 제품·표현 측면의 기대치이고, 엔지니어링 현실에서는 <strong>Chromium(+Edge 157) 先行 · 폴백 유지 · OT 이후 속성/메서드 이름 변경</strong>을 같이 봐야 합니다.</p>
+<h2 id="_6">참고 자료</h2>
+<ul>
+<li>Natalia Markoborodova, <em>HTML-in-Canvas in Chrome 157…</em>, Chrome for Developers (2026-10-26) — <a href="https://developer.chrome.com/blog/html-in-canvas">blog</a></li>
+<li>Chrome docs — <a href="https://developer.chrome.com/docs/web-platform/html-in-canvas">HTML-in-Canvas overview</a> · <a href="https://developer.chrome.com/docs/web-platform/html-in-canvas/concepts">concepts</a> · <a href="https://developer.chrome.com/docs/web-platform/html-in-canvas/2d">2D</a></li>
+<li>Origin trial API 변경 — <a href="https://developer.chrome.com/blog/html-in-canvas-ot-changes">html-in-canvas-ot-changes</a> (<code>layoutsubtree</code> → <code>content="drawable"</code>)</li>
+<li>Microsoft Edge — <a href="https://learn.microsoft.com/en-us/microsoft-edge/web-platform/release-notes/157">Release notes for Edge 157</a> (2026-11-05)</li>
+<li>Standards — <a href="https://github.com/whatwg/html/issues/10650">WHATWG html#10650 HTML-in-Canvas</a> · <a href="https://github.com/WICG/html-in-canvas">WICG/html-in-canvas</a></li>
+<li>2차(주의) — <a href="https://buildful.ai/blog/html-in-canvas">Buildful: HTML-in-Canvas in Chrome 157</a> — 빌드 번호·stage 라벨은 1차 문서와 충돌할 수 있음</li>
+<li>원본 X 포스트 — <a href="https://x.com/clockmaker/status/2118490890927067597">@clockmaker</a> (bookmark id <code>2118490890927067597</code>)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
