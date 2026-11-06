@@ -8,7 +8,8 @@
 <link rel="stylesheet" href="assets/code.css">
 </head><body>
 <header class="site"><a class="brand" href="index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
-<main><h1 class="title">글 목록</h1><ul class="list"><li class="card"><a href="posts/nvidia-you-dont-need-long-context/index.html">
+<main><h1 class="title">글 목록</h1><ul class="list"><li class="card"><a href="posts/openssh-musl-sshole-alpine-auth-bypass/index.html">
+<p class="meta">2026-11-06</p><h2>긴 비밀번호면 Alpine에서 root인가? OpenSSH·musl *sshole</h2><p>PAM 없이 도는 musl sshd는 shadow가 `*`인 계정에 257–1024바이트면 로그인된다. root는 PermitRootLogin이나 doas가 따로 필요하고, CVE-2026-123158 설명의 하한 256자는 Alpine 권고와 어긋난다.</p></a></li><li class="card"><a href="posts/nvidia-you-dont-need-long-context/index.html">
 <p class="meta">2026-11-06</p><h2>긴 기록 없이 에이전트가 되나? NVIDIA &#x27;You don&#x27;t need long context&#x27;</h2><p>인수인계 메모로 대화를 비워도 Opus 4.5와 GPT 5.6 Sol의 SWE-bench 정확도는 크게 안 흔들렸다. 256K 대 16K의 3.6–7배는 세 오픈웨이트 모델의 서빙 비용이고, 지금 API 청구서의 단가는 아니다.</p></a></li><li class="card"><a href="posts/colibri-ssd-streaming-moe-inference/index.html">
 <p class="meta">2026-11-05</p><h2>744B MoE가 RAM 9.9GB에 상주하나? colibri</h2><p>colibri main 0a5504a1의 9.9GB는 GLM-5.2 int4 dense 상주분이다. 같은 기준 표의 채팅 피크 RSS는 약 20GB이고, 콜드 토큰은 디스크에서 약 11GB를 읽는다.</p></a></li><li class="card"><a href="posts/hyperqwen-qwen38-27b-rtx-3090/index.html">
 <p class="meta">2026-11-05</p><h2>381 tok/s는 채팅 속도인가? RTX 3090의 HyperQwen</h2><p>HyperQwen main 6ab9bd05의 381 tok/s는 DFLASH_TOKENS=15로 25k 문서를 그대로 베끼는 칸이고, 같은 세션의 짧은 채팅은 133 tok/s다. README 헤드라인의 단일 스트림 127 tok/s는 그 디코드 칸과 다른 숫자다.</p></a></li><li class="card"><a href="posts/qwenbend-bend-in-forward-pass/index.html">
