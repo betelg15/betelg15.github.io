@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>3D 10만 점을 Python 코드로? Sand3D 데이터셋과 sand3d</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-06 · <span class="chip">#Sand3D</span><span class="chip">#sand3d</span><span class="chip">#3D</span><span class="chip">#Python</span><span class="chip">#Blender</span><span class="chip">#LLM</span><span class="chip">#Hugging Face</span><span class="chip">#Sandflow</span></p>
+<h1 class="title">3D 10만 점을 Python 코드로? Sand3D 데이터셋과 sand3d</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#sand3d-sand3d">기술 설명: sand3d와 Sand3D</a><ul>
+<li><a href="#sand3d-pypi-163">라이브러리 sand3d (PyPI 1.6.3)</a></li>
+<li><a href="#_2">첫 프로그램: 브라켓 (공식 예제)</a></li>
+<li><a href="#washing-machine">조인트·어셈블리: washing machine 패턴</a></li>
+<li><a href="#sand3d-hugging-face">데이터셋 Sand3D (Hugging Face)</a></li>
+</ul>
+</li>
+<li><a href="#_3">비즈니스 인사이트</a></li>
+<li><a href="#_4">팩트 체크</a></li>
+<li><a href="#_5">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/tokufxug/status/2118518008478085477">@tokufxug의 포스트</a>(bookmark id <code>2118518008478085477</code>)를 계기로 썼습니다. X 글의 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다. 아래 대조는 2026-11-06(KST)에 읽은 <a href="https://sand3d.sandflow.ai/">sand3d 공식 문서</a>(citation note Version 1.6.3), <a href="https://pypi.org/project/sand3d/">PyPI sand3d 1.6.3</a>, <a href="https://github.com/Sandflow-ai/sand3d">GitHub Sandflow-ai/sand3d</a>, <a href="https://huggingface.co/blog/Sandflow/sand3d-106094-3d-objects-in-one-code-substrate-for">Hugging Face 블로그 <em>Sand3D: 106,094 3D Objects…</em></a>(Thibault-SF / Sandflow, 2026-11-05), <a href="https://sandflow.ai/press/3d-as-code-dataset/">프레스 릴리스</a>(2026-11-05, Lyon), <a href="https://sandflow.ai/sand3d/">마케팅 페이지</a>입니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>3D를 LLM·에이전트에 맡기려는 팀은 오래전부터 같은 벽에 부딪힙니다.</p>
+<ol>
+<li><strong>메쉬만 있으면</strong> — 파일은 크지만 “어떻게 만들었는지”가 없습니다. 구멍 지름을 6.6 mm에서 8 mm로 바꾸라는 한 줄 요청이 곧바로 파라미터 편집이 되지 않습니다.</li>
+<li><strong>Blender Python(<code>bpy</code>)을 LLM이 직접 쓰게 하면</strong> — 표현력은 충분하지만 프롬프트·생성 코드가 길고, 같은 지시라도 맞춘 파트가 들쭉날쭉해질 수 있습니다. sand3d 문서 홈은 공개 CAD 30파트 실험에서 LLM이 쓴 Blender Python이 <strong>9/30만</strong> 올바른 파트를 만들었다고 적습니다(같은 셋에서 sand3d는 30/30).</li>
+<li><strong>CadQuery·FeatureScript·전용 SDK</strong> — 각각 강한 CAD/아티큘레이션 표현이지만, LLM 컨텍스트에 넣을 API 표면·토큰 비용·학습 데이터 형태가 제각각입니다.</li>
+</ol>
+<p>Sandflow(옛 Chat3D, 프랑스 리옹)가 2026-11-05에 공개한 <strong>Sand3D</strong>는 “객체를 짧은 Python 프로그램 + OpenUSD + 렌더”로 묶은 데이터셋이고, 그 프로그램을 실행하는 라이브러리가 <strong>sand3d</strong>입니다. 개발자 입장에서 궁금한 건 마케팅 슬로건보다 다음입니다.</p>
+<ul>
+<li>객체 수는 정확히 얼마인가? (HF 표 106,094 vs 프레스 “100,000”)</li>
+<li>가동기(articulated)와 관절 수는 어디에 적혀 있나?</li>
+<li>sand3d API는 프롬프트에 넣을 만할 정도로 짧은가?</li>
+<li>Blender·glTF·Three.js로 “바로” 쓸 수 있다는 말은 수출 포맷 기준으로 어디까지 맞나?</li>
+</ul>
+<h2 id="sand3d-sand3d">기술 설명: sand3d와 Sand3D</h2>
+<h3 id="sand3d-pypi-163">라이브러리 sand3d (PyPI 1.6.3)</h3>
+<p><a href="https://pypi.org/project/sand3d/">PyPI</a> 기준 <strong>1.6.3</strong>(업로드 2026-11-06T11:05:51Z 근처). 요구 Python은 <code>!=3.12.*, &gt;=3.11,&lt;3.14</code>입니다. Blender는 <code>bpy</code>로 따라옵니다 — 문서·PyPI README 기준 <strong>Python 3.11 → bpy 4.5 LTS</strong>, <strong>Python 3.13(권장) → bpy 5.2 LTS</strong>. 라이선스는 <strong>Apache-2.0</strong>. 인용 메타는 Thibault Neveu &amp; Andréa Loy, note Version 1.6.3입니다.</p>
+<p>설치는 한 줄입니다.</p>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>sand3d<span class="w">        </span><span class="c1"># 또는 uv add sand3d</span>
+</code></pre></div>
+
+<p>설계 요지는 문서 첫 화면이 요약합니다. 프로파일·솔리드·편집·프레임·조인트·어셈블리를 <strong>평평한 <code>s3d.</code> 표면</strong>(공개 이름 약 <strong>70개</strong>)으로 두고, API 전체를 프롬프트에 넣으면 약 <strong>3,643 토큰</strong>입니다. 같은 프로그램은 <strong>결정적(deterministic)</strong> 메쉬를 만들고, <code>export</code> 한 번으로 확장자에 따라 <strong>GLB / URDF / USDA / OBJ / STL</strong>을 씁니다. 기본 단위는 <strong>밀리미터</strong>, 파일로 나갈 때는 <strong>미터</strong>입니다.</p>
+<p>문서가 적은 토큰 비교(median, 상대 언어 토큰 / sand3d 토큰, o200k_base, 코드만)는 다음과 같습니다. <strong>벤치 정의·표본 크기가 항목마다 다르므로</strong> 숫자를 절대 순위로 읽지 마세요.</p>
+<table>
+<thead>
+<tr>
+<th>비교 상대</th>
+<th>배수(median)</th>
+<th>표본·비고(문서)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Blender Python (LLM이 작성)</td>
+<td><strong>4.0×</strong></td>
+<td>30 CAD 파트; LLM Blender는 9/30만 올바른 파트, sand3d는 30/30</td>
+</tr>
+<tr>
+<td>CadQuery (Zero-To-CAD 자체 프로그램)</td>
+<td><strong>2.3×</strong></td>
+<td>17 CAD 파트</td>
+</tr>
+<tr>
+<td>FeatureScript / Onshape (CADFS)</td>
+<td><strong>6.0×</strong></td>
+<td>13 CAD 파트</td>
+</tr>
+<tr>
+<td>Articraft Python SDK</td>
+<td><strong>2.0×</strong></td>
+<td>12 articulated; 일부는 CadQuery도 사용</td>
+</tr>
+</tbody>
+</table>
+<p>HF 블로그 쪽에는 손수 쓴 sand3d vs LLM Blender Python 30파트에 대해 <strong>3.8×</strong>라는 관련 서술도 있습니다. 이 글은 <strong>문서 홈의 4.0× median</strong>을 1차로 두고, 3.8×는 같은 계열의 다른 서술로 표시합니다(아래 팩트 체크 ⚠️).</p>
+<h3 id="_2">첫 프로그램: 브라켓 (공식 예제)</h3>
+<p>아래는 <a href="https://sand3d.sandflow.ai/">공식 문서 / PyPI README</a>의 bracket 예제입니다(귀속: Sandflow sand3d docs).</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">sand3d</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">s3d</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">bracket</span><span class="p">(</span><span class="n">w</span><span class="o">=</span><span class="mi">80</span><span class="p">,</span> <span class="n">d</span><span class="o">=</span><span class="mi">40</span><span class="p">,</span> <span class="n">t</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">hole_d</span><span class="o">=</span><span class="mf">6.6</span><span class="p">,</span> <span class="n">pitch</span><span class="o">=</span><span class="mi">50</span><span class="p">):</span>
+    <span class="n">plate</span> <span class="o">=</span> <span class="n">s3d</span><span class="o">.</span><span class="n">extrude</span><span class="p">(</span><span class="s2">"plate"</span><span class="p">,</span> <span class="n">s3d</span><span class="o">.</span><span class="n">rect</span><span class="p">(</span><span class="n">w</span><span class="p">,</span> <span class="n">d</span><span class="p">,</span> <span class="n">r</span><span class="o">=</span><span class="mi">4</span><span class="p">),</span> <span class="n">t</span><span class="p">)</span>
+    <span class="n">s3d</span><span class="o">.</span><span class="n">hole</span><span class="p">(</span><span class="n">plate</span><span class="p">,</span> <span class="n">hole_d</span><span class="p">,</span> <span class="n">on</span><span class="o">=</span><span class="n">s3d</span><span class="o">.</span><span class="n">grid</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">pitch</span><span class="p">,</span> <span class="mi">0</span><span class="p">))</span>
+    <span class="n">s3d</span><span class="o">.</span><span class="n">fillet</span><span class="p">(</span><span class="n">plate</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">edges</span><span class="o">=</span><span class="s2">"top"</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">plate</span>
+
+<span class="n">s3d</span><span class="o">.</span><span class="n">export</span><span class="p">(</span><span class="n">bracket</span><span class="p">(),</span> <span class="s2">"bracket.glb"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>문서는 이 조각을 약 10줄·121 토큰(o200k_base)으로 적습니다. <code>w</code>·<code>hole_d</code>·<code>pitch</code>가 함수 인자라서, “구멍만 키워” 같은 요청이 <strong>파라미터 편집</strong>으로 떨어집니다. X 북마크가 말한 “부품마다 함수화·치수는 파라미터”와 같은 축입니다.</p>
+<h3 id="washing-machine">조인트·어셈블리: washing machine 패턴</h3>
+<p>문서가 보여주는 프론트 로딩 세탁기 예는 캐비닛·드럼·도어(유리·핸들)·서랍·다이얼을 이름 있는 파트로 두고, 네 조인트로 움직임을 선언합니다. 핵심 줄만 옮기면 다음과 같습니다(귀속: 동일 docs/PyPI).</p>
+<div class="highlight"><pre><span></span><code><span class="n">door</span> <span class="o">=</span> <span class="n">s3d</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s2">"door"</span><span class="p">,</span> <span class="n">ring</span><span class="p">,</span> <span class="n">glass</span><span class="p">,</span> <span class="n">handle</span><span class="p">)</span>  <span class="c1"># 핸들·유리가 같이 움직임</span>
+<span class="n">s3d</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="s2">"door_hinge"</span><span class="p">,</span> <span class="n">door</span><span class="p">,</span> <span class="n">hinge</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="s2">"-Z"</span><span class="p">,</span> <span class="nb">range</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">143</span><span class="p">))</span>
+<span class="n">s3d</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="s2">"drum_spin"</span><span class="p">,</span> <span class="n">drum</span><span class="p">,</span> <span class="n">front</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">400</span><span class="p">),</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"continuous"</span><span class="p">)</span>
+<span class="n">s3d</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="s2">"drawer_slide"</span><span class="p">,</span> <span class="n">drawer</span><span class="p">,</span> <span class="n">top_band</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="mi">150</span><span class="p">),</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"prismatic"</span><span class="p">,</span>
+          <span class="n">axis</span><span class="o">=</span><span class="s2">"+X"</span><span class="p">,</span> <span class="nb">range</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">200</span><span class="p">))</span>
+<span class="n">s3d</span><span class="o">.</span><span class="n">joint</span><span class="p">(</span><span class="s2">"dial_turn"</span><span class="p">,</span> <span class="n">dial</span><span class="p">,</span> <span class="n">top_band</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="o">-</span><span class="mi">150</span><span class="p">),</span> <span class="n">kind</span><span class="o">=</span><span class="s2">"continuous"</span><span class="p">)</span>
+<span class="k">return</span> <span class="n">s3d</span><span class="o">.</span><span class="n">assembly</span><span class="p">(</span><span class="s2">"washing_machine"</span><span class="p">,</span> <span class="n">cab</span><span class="p">,</span> <span class="n">drum</span><span class="p">,</span> <span class="n">door</span><span class="p">,</span> <span class="n">drawer</span><span class="p">,</span> <span class="n">dial</span><span class="p">,</span> <span class="n">front</span><span class="o">=</span><span class="n">front</span><span class="p">)</span>
+</code></pre></div>
+
+<p>문서 표기: 이 블록 6줄·153 토큰. <code>export(..., "washer.glb")</code>뿐 아니라 <code>.urdf</code>·<code>.usda</code>·<code>.obj</code>·<code>.stl</code>도 확장자로 고릅니다. GLB는 웹·뷰어·게임 엔진용으로 메쉬·머티리얼·노드 extras의 조인트를 현재 포즈로 담고, URDF는 ROS/PyBullet/MuJoCo/Isaac, USDA는 Omniverse·Isaac Sim·USD 파이프라인용이라고 문서 표가 적습니다.</p>
+<h3 id="sand3d-hugging-face">데이터셋 Sand3D (Hugging Face)</h3>
+<p><a href="https://huggingface.co/blog/Sandflow/sand3d-106094-3d-objects-in-one-code-substrate-for">HF 블로그</a>(2026-11-05) 표가 1차입니다.</p>
+<table>
+<thead>
+<tr>
+<th>서브셋</th>
+<th>개수</th>
+<th>출처</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sand3d-objaverse</td>
+<td>66,887</td>
+<td>Objaverse</td>
+</tr>
+<tr>
+<td>sand3d-cad</td>
+<td>24,495</td>
+<td>Zero-To-CAD 16,766 + CADFS 7,729</td>
+</tr>
+<tr>
+<td>sand3d-articraft</td>
+<td>9,209</td>
+<td>Articraft</td>
+</tr>
+<tr>
+<td>sand3d-automate</td>
+<td>3,169</td>
+<td>AutoMate (872 assemblies, 2,297 parts)</td>
+</tr>
+<tr>
+<td>sand3d-simready</td>
+<td>2,334</td>
+<td>NVIDIA SimReady</td>
+</tr>
+<tr>
+<td><strong>합계</strong></td>
+<td><strong>106,094</strong></td>
+<td>이 중 <strong>articulated 10,456</strong></td>
+</tr>
+</tbody>
+</table>
+<p>라이선스: 데이터셋 <strong>CC BY 4.0</strong>(개별 객체는 원출처 라이선스 유지), 라이브러리 <strong>Apache 2.0</strong>. 객체마다 프로그램 + OpenUSD + 렌더가 붙고, F-score 하한은 블로그에 문서화되어 있습니다. 한계도 명시됩니다 — <strong>대부분 hard-surface</strong>이며 캐릭터·동물·오가닉은 아직입니다. 탐색은 <a href="https://huggingface.co/collections/Sandflow/sand3d">컬렉션</a>, <a href="https://huggingface.co/spaces/Sandflow/sand3d-explorer">explorer 스페이스</a>.</p>
+<p>프레스 릴리스(2026-11-05, Lyon)는 “<strong>100,000</strong> objects”, “More than <strong>10,000</strong> articulated, with <strong>36,000</strong> joints”, SimReady 재작성 <strong>2,369</strong> 등을 말합니다. HF 표의 106,094 / articulated 10,456 / simready 2,334와 <strong>반올림·집계 시점 차이</strong>가 있어 아래 팩트 체크에서 ⚠️로 묶습니다. 마케팅 페이지(<a href="https://sandflow.ai/sand3d/">sandflow.ai/sand3d</a>)도 “10K+ articulated objects and 36K joints”를 그대로 적습니다. 회사는 프레스에서 자사 <strong>첫 3D 파운데이션 모델을 mid-December</strong>에 둔다고 주장합니다 — <strong>회사 클레임</strong>이지 출하 검증이 아닙니다. CEO 인용은 Félix Balmonet(프레스).</p>
+<p>GitHub API 기준(2026-11-06) Sandflow-ai/sand3d는 <strong>stargazers 606</strong>, <strong>forks 73</strong>, <strong>open issues 4</strong>, 라이선스 Apache-2.0, 저장소 생성 <strong>2026-11-03</strong>입니다. 스타 수는 관심 신호일 뿐 채택·품질을 보증하지 않습니다.</p>
+<h2 id="_3">비즈니스 인사이트</h2>
+<p>숫자·제품 서술은 문장 옆 출처에 붙입니다. 그 밖의 판단은 <strong>분석/의견</strong>으로 표시합니다. 펀딩 금액·DAU·기업 가치는 이 글이 invent 하지 않습니다.</p>
+<p><strong>3D-as-code가 노리는 병목.</strong> HF·문서가 같이 가리키는 자리는 “메쉬 덤프”와 “초장문 bpy 스크립트” 사이입니다. API ~3.6k 토큰·flat <code>s3d.</code> 표면은 <strong>시스템 프롬프트에 통째로 넣는 전제</strong>에 맞춰져 있고, 데이터셋 10.6만 프로그램은 그 어휘로 재구성된 학습·평가 기판입니다. <strong>분석/의견.</strong> LLM 코딩 에이전트·시뮬레이션 파이프라인·로보틱스(URDF)·Omniverse(USD)를 한 줄기로 묶으려는 팀에 먼저 읽히는 패키징입니다.</p>
+<p><strong>누가 이득을 보나.</strong> (1) 파라미터 CAD를 코드로 버전 관리하려는 프로덕트/툴링 팀 — bracket처럼 치수가 함수 인자. (2) articulated 자산이 필요한 로보틱스·시뮬 — HF 기준 articulated 10,456, 프레스/마케팅의 36k joints. (3) 웹·엔진으로 GLB를 보내는 뷰어/게임 쪽 — 문서가 GLB를 1급 export로 둠. <strong>분석/의견.</strong> 순수 아트/캐릭터 파이프라인은 한계(하드서피스 중심) 때문에 당장 대체재가 되기 어렵습니다.</p>
+<p><strong>경쟁·대체재 맥락 (문서가 비교한 축).</strong> CadQuery·FeatureScript·Articraft SDK·Blender Python은 토큰 표에 직접 등장합니다. sand3d는 “더 짧은 표현 + LLM이 맞출 확률”을 문서 수치로 밀고, 동시에 <strong>Blender <code>bpy</code> 위</strong>에 얹혀 deterministic mesh를 보장한다고 합니다. <strong>분석/의견.</strong> 기존 CadQuery/Onshape 숙련 팀의 이전 비용은 “API 학습”보다 <strong>파이프라인·검증·라이선스(원객체 출처)</strong> 쪽에 남을 수 있습니다. 스타 606(2026-11-06 API)은 출시 직후 관심이지, CadQuery급 생태계 규모와 같은 줄에 두지 마세요.</p>
+<p><strong>비용·도입.</strong> <code>pip install sand3d</code>로 진입 자체는 낮고, Python 3.12 휠이 없다는 제약은 PyPI·README가 명시합니다(Intel Mac + bpy 5.2도 3.11 권고). 데이터는 CC BY 4.0이지만 <strong>객체별 원출처 라이선스</strong>를 제품에 실을 때 다시 읽어야 합니다. <strong>분석/의견.</strong> 파운데이션 모델 “mid-December” 공언은 로드맵 신호일 뿐, 그 전까지는 <strong>오픈 라이브러리+데이터셋</strong>만으로도 실험·벤치·합성 데이터 생성에 쓸 수 있는지가 실질 ROI입니다. 토큰 배수(4.0× 등)는 문서 정의의 median이므로, 자사 파트 분포에 재측정하지 않으면 비용 절감 주장이 과대해질 수 있습니다.</p>
+<p><strong>분석/의견 — 리스크.</strong> (1) 프레스 100k vs HF 106,094, simready 2,369 vs 2,334처럼 <strong>공개 숫자 불일치</strong>가 이미 있음 → 논문·계약·마케팅 인용 시 HF 표를 우선. (2) 관절 36,000은 프레스/마케팅 — HF 블로그 표에는 관절 총합이 없음. (3) Three.js “네이티브 지원”이 아니라 <strong>GLB가 three.js에서 열리는 경로</strong>. (4) 저장소가 2026-11-03 생성이라 API·데이터셋 스키마 변동 여지를 제품 리스크로 잡는 편이 안전합니다.</p>
+<h2 id="_4">팩트 체크</h2>
+<p>✅ 1차 자료와 맞음 / ⚠️ 핵심은 맞거나 범위·수사·출처가 다름 / ❌ 1차 자료와 어긋남</p>
+<p>원본 X(<a href="https://x.com/tokufxug/status/2118518008478085477">@tokufxug</a>) 요지를 HF 블로그·공식 docs·PyPI·프레스·마케팅과 대조했습니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3D 모델 10만 점 이상을 코드로 공개(Sand3D)</td>
+<td>✅</td>
+<td>HF 표 합계 <strong>106,094</strong>. 프레스/마케팅은 “100,000” 반올림 수사 — 규모 주장은 성립, 정확 인용은 HF.</td>
+</tr>
+<tr>
+<td>각 모델을 sand3d Python 코드로 표현</td>
+<td>✅</td>
+<td>HF: 객체마다 program(+ OpenUSD + render). docs: 짧은 프로그램으로 작성.</td>
+</tr>
+<tr>
+<td>부품마다 함수화, 치수는 파라미터로 편집</td>
+<td>✅</td>
+<td>bracket 공식 예제(<code>w</code>, <code>hole_d</code>, <code>pitch</code> 등). 세탁기 예도 파트·조인트 이름 단위.</td>
+</tr>
+<tr>
+<td>가동 모델 1만 점 초과 · 관절 3.6만 개</td>
+<td>⚠️</td>
+<td>articulated <strong>10,456</strong>(HF) → “1만 초” ✅. <strong>36,000 joints</strong>는 프레스·마케팅(<a href="https://sandflow.ai/sand3d/">sandflow.ai/sand3d</a>) — HF 블로그 표에는 관절 총합 없음.</td>
+</tr>
+<tr>
+<td>전 모델에 메쉬 포함, Blender·Three.js·glTF로 이용 가능</td>
+<td>⚠️</td>
+<td>프로그램+OpenUSD+render; export는 <strong>GLB(glTF)·USD·URDF·OBJ·STL</strong>. Blender는 <code>bpy</code> 위 실행. Three.js는 docs 1급 export 이름이 아니라 <strong>GLB 경로</strong>로 쓰는 뉘앙스.</td>
+</tr>
+<tr>
+<td>개발: Sandflow</td>
+<td>✅</td>
+<td>GitHub Sandflow-ai, HF Sandflow, 프레스(리옹, 옛 Chat3D).</td>
+</tr>
+<tr>
+<td>(부가) LLM Blender 대비 토큰이 약 4배 적다</td>
+<td>⚠️</td>
+<td>docs median <strong>4.0×</strong>(30 CAD). HF 관련 서술 <strong>3.8×</strong> — 같은 방향, 수치·정의가 완전 동일하진 않음.</td>
+</tr>
+<tr>
+<td>(부가) SimReady 재작성 개수</td>
+<td>⚠️</td>
+<td>HF 표 <strong>2,334</strong> vs 프레스 <strong>2,369</strong>.</td>
+</tr>
+<tr>
+<td>(부가) 스타 수·채택 규모가 이미 업계 표준급</td>
+<td>❌</td>
+<td>주장하지 말 것. API 기준 star 606(2026-11-06)은 초기 관심 신호일 뿐.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> “10만+ 객체를 sand3d 코드로 공개했고, 파라미트릭·어티큘레이션 표현이 가능하다”는 X의 핵심은 HF·docs와 맞습니다. 관절 3.6만·Three.js·토큰 배수·SimReady 개수는 <strong>출처를 가려 읽어야</strong> 하고, 정확 인용은 Hugging Face 표와 sand3d 문서 홈을 우선하세요.</p>
+<h2 id="_5">참고 자료</h2>
+<ul>
+<li>sand3d docs — <a href="https://sand3d.sandflow.ai/">sand3d.sandflow.ai</a> (Version 1.6.3 citation; API ~3643 tokens; token 비교 표)</li>
+<li>PyPI — <a href="https://pypi.org/project/sand3d/">sand3d 1.6.3</a> (업로드 2026-11-06Z; Python/bpy 제약)</li>
+<li>GitHub — <a href="https://github.com/Sandflow-ai/sand3d">Sandflow-ai/sand3d</a> (Apache-2.0; authors Neveu &amp; Loy; API 2026-11-06: ★606 / forks 73 / issues 4 / created 2026-11-03)</li>
+<li>Hugging Face blog — <a href="https://huggingface.co/blog/Sandflow/sand3d-106094-3d-objects-in-one-code-substrate-for">Sand3D: 106,094 3D Objects in One Code Substrate…</a> (2026-11-05)</li>
+<li>HF collection · explorer — <a href="https://huggingface.co/collections/Sandflow/sand3d">collections/Sandflow/sand3d</a> · <a href="https://huggingface.co/spaces/Sandflow/sand3d-explorer">spaces/Sandflow/sand3d-explorer</a></li>
+<li>Press — <a href="https://sandflow.ai/press/3d-as-code-dataset/">Sandflow: 3D-as-code dataset</a> (2026-11-05, Lyon; 100k / 36k joints / SimReady 2,369 / mid-December FM claim)</li>
+<li>Marketing — <a href="https://sandflow.ai/sand3d/">sandflow.ai/sand3d</a> (“10K+ articulated … 36K joints”)</li>
+<li>원본 X 포스트 — <a href="https://x.com/tokufxug/status/2118518008478085477">@tokufxug</a> (bookmark id <code>2118518008478085477</code>)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
