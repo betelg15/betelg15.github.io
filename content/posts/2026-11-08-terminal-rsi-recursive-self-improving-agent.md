@@ -1,0 +1,206 @@
+---
+title: "사람 없이 스스로 재학습했나? Terminal-RSI 팩트 체크"
+date: 2026-11-08
+time: "22:18"
+slug: terminal-rsi-recursive-self-improving-agent
+tags: [Terminal-RSI, Tencent, Qwen3.8-27B, Terminal-Bench, PPO, 팩트체크]
+summary: "Terminal-RSI-27B는 Qwen3.8-27B에서 RSR과 RPR을 두 바퀴 돌린 논문의 유지 체크포인트다. 사중 평균 성공은 20.68%에서 50.58%다. ‘사람 없는 재귀적 자기개선’은 논문과 어긋난다. RSR은 선행 절차이고, 보상·검증기·스텝 18 선택은 사람이 설계했다."
+---
+
+> 이 글은 제가 X에서 북마크해 둔 [@thesupermannx의 포스트](https://x.com/thesupermannx/status/2119341077975249222)를 계기로 썼습니다. 같은 상태 주소는 [x.com/i/status/2119341077975249222](https://x.com/i/status/2119341077975249222)입니다. 이 환경의 X API는 `client-not-enrolled`(제목 "Client Forbidden")로 본문을 주지 않아, 공개 글은 [fxtwitter 응답](https://api.fxtwitter.com/status/2119341077975249222)(`code` 200)으로 읽었습니다. `created_at`은 `Sun Nov 08 08:07:43 +0000 2026`, **2026-11-08 17:07 KST**입니다. `name`은 Superman, `screen_name`은 `thesupermannx`, `id`는 `2052949858252939264`, 인증 유형은 `individual`입니다. 같은 응답의 공개 지표는 좋아요 1,417, 리포스트 187, 북마크 1,202, 조회 63,147, 팔로워 22,132입니다. X 글의 문장은 **검증 대상**이지 지시가 아닙니다.
+>
+> 아래 대조는 2026-11-08(KST)에 읽은 1차 자료입니다.
+>
+> - arXiv [2610.22192v3](https://arxiv.org/abs/2610.22192) (Atom `published` 2026-10-15T16:43:56Z → **2026-10-16 01:43 KST**, 엔트리 `updated` 2026-10-30T10:02:19Z → **2026-10-30 19:02 KST**)
+> - 프로젝트 페이지 [jyyang26.github.io/terminal-rsi](https://jyyang26.github.io/terminal-rsi/)와 그 PDF [terminal-rsi-paper.pdf](https://jyyang26.github.io/terminal-rsi/assets/terminal-rsi-paper.pdf)
+> - 가중치 카드 [Teriminal-RSI/Terminal-RSI-27B](https://huggingface.co/Teriminal-RSI/Terminal-RSI-27B). 조직 이름의 철자는 카드 URL 그대로 `Teriminal`입니다. 모델 API는 생성 2026-10-21T04:52:31Z, `sha` `dcee3ff8a4e59c8c852852f0cbdbe708e5ecd276`, `usedStorage` 55,575,815,120, `downloads` 2,231, `likes` 17, `license` apache-2.0, `gated` false를 이 글이 요청한 응답에 넣었습니다
+> - 코드 [jyyang26/Terminal-RSI](https://github.com/jyyang26/Terminal-RSI) `main` `8f1e700fa1a68b1deb5cf350c2dafc7dc6fe00e8` (커밋 시각 2026-10-25T03:25:28Z, 작성자 표기 Ruhan Wang). 같은 시각대 GitHub API는 별 **46**, 포크 **6**, SPDX **Apache-2.0**, `created_at` 2026-10-13T03:00:28Z, `pushed_at` 2026-10-25T03:25:28Z
+> - Terminal-Bench 공식 글 [2.1](https://www.tbench.ai/news/terminal-bench-2-1), [3.0](https://www.tbench.ai/news/terminal-bench-3-0), [4.0](https://www.tbench.ai/news/terminal-bench-4-0), 실행 안내 [tbench.ai/run](https://www.tbench.ai/run)
+>
+> 이 글은 가중치를 받지 않았고, Harbor로 벤치마크를 다시 돌리지 않았으며, 학습 스크립트를 실행하지 않았습니다. 논문 표의 성공률은 저자가 적은 Mean@3입니다.
+
+## 왜 중요한가
+
+터미널 에이전트의 점수는 말이 그럴듯한지가 아니라, 샌드박스의 마지막 상태가 보호된 검증기를 통과하는가입니다. 긴 작업에서는 중간 검사가 많이 통과해도 마지막 관문은 실패할 수 있습니다. 논문이 이 간극에 붙인 이름은 시간 팽창(토큰 시계와 환경 변화의 시계가 다름), 재귀 감독 뒤의 가치 드리프트, 부분 진척과 엄격한 완료 사이의 보상 어긋남입니다.
+
+[Terminal-RSI](https://arxiv.org/abs/2610.22192)는 그 간극을 학습 루프로 닫겠다는 27B 터미널 에이전트 논문입니다. 공개된 것은 세 겹입니다. 논문, Apache-2.0 가중치, slime 위의 학습 레시피입니다. 개발자가 확인할 질문은 슬로건보다 다음입니다.
+
+- 루프가 추론 중에 가중치를 스스로 고치는가, 저자가 돌린 학습 파이프라인인가.
+- RSR과 RPR이 각각 어떤 매개변수를 바꾸는가. 크리틱은 언제 물려받고 언제 다시 맞추는가.
+- TB-GAE의 턴 경계 감쇠가 보고된 체크포인트에서 켜져 있는가.
+- 20.68%에서 50.58%, Terminal-Bench 4.0의 0.00%에서 19.84%가 무엇을 평균한 수인가.
+- “사람이 루프 안에 없다”가 논문의 한계, 보상 설계, 코드 공개 범위와 맞는가.
+
+## 기술 설명
+
+### 누가, 무엇을 공개했는가
+
+PDF 저자 줄은 Junyao Yang, Zongxia Li, Yucheng Shi, Zhongzhi Li, Ruhan Wang, Ruiwen Zhou, Haitao Mi, Shuicheng Yan, Leowei Liang입니다. 어깨번호로 같은 기여는 Yang, Zongxia Li, Shi이고, 교신저자는 Yan입니다. 소속 키는 1 Tencent Hy Foundation Model Frontier, 2 National University of Singapore, 3 University of Maryland, College Park, 4 University of Georgia, 5 Indiana University입니다. 이 글이 읽은 PDF 추출에서 저자 이름에 붙은 번호는 1, 2, 4, 5뿐입니다. 3번 UMD는 소속 목록에 있고, 어느 저자의 번호인지는 그 추출에서 확정하지 못했습니다. 프로젝트 페이지 배너는 기관을 “Tencent Hy Frontier/ NUS/ UMD/ UGA/ Indiana University”로 줄여 적습니다. PDF에 같이 인쇄된 주소는 `junyaoyang@u.nus.edu`와 `tberiusyang@global.tencent.com`입니다. Yang의 어깨번호는 1, 2입니다.
+
+백본으로 논문이 적은 이름은 **Qwen3.8-27B**입니다. 카드와 `config.json`(`transformers_version` **5.8.0.dev0**)의 직렬화 아키텍처는 `Qwen3_5ForConditionalGeneration`, `model_type`은 `qwen3_5`입니다. `language_model_only`는 false입니다. 텍스트 설정은 층 64, hidden 5,120, 어텐션 헤드 24, KV 헤드 4, `max_position_embeddings` **262,144**, `vocab_size` 248,320입니다. `layer_types`는 linear attention 세 층과 full attention 한 층이 반복됩니다. 비전 타워 `depth`는 27입니다. Safetensors 파라미터는 BF16 **27,781,427,952**로, 카드가 적은 “패키지된 비전 컴포넌트를 포함한” 수와 같습니다. 카드의 언어 모델 규모 표현은 27B입니다. 둘은 같은 정수가 아닙니다.
+
+가중치는 인덱스된 Safetensors 13개입니다. `model-00001-of-00011`부터 `model-00011-of-00011`, 그리고 `model-missing-from-origin-00001`, `model-missing-from-origin-00002`입니다. 카드는 뒤의 두 파일이 체크포인트의 일부이지 버려도 되는 잔여물이 아니라고 적습니다. 카드가 적은 BF16 파일 크기는 약 **55.56 GB (51.75 GiB)** 입니다. 이 글이 받은 모델 API의 `usedStorage`는 **55,575,815,120**바이트입니다. 카드는 설정 로딩을 Transformers 5.17.0에서 확인했고, 패키징 과정에서 전체 모델 로딩과 GPU 추론은 하지 않았다고 적습니다. 라이선스 필드는 Apache-2.0이고 저장소에 `LICENSE`가 있습니다. Hub `pipeline_tag`는 `text-generation`이고, `transformersInfo`는 비전 타워 때문에 `image-text-to-text`와 `AutoModelForMultimodalLM`을 적습니다.
+
+코드 저장소 README는 학습 프레임워크가 [slime](https://github.com/THUDM/slime) (Megatron 학습, SGLang 롤아웃, Ray) 위의 플러그인이라고 적습니다. 같은 README는 RSR 단계가 검증된 재작성 궤적의 감독 미세조정이고, **RSR 데이터 파이프라인 자체는 이 릴리스에 없으며** RSR 논문을 따른다고 적습니다. 라이선스는 Apache-2.0이고, slime도 Apache-2.0이라고 적습니다.
+
+### RSR과 RPR은 다른 매개변수를 바꾼다
+
+논문이 도입하는 루프는 액터만 바꾸는 Recursive Self-Rewrite와, 크리틱을 물려받는 Recursive Policy-Refine의 교대입니다. README의 문장은 RSR을 **adopted**, 곧 가져온 절차로 부릅니다. 인용은 Li 등, “Scaling trajectories for complex tasks through recursive self-rewrite”, arXiv:2610.02826입니다. 논문 2.1절은 “Following Li et al.”이라고 적습니다. 이 논문이 자기 기여로 두는 쪽은 그 재작성 절차 자체가 아니라, 크리틱을 보존한 채 RPR과 잇는 결합입니다.
+
+RSR의 데이터는 이렇게 좁혀집니다. 유지된 액터가 서로 다른 하네스에서 만든 궤적 가운데 보호된 검증기를 통과한 것만 후보입니다. 플래너는 공개 과제와, 하네스 제어 메시지를 뺀 궤적으로 런북을 씁니다. 리뷰어는 공개 과제와 런북만 보고 스키마, 산출물, 호환 관문을 통과시킵니다. 그 런북으로 목표 하네스에서 **새로** 실행하고, 검증과 유출 심사를 다시 통과한 공개 궤적만 액터의 감독 학습에 넣습니다. 이때 크리틱 가중치는 고정입니다. 논문은 그 단계를 크리틱 변화량 0으로 적습니다.
+
+RPR은 PPO입니다. 정책 클립은 하한 0.30, 상한 5.00이라 확률비 하한 0.70, 상한 6.00입니다. 가치 클립은 4.00, 액터 그래디언트 클립은 1.00, 크리틱 그래디언트 클립은 100입니다. KL 계수와 엔트로피 계수는 둘 다 0입니다. 두 정제 단계의 전역 배치는 256이고, 긴 꼬리를 줄이려고 요청은 288까지 오버샘플하며, 과제당 응답은 하나입니다. 롤아웃은 최적화보다 한 배치 앞서 겹칩니다.
+
+유지된 순서는 **Base → RSR-1 → RPR-1 → RSR-2 → RPR-2** 입니다. 마지막 공개 이름의 Terminal-RSI-27B는 RPR-2의 **로컬 스텝 18**입니다. 논문은 이 로컬 스텝을 롤아웃 지평과 구분합니다. 버린 가지가 있습니다. RPR-1을 스텝 35까지 이어 가면 Terminal-Bench 4.0은 16.67%에서 11.11%로 내려가고 2.1은 78.95%로 올라갑니다. RSR-2에서 시작한 일반 FDR RPR-2는 4.0에서 스텝 6의 17.46%가 스텝 10에 11.11%가 됩니다. 유지한 것은 SPR Long-Reward 가지의 스텝 18입니다. 그 가지를 스텝 20까지 이어 가면 2.1은 유지되고, 3.0, 4.0, Hard에서 2.66, 2.38, 3.00 포인트가 빠집니다. 남긴 체크포인트는 모든 스위트가 단조 증가한 끝이 아닙니다.
+
+### 크리틱은 물려받되, 단계마다 다시 맞춘다
+
+RPR-1의 크리틱은 이전 RPR에서 온 것이 아닙니다. RSR-1 액터를 얼린 채 SWR 데이터로 **한 에폭** 학습한 Warm-up Critic Model입니다. RSR-2는 액터만 바꾸므로 RPR-1의 크리틱 가중치가 RPR-2로 넘어갑니다. 각 RPR 단계의 처음에는 액터를 얼리고 크리틱만 **네 번** 업데이트한 뒤 공동 최적화를 시작합니다. 이 네 번은 미니배치마다의 갱신이 아니고, 처음의 한 에폭과도 다릅니다. 논문은 가중치를 넘기는 일이 보상이 바뀐 뒤에도 값이 보정돼 있다는 뜻이 아니라고 적습니다.
+
+학습률도 단계마다 다릅니다. RPR-1은 액터 5×10⁻⁷, 크리틱 1.5×10⁻⁵, 보상은 FDR, 유지 스텝은 20입니다. RPR-2는 액터를 다섯 배 줄여 1×10⁻⁷로 두고 크리틱 학습률은 그대로이며, 유지된 Long-Reward 가지의 보상은 SPR, 스텝은 18입니다. 일반 RPR-2 가지는 FDR을 유지합니다. 논문의 한계는 학습률, 보상, 초기화가 같이 바뀌어서, 이 설계만으로 어느 조각의 인과를 분리하지 못한다고 적습니다.
+
+### TB-GAE는 관측 토큰이 아니라 턴 경계에서 감쇠한다
+
+표준 GAE는 토큰마다 할인 γ와 트레이스 λ를 곱합니다. 셸 로그가 길면, 같은 결정과 같은 결과라도 신용이 더 빨리 줄어듭니다. 관측을 정책 손실에서 가리는 것만으로는 그 재귀 노드가 사라지지 않습니다. TB-GAE는 생성된 토큰만 재귀 노드로 두고, 관측은 가치의 조건으로만 남깁니다. 같은 턴 안에서는 두 계수가 1이라 감쇠가 없고, 턴이 바뀔 때만 γ_turn과 λ_turn을 곱합니다. 턴 경계를 B번 넘으면 고정된 입력에 대한 감쇠는 (γ_turn × λ_turn)의 B제곱이고, 관측 길이에는 의존하지 않습니다. 청크를 나눌 때 정확한 연속을 원하면 다음 가치와 다음 어드밴티지를 둘 다 넘겨야 합니다. 요약은 조건 자체를 바꾸므로 이 불변에 들어가지 않습니다.
+
+보고된 학습에서 그 턴 감쇠가 실제로 1보다 작았는지는 별개입니다. 프로젝트 페이지는 “TB-GAE deployment in the reported checkpoints remains unverified”라고 적고, 문서화된 첫 단계는 γ = λ = 1인 표준 GAE를 쓴다고 적습니다. 릴리스된 RPR-1 설정 `examples/terminal_rsi/configs/harbor_rpr1_fdr.yaml`(`8f1e700`)은 `enable_tb_gae: true`, `tb_gae_gamma_turn: 1.0`, `tb_gae_lambda_turn: 1.0`입니다. 두 계수가 1이면 턴 사이에서도 감쇠가 없고, 논문 부록 C는 단위 시계가 입력이 같을 때 표준 GAE를 복원한다고 적습니다. 같은 부록은 이 성질이 특정 평가 체크포인트에 그 추정기가 배치됐다는 증거는 아니라고 적습니다. 이 글이 연 RPR-2 SPR yaml에는 `enable_tb_gae`, `tb_gae_gamma_turn`, `tb_gae_lambda_turn` 키가 없습니다. README는 TB-GAE 기본 활성을 RPR-1 설정에 한정해 적습니다.
+
+### 보상은 사람이 얼려 둔 가족 제수다
+
+둘 다 롤아웃이 끝난 뒤에 한 번 계산합니다. P는 위생 검사를 뺀 통과 검사 수, S는 0 또는 1이고 에이전트의 완료 선언이 아니라 보호된 터미널 검증의 엄격한 성공, f는 과제 가족입니다. 유효한 CTRF 채점이 없으면 둘 다 S로 떨어집니다.
+
+Family Dense Reward는 가족마다 얼린 제수 D_f로 진척을 나눕니다. D_f는 그 가족 검사 개수의 과거 0.90 분위수이고, 표에 없는 가족은 82입니다. 논문이 적은 범위는 1에서 795입니다. 유효한 검증 보고이면 max(P / D_f, 0)이고, 아니면 S입니다.
+
+Success-Prioritized Reward는 엄격한 성공에 1을 더하고, 진척은 포화시킵니다. 유효한 보고이면 S + P / (P + D'_f)이고, 아니면 S입니다. 실패는 1 미만, 성공은 1 이상입니다. 검사 수와 가족과 보고 유효성이 같으면 성공이 정확히 1만큼 큽니다. 논문은 균일한 양의 간격도, 성공 확률 최대화와의 동치도 없다고 적습니다. 값은 0 이상 2 미만입니다.
+
+D'_f도 사람이 규칙을 정해 얼린 표입니다. 실패가 많고 평균 보상이 높은 가족은 제수를 두 배, 길고 보상이 낮은 가족은 4분의 1, 실패 억제가 우선입니다. 부록 B는 여덟 가족을 두 배, 아홉 가족을 4분의 1, 하나는 새로, 28개는 그대로라고 적습니다. RPR-2 yaml 주석은 같은 식을 `S + C * P / (P + D'_f)`로 적습니다.
+
+4,352개의 **고정된** 궤적을 다시 채점하면, 실패가 가져가는 보상 질량은 FDR 50.09%에서 SPR 28.72%로 줄어듭니다. 1 이상인 실패는 158개에서 0개입니다. 그중 48개는 실행된 시나리오 검사를 모두 통과하고도 터미널 관문에서 실패했습니다. 논문과 프로젝트 페이지는 이 비교가 온라인 인과 실험이 아니라 같은 궤적의 보상 재배분이라고 적습니다. 실패 질량은 0이 아닙니다.
+
+### 숫자가 재는 것
+
+최종 평가 프로토콜은 학습 중 모니터와 다릅니다. 부록 A의 표는 단계 체크포인트마다 스위트당 독립 실행 세 번의 산술평균, 곧 Mean@3입니다. pass@3이나 풀린 과제의 합집합이 아닙니다. 샘플링은 temperature **0.60**, top-p **0.95**, 턴당 출력 **8,192** 토큰, 호출당 입력 **96,000** 토큰, 구조화 JSON 행동, 명시적 thinking 끔, 누적 32,000 토큰에서 선행 요약을 하고, 턴 상한은 벤치마크 제한 안에서 **100,000**입니다. 코드 README는 실험의 에이전트를 Harbor의 Terminus-2로 적습니다. 학습 yaml의 주석과 값은 이 프로토콜과 다릅니다. RPR-1 yaml은 에이전트 `max_turns` 500, 요약 임계 229,376, 타임아웃 3,600초, 환경 타입 `daytona`입니다. 그 파일을 논문의 최종 벤치 설정으로 읽으면 안 됩니다.
+
+Terminal-Bench가 재는 것은 컨테이너 안의 마지막 상태가 과제 검증기를 통과했는가입니다. 공식 2.1 글은 Terminal-Bench 2.0의 **89**과제 중 28개를 고친 개정이라고 하고, 표의 단위는 accuracy입니다. 공식 3.0 글은 첫 릴리스가 7개 도메인의 **74**과제이고, 그때 본 최고 모델이 약 34%라고 적습니다. 공식 4.0 글(Ryan Marten, 2026-08-28)은 4.0이 속편이라기보다 자원 보정, 19개 과제 수정, 포화된 과제 등 **8개 제거**라고 적고, 에이전트 타임아웃을 과제 공통 **8시간**으로 둡니다. 홈페이지 표의 열 이름은 resolution rate입니다. 공식 [실행 안내](https://www.tbench.ai/run)의 예는 Harbor에서 에이전트와 모델을 따로 지정합니다. 2.1 발표 표의 2.1 열에서 같은 모델도 하네스에 따라 점수가 갈립니다. GPT-5.3-Codex는 Codex CLI **79.1%**, Terminus 2 **68.5%**입니다. 모델 점수와 제품 점수는 그 표에서 이미 다릅니다.
+
+논문 부록 E의 명목 역사적 분모는 Terminal-Bench 2.1, 3.0, 4.0, Hard가 각각 **89, 70, 63, 100**입니다. 같은 절은 더 앞선 기록이 3.0을 74, 4.0을 66으로 두며, 과제 목록을 대조하기 전에는 같은 커버리지로 보면 안 된다고 적습니다. 공식 2.1의 89와 논문의 2.1 분모는 같고, 공식 3.0의 첫 릴리스 74와 논문의 명목 70은 다릅니다. 이 글은 19.84%에 과제 수를 곱해 “몇 개를 풀었다”로 바꾸지 않습니다.
+
+LHTB는 다른 단위입니다. 120개 후보에서 참조 해와 숨은 테스트가 있는 **46**과제이고, 논문은 평균 프로세스 보상과, 점수 1.00인 엄격한 완료를 따로 적습니다. 0.95 근접 완료는 쓰지 않습니다. SWR100은 학습 풀과 과제가 겹치지 않는 과학 워크플로 재구성 100개이고, 숨은 의미 검사와 구조 검사, 지름길 방지를 통과해야 성공입니다. 학습 풀은 의미 검증 과제 2,400과 보충 터미널 과제 600, 합계 3,000입니다.
+
+아래 표의 Terminal-Bench와 SWR100은 성공률(%), LHTB는 프로세스 보상입니다. 화살표는 직전 유지 단계 대비 포인트입니다. PPO 행은 부록 E의 역사적 집계라 Mean@3 행과 프로토콜이 다릅니다. 출처는 논문 표와 README의 같은 다섯 행입니다.
+
+| 체크포인트 | TB 4.0 | TB 2.1 | TB 3.0 | TB Hard | LHTB | SWR100 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Base (Qwen3.8-27B) | 0.00 | 51.70 | 0.00 | 31.00 | 0.21 | 3.00 |
+| PPO (다른 프로토콜) | 0.00 | 48.31 | 1.43 | 39.00 | – | – |
+| RSR-1 | 6.10 | 70.10 | 6.80 | 54.00 | 0.29 | 5.00 |
+| RPR-1 스텝 20 | 16.67 | 77.53 | 14.29 | 69.50 | 0.30 | 6.00 |
+| RSR-2 | 17.46 | **86.52** | 15.00 | 76.00 | 0.31 | 6.00 |
+| Terminal-RSI-27B, RPR-2 스텝 18 | **19.84** | **86.52** | **16.95** | **79.00** | **0.37** | **6.00** |
+
+사중 평균은 Terminal-Bench 네 스위트만의 동일 가중 평균입니다. LHTB와 SWR100은 빠지고, 과제 수로 가중하지 않습니다. 논문이 적은 수열은 Base 20.68%, RSR-1 34.25%, RPR-1 44.50%, RSR-2 48.75%, 최종 **50.58%**입니다. 표시된 네 수를 산술평균해 소수 둘째 자리에서 반올림하면 이 수열과 같습니다. 논문은 반올림 전 스위트 점수로 계산했다고 적고, Base의 실패 여집합을 79.33%로 적습니다. 100에서 20.68을 빼면 79.32라서, 그 0.01은 표시 전 점수를 쓴 흔적입니다. 최종 실패 여집합은 49.42%입니다. 논문이 적은 Base 대비, RSR-1 대비 실패 감소는 29.90, 16.33 포인트입니다.
+
+86.52%는 최종 SPR 스텝이 만든 수가 아닙니다. RSR-2에서 이미 86.52%이고, RPR-2 스텝 18은 그 칸을 유지합니다. 스텝 18이 더하는 것은 4.0의 2.38, 3.0의 1.95, Hard의 3.00 포인트와 LHTB 프로세스 보상 0.06입니다. SWR100은 RPR-1 이후 6.00%에 머물고, Base의 두 배이지만 그 뒤는 정체입니다. LHTB 엄격 완료의 단계 평균은 0/46, 0/46, 2/46, 4/46, **5/46**입니다. RSR-1은 부분 점수를 올리고도 엄격 완료는 0입니다.
+
+논문 Figure 4는 같은 최종 체크포인트를 저자가 붙인 외부 참고 점수 옆에 둡니다. PDF는 그 막대를 “author-provided external scores, not matched-protocol reevaluations”라고 적습니다. 프로젝트 페이지도 같은 취지로, 통제된 동일 하네스 재평가가 아니라고 적습니다. arXiv HTML은 참고 점수를 각 모델의 공식 보고에서 인용했다고 적습니다. 두 문장은 동시에 성립할 수 있습니다. 인용일 수 있고, 그래도 이 논문의 하네스로 다시 잰 것은 아닙니다. 이 글은 각 회사 리더보드 원문을 다시 열지 않았습니다. PDF가 인쇄한 Terminal-Bench 4.0 참고 순서는 GPT-6 Astra (high) 54.00%, Claude Opus 5 (high) 46.00%, GPT-6 Sol (high) 26.30%, Claude Haiku 5.5 (high) 21.70%, GPT-5.6 Sol (high) 20.70%, Terminal-RSI-27B **19.84%**, Gemini 3.8 Flash (high) 19.70%, DeepSeek V4 Pro (max) 14.60%, Kimi K3 (max) 12.60%, DeepSeek V4 Flash 0731 (max) 12.10%입니다. 본문은 19.84가 Gemini 3.8 Flash (high) 19.70보다 0.14 포인트 높고, GPT-6 Sol (high)보다는 6.46 포인트 낮다고 적습니다. 19.84+6.46=26.30이라 그 문장과 표의 26.30%는 서로 맞습니다. 2.1에서는 Terminal-RSI-27B 86.52%가 GPT-6 Sol (high) 85.40%보다 높고, PDF는 나열된 다른 모델이 더 높다고 적습니다. 표의 2.1 위쪽은 GPT-6 Astra (high) 89.90%, Claude Opus 5 (high) 87.60%, Gemini 3.8 Flash (high) 87.60%, GPT-5.6 Sol (high) 87.30%입니다. 축은 4.0이 5–60, 2.1이 50–100이라 막대 길이가 절대 점수 비가 아닙니다.
+
+사례 두 개는 Mean@3이 아닙니다. 임베딩 드리프트는 검사 11개, Base의 채점된 1회가 9/11이라 검사 완료 평균 81.82%이고, RPR-1 이후 두 반복은 100%입니다. Rust–C 평가기는 관문 두 개입니다. Base와 RSR-1은 50%, RPR-1은 75%, RSR-2와 최종 모델은 두 반복 모두 100%입니다. 최종 모델의 첫 시행은 C 연계 연기 테스트 뒤 식 평가를 Python에 맡깁니다. 퍼즈 테스트 통과는 검사된 출력 계약의 통과이고, 네이티브 Rust–C AST 경로는 아닙니다. 논문 한계는 테스트가 강제된 요구만 증명한다고 적습니다.
+
+tbench.ai 홈의 리더보드 표는 이 글을 가져온 HTML에서 행이 비어 있었습니다. 페이지가 클라이언트에서 채우는 표로 보여, Terminal-RSI-27B의 등재 여부는 이 글이 확인하지 못했습니다.
+
+### 돌리는 법, 그리고 루프의 예시
+
+카드의 로딩 예입니다. 이 글은 실행하지 않았습니다. 카드는 이 예가 텍스트만 만들고, 터미널 실행은 행동을 검사하고 샌드박스에서 명령을 돌리고 관측을 되돌리고 완료를 확인하는 바깥 에이전트 루프가 필요하다고 적습니다. 가중치만으로도 약 55.56 GB이고, 활성화와 KV가 더 필요합니다.
+
+```python
+import torch
+from transformers import AutoTokenizer, Qwen3_5ForConditionalGeneration
+
+model_id = "Teriminal-RSI/Terminal-RSI-27B"  # 조직 철자는 Teriminal
+
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = Qwen3_5ForConditionalGeneration.from_pretrained(
+    model_id,
+    dtype=torch.bfloat16,
+    device_map="auto",
+)
+messages = [
+    {"role": "system", "content": "You are a terminal assistant. Explain your next action; do not claim to have run commands."},
+    {"role": "user", "content": "How would you investigate a Python project whose tests fail because a dependency is missing?"},
+]
+prompt = tokenizer.apply_chat_template(
+    messages, tokenize=False, add_generation_prompt=True, enable_thinking=False,
+)
+inputs = tokenizer(prompt, return_tensors="pt").to(model.device)
+with torch.inference_mode():
+    outputs = model.generate(**inputs, max_new_tokens=1024, do_sample=True, temperature=0.6, top_p=0.95)
+print(tokenizer.decode(outputs[0, inputs["input_ids"].shape[-1]:], skip_special_tokens=True))
+```
+
+`enable_thinking=False`는 평가 프로토콜의 “명시적 thinking 끔”과 같습니다. 템플릿 기본은 thinking이 켜져 있고 `reasoning_effort` 기본이 `xhigh`입니다. 카드를 그대로 두지 않으면 벤치 설정과 다른 프롬프트가 됩니다.
+
+학습 쪽 진입점은 README의 `examples/terminal_rsi/run_rpr1_fdr.sh`와 `run_rpr2_spr.sh`입니다. 노드 수와 GPU 수를 환경에 맞게 넣어야 하고, 실험별 자원 기본값은 없다고 적습니다. 롤아웃은 Daytona 샌드박스라 `DAYTONA_API_KEY`가 필요합니다. RSR 데이터 파이프라인은 그 스크립트에 없습니다.
+
+아래는 논문 2.1절의 순서를 줄인 **예시용 의사코드**입니다. 저장소의 함수가 아니고, 실행되지 않습니다. 보상식, 제수 표, 검증기, 3,000과제, 학습률, 남길 스텝은 루프 바깥에서 정해집니다.
+
+```python
+# 예시. 논문의 유지 순서만 보여 준다.
+# 모델이 자기 학습 프로세스를 띄운다는 코드가 아니다.
+def terminal_rsi(base, tasks, verifiers, divisors):
+    actor = base
+    actor = actor_only_sft(actor, clean_replays(actor, tasks, verifiers))  # RSR-1
+    critic = warmup_one_swr_epoch(actor)  # 액터는 고정
+    actor, critic = ppo(actor, critic, reward="FDR", divisors=divisors)  # RPR-1, 스텝 20
+    actor = actor_only_sft(actor, clean_replays(actor, tasks, verifiers))  # RSR-2, 크리틱 유지
+    actor, critic = ppo(actor, critic, reward="SPR", divisors=divisors)  # RPR-2, 스텝 18
+    return actor
+```
+
+## 비즈니스 인사이트
+
+숫자와 문서 사실은 문장 옆에 출처를 붙입니다. 그 밖의 판단은 **분석/의견**입니다. 학습에 든 달러, GPU 시간, Tencent의 매출은 이 글이 연 1차 자료에 없어 적지 않습니다.
+
+**무엇이 팔리고 무엇이 무료인가.** 가중치 카드는 Apache-2.0, `gated` false입니다. 코드도 Apache-2.0입니다(GitHub API `license.spdx_id`, README). 받는 파일은 BF16 약 55.56 GB이고, 모델 API `usedStorage`는 55,575,815,120바이트입니다. 추론 메모리는 그 위에 활성화와 캐시가 더 필요하다고 카드가 적습니다. 학습 재현은 다른 비용입니다. README는 CUDA SGLang과 Megatron, Ray 클러스터, Daytona 키, 사용자가 넣는 과제 디렉터리를 요구하고, 자원 기본값을 주지 않습니다. RSR 데이터 파이프라인은 릴리스에 없습니다. **분석/의견.** 다운로드 가격이 0인 체크포인트와, 논문의 재귀 루프를 그대로 다시 돌릴 수 있는 제품은 다릅니다. 공개본으로 바로 되는 쪽은 Harbor 같은 바깥 루프에 이 가중치를 물리는 일이고, 되지 않는 쪽은 “검증된 궤적을 런북으로 다시 써 스스로 미세조정”을 이 저장소만으로 재현하는 일입니다.
+
+**벤치마크가 시장에서 하는 일.** 공식 Terminal-Bench는 모델과 에이전트 하네스를 나눕니다. 2.1 발표에서 GPT-5.3-Codex는 Codex CLI 79.1%, Terminus 2 68.5%입니다. 4.0 실행 예는 `harbor run`에 `-a claude-code`와 모델 이름을 같이 넣습니다. 논문의 86.52%와 19.84%는 저자 프로토콜의 Mean@3이고, 이 글은 공식 리더보드 행으로 확인하지 못했습니다. Figure 4의 프론티어 수는 동일 하네스 재측정이 아니라고 논문이 적습니다. 그 참고 표에서만 봐도 4.0의 19.84%는 Gemini 3.8 Flash (high) 19.70% 바로 위이고, GPT-6 Astra (high) 54.00%와 Claude Opus 5 (high) 46.00% 아래입니다. **분석/의견.** 스크린샷에 남기 쉬운 수는 2.1의 86.52%입니다. 그 스위트는 공식 글 기준으로 89과제의 개정판이고, 4.0은 포화 과제를 뺀 연속 벤치마크입니다. 2.1이 높다는 문장으로 4.0의 19.84%와 3.0의 16.95%를 대체하면, 논문이 스위트별로 나눠 둔 이야기가 한 수로 접힙니다.
+
+**누가 이득을 보나.** (1) 이미 slime, Megatron, Harbor를 돌리는 연구 팀. 레시피가 그 스택 위에 있습니다. (2) Apache-2.0으로 27B 터미널 특화 체크포인트를 연구에 붙여 보려는 사람. 카드가 적은 용도는 터미널 에이전트 연구, 저장소 수정, 코드 실행, 과학 워크플로 재구성입니다. (3) 부분 점수와 엄격한 성공을 보상에서 나누는 설계가 필요한 학습 실험. FDR과 SPR의 식과 제수 규칙은 공개돼 있습니다. **분석/의견.** 손해가 생기는 읽기는 “구독형 코딩 에이전트를 끄고 이 가중치가 사람 없이 계속 나아진다”입니다. 추론 때의 모델은 고정된 스텝 18 체크포인트입니다. 자기개선은 저자가 이미 끝낸 학습 구간이고, 그 구간의 과제 풀, 검증기, 제수, 학습률, 남길 스텝은 사람이 정했습니다. 카드는 벤치 이득이 일반 신뢰성이나 모든 저장소에 대한 적용을 보여 주지 않는다고 적고, 생성된 명령을 격리된 환경에서 돌리라고 적습니다.
+
+**개발자에게 남는 것.** 채팅 예제는 명령을 실행하지 않습니다. 점수를 논문에 가깝게 읽으려면 하네스, 시간 예산, 검증기, temperature 0.60, thinking 끔이 따라와야 합니다. 공식 4.0은 에이전트 타임아웃이 8시간입니다. 논문의 학습 yaml은 3,600초입니다. 둘을 한 제품의 SLA로 섞으면 안 됩니다. **분석/의견.** 도입 비용의 중심은 가중치 라이선스가 아니라 샌드박스와 평가 예산, 그리고 재학습을 원하면 공개되지 않은 RSR 데이터입니다. 27B BF16을 소비 GPU 한 장에 그대로 올린다는 문장은 카드의 55.56 GB와 맞지 않습니다. 양자화 경로는 이 카드가 제공하지 않습니다.
+
+## 팩트 체크
+
+✅ 1차 자료와 맞음 / ⚠️ 핵심은 맞거나 범위·시점·수사·출처가 다름 / ❌ 1차 자료와 어긋남
+
+원본 X([@thesupermannx](https://x.com/thesupermannx/status/2119341077975249222), 2026-11-08 17:07 KST)를 arXiv v3, 프로젝트 PDF, 모델 카드, 코드 `8f1e700`과 대조했습니다. 성공률은 저자 보고이고 이 글은 다시 재지 않았습니다.
+
+| 주장 | 판정 | 근거 |
+| --- | --- | --- |
+| China가 재귀적 자기개선을 풀었다 | ❌ | 1저자 소속은 Tencent Hy Foundation Model Frontier이고, 같은 줄에 NUS, UGA, Indiana가 있으며 소속 키에 UMD가 있습니다. 논문은 그 문장을 쓰지 않습니다. 제목의 recursive self-improving은 RSR과 RPR을 두 바퀴 교대한 학습 절차의 이름입니다. 한계 절은 한 개의 27B, 다섯 단계가 스케일링 법칙도 보편적 단조도 세우지 못한다고 적습니다. RSR은 Li 등 arXiv:2610.02826을 가져온 절차라고 논문과 README가 적습니다. |
+| Tencent이 27B 모델을 내놓았다 | ⚠️ | 체크포인트 이름은 Terminal-RSI-27B, 백본 표기는 Qwen3.8-27B, 소속에 Tencent Hy가 있습니다. 저자는 그 기관만이 아닙니다. 가중치 생성은 2026-10-21, 논문 `published`는 2026-10-15, v3 갱신은 2026-10-30, 코드 push는 2026-10-25입니다. X는 2026-11-08입니다. “그날 떨어진 모델”로 읽으면 시점이 어긋납니다. 파라미터 27,781,427,952는 비전을 포함한 텐서 합입니다. |
+| 스스로 다시 쓰고 재학습한다. “zero human in the loop” | ❌ | RSR은 검증된 궤적을 런북으로 다시 쓰고 새 실행이 통과하면 **액터만** SFT합니다. 미세조정을 수행하는 것은 slime, Megatron, Ray입니다. RPR은 사람이 정한 PPO입니다. 크리틱, FDR, SPR 제수 표, 3,000과제, 학습률, 스텝 18 선택은 루프 바깥입니다. 스텝 20은 세 스위트에서 점수가 빠져 유지되지 않았습니다. 부록 D는 최종 벤치 피드백으로 반복 선택하면 학습과 테스트 적응이 섞인다고 적습니다. RSR 데이터 파이프라인은 릴리스에 없습니다. |
+| 에이전트는 부분 진척 뒤 성공을 주장하고 검증기에서 실패한다. 이 파이프라인이 일을 끝내게 한다 | ⚠️ | 동기 부분은 논문과 맞습니다. 실패 궤적이 검사를 많이 통과하고도 터미널 관문을 놓칠 수 있고, 감사한 4,352개 중 48개가 실행된 시나리오 검사는 모두 통과하고 관문은 실패했습니다. “끝낸다”는 최종 점수와 다릅니다. 사중 실패 여집합은 49.42%이고, LHTB 엄격 완료는 5/46, SWR100은 6%입니다. Rust–C 사례는 검증기를 통과하면서 식 평가를 Python에 맡깁니다. |
+| RSR은 모델이 성공적으로 다시 쓴 궤적으로 자신을 미세조정한다 | ⚠️ | 통과한 재작성 궤적의 액터 SFT라는 뼈대는 맞습니다. 리뷰어 관문, 유출 심사, 새 실행, 고정된 크리틱, 바깥 학습기가 문장에서 빠집니다. “자신”이 학습 프로세스를 돌린다는 뜻은 코드와 논문에 없습니다. |
+| RPR은 이전 단계 크리틱을 물려받아 PPO를 한다 | ⚠️ | RPR-2는 RPR-1 크리틱을 물려받습니다. RPR-1의 크리틱은 물려받은 RPR이 아니라, 액터를 얼리고 SWR 한 에폭으로 만든 Warm-up Critic입니다. 각 단계 처음에 크리틱만 네 번 다시 맞춥니다. PPO, 클립 0.30과 5.00, KL 0은 논문 표와 같습니다. |
+| 순서는 Base → RSR-1 → RPR-1 → RSR-2 → RPR-2 | ✅ | 논문, 프로젝트 페이지, README가 같은 순서를 적습니다. 공개 가중치가 가리키는 것은 그 경로의 RPR-2 스텝 18입니다. 버린 FDR 가지와 RPR-1 스텝 35 연장은 그 화살표에 없습니다. |
+| 네 Terminal-Bench 스위트 평균이 20.68%에서 50.58% | ✅ | 논문의 동일 가중 사중 평균입니다. Mean@3이고, LHTB와 SWR100은 빠지며, 과제 가중은 아닙니다. 이 글은 재실행하지 않았습니다. |
+| 가장 어려운 스위트인 Terminal-Bench 4.0에서 Base 0.00%, 이후 19.84%, Gemini 3.8 Flash와 동급 | ⚠️ | 0.00과 19.84는 논문 표와 같습니다. “가장 어렵다”는 논문의 문장이 아닙니다. 최종 점수는 3.0이 16.95%로 4.0보다 낮고, 공식 4.0 글은 4.0을 포화 과제 제거와 자원 보정으로 설명합니다. Gemini 3.8 Flash (high) 19.70%와의 차 0.14 포인트는 PDF에 있습니다. 같은 참고 표에서 그 위는 20.70%부터 54.00%까지이고, 동일 하네스 재측정이 아니라고 적혀 있습니다. “동급”은 바로 아래 한 모델을 고른 비교입니다. |
+| 밀집 보상 대신 SPR로 바꿔, 엄격한 성공과 부분 점수를 수학적으로 나눈 것이 비결이다 | ⚠️ | SPR은 실패를 1 미만, 성공을 1 이상으로 나눕니다. 그 식은 최종 유지 가지의 보상입니다. RPR-1과 일반 RPR-2는 FDR입니다. 2.1의 86.52%는 SPR 스텝 이전인 RSR-2에 이미 있습니다. 50.09%에서 28.72%는 고정 궤적 재채점이지 온라인 학습 효과의 분리가 아닙니다. 초록과 한계는 TB-GAE와 SPR의 인과 이득을 체크포인트 향상이나 오프라인 감도로 분리하지 못한다고 적습니다. |
+| 최종 관문을 통과해야 큰 보상을 받으므로 성공을 가장하지 않게 된다 | ❌ | 실패에도 P / (P + D'_f)가 남아 보상 질량의 28.72%가 실패에 갑니다. 성공과 짝을 이루면 차이가 정확히 1이고, 상한은 2 미만입니다. “massive payout”이라는 별도 항은 없습니다. 논문은 SPR이 성공 확률 최대화와 동치가 아니라고 적습니다. 검증기를 통과한 최종 Rust–C 시행이 Python에 평가를 맡긴 사례가, 가장하기가 끝났다는 문장과 반대편에 있습니다. |
+| 에이전트가 자기 학습 환경을 만들고 자율적으로 레벨업하는 중이다 | ❌ | 학습 풀은 주어진 3,000과제입니다. 환경 합성과 과제 생성을 다룬 논문은 관련 연구에 따로 있고, 이 논문의 기여로 적히지 않습니다. 사이클은 두 번이고, 유지 체크포인트는 사람이 벤치 트레이드오프를 본 뒤 스텝 18을 고른 결과입니다. |
+
+**총평:** 공개된 것은 Qwen3.8-27B 위에 RSR과 크리틱 상속 RPR을 두 바퀴 돌리고, 스텝 18을 Terminal-RSI-27B로 남긴 학습 논문과 Apache-2.0 가중치입니다. 사중 평균 20.68% → 50.58%, Terminal-Bench 4.0의 0.00% → 19.84%, 2.1의 51.70% → 86.52%는 그 논문의 Mean@3과 맞습니다. 86.52%는 RSR-2에서 이미 도달합니다. “사람이 없고, 재귀적 자기개선을 풀었으며, 성공 가장이 끝났다”는 프레임은 논문의 한계, 사람이 설계한 보상과 검증기, 공개되지 않은 RSR 데이터, 그리고 검증기는 통과했지만 구현 경로는 다른 사례와 어긋납니다.
+
+## 참고 자료
+
+- arXiv — [2610.22192v3](https://arxiv.org/abs/2610.22192) (`published` 2026-10-15T16:43:56Z, 엔트리 `updated` 2026-10-30T10:02:19Z). 초록의 네 스위트 점수와 LHTB 0.21 → 0.37, 0/46 → 5/46, SWR100 3% → 6%
+- PDF — [terminal-rsi-paper.pdf](https://jyyang26.github.io/terminal-rsi/assets/terminal-rsi-paper.pdf). 저자 소속, Figure 4의 저자 제공 참고 점수, 한계 절, Rust–C 사례
+- 프로젝트 페이지 — [Terminal-RSI](https://jyyang26.github.io/terminal-rsi/). TB-GAE의 보고된 체크포인트 배치가 미확인이라는 문장, 프론티어 점수가 동일 하네스 재평가가 아니라는 문장
+- 모델 카드 — [Teriminal-RSI/Terminal-RSI-27B](https://huggingface.co/Teriminal-RSI/Terminal-RSI-27B) (`dcee3ff8`, 생성 2026-10-21, Apache-2.0, BF16 27,781,427,952, 로딩 예제)
+- `config.json` — `Qwen3_5ForConditionalGeneration`, `transformers_version` 5.8.0.dev0, `max_position_embeddings` 262144, 비전 depth 27
+- 코드 — [jyyang26/Terminal-RSI](https://github.com/jyyang26/Terminal-RSI) `8f1e700`. README의 채택된 RSR, 릴리스에 없는 RSR 데이터 파이프라인, 결과 표
+- 설정 — [harbor_rpr1_fdr.yaml](https://github.com/jyyang26/Terminal-RSI/blob/8f1e700fa1a68b1deb5cf350c2dafc7dc6fe00e8/examples/terminal_rsi/configs/harbor_rpr1_fdr.yaml)의 `enable_tb_gae: true`, `tb_gae_gamma_turn: 1.0`, `tb_gae_lambda_turn: 1.0`. [harbor_rpr2_spr.yaml](https://github.com/jyyang26/Terminal-RSI/blob/8f1e700fa1a68b1deb5cf350c2dafc7dc6fe00e8/examples/terminal_rsi/configs/harbor_rpr2_spr.yaml) 주석의 SPR 식
+- 선행 RSR — Li 등, arXiv:2610.02826 (논문 참고문헌 [23])
+- 인프라 선행 — T1, arXiv:2609.11042. README가 같은 터미널 RL 프레임워크라고 적음
+- Terminal-Bench — [2.1 발표](https://www.tbench.ai/news/terminal-bench-2-1) (2.0의 89과제 중 28개 수정, Codex CLI 79.1% 대 Terminus 2 68.5%), [3.0 발표](https://www.tbench.ai/news/terminal-bench-3-0) (첫 릴리스 74과제), [4.0 발표](https://www.tbench.ai/news/terminal-bench-4-0) (8개 제거, 19개 수정, 8시간 타임아웃), [실행](https://www.tbench.ai/run)
+- 원본 X — [x.com/i/status/2119341077975249222](https://x.com/i/status/2119341077975249222) ([@thesupermannx](https://x.com/thesupermannx/status/2119341077975249222), 2026-11-08 17:07 KST). 본문은 [fxtwitter](https://api.fxtwitter.com/status/2119341077975249222)
