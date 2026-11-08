@@ -1,0 +1,353 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>43%는 9950X3D2가 맞나? MSI 고효율 모드와 로컬 LLM 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-09 · <span class="chip">#MSI</span><span class="chip">#DDR5</span><span class="chip">#EXPO</span><span class="chip">#로컬 LLM</span><span class="chip">#Gemma 4</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">43%는 9950X3D2가 맞나? MSI 고효율 모드와 로컬 LLM 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#_3">고효율 모드는 무엇을 바꾸는가</a></li>
+<li><a href="#1-expo-expo-ull">1차 타이밍, 서브타이밍, EXPO, EXPO ULL</a></li>
+<li><a href="#_4">디코드가 대역폭에 묶이는 이유</a></li>
+<li><a href="#msi-llm">MSI가 적은 LLM 숫자</a></li>
+<li><a href="#_5">안정성</a></li>
+</ul>
+</li>
+<li><a href="#_6">비즈니스 인사이트</a></li>
+<li><a href="#_7">팩트 체크</a></li>
+<li><a href="#_8">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/ma_sane39/status/2119501016886558748">@ma_sane39(🐑불고트🐃)의 포스트</a>를 계기로 썼습니다. 같은 상태 주소는 <a href="https://x.com/i/status/2119501016886558748">x.com/i/status/2119501016886558748</a>입니다. 그 글은 <a href="https://x.com/msigaming/status/2119414646637826388">@msigaming</a>의 게시물을 인용합니다. 이 환경의 X API는 <code>client-not-enrolled</code>로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2119501016886558748">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. 읽은 시각은 2026-11-09 08:10 KST 무렵입니다.</p>
+<p>한국어 포스트의 <code>created_at</code>은 <code>Sun Nov 08 18:43:15 +0000 2026</code>, <strong>2026-11-09 03:43 KST</strong>입니다. 그 시점 스냅샷으로 답글 1, 리포스트 0, 좋아요 2, 북마크 1, 인용 0, 조회 292입니다. 인용된 MSI Gaming 글의 <code>created_at</code>은 <code>Sun Nov 08 13:00:03 +0000 2026</code>, <strong>2026-11-08 22:00 KST</strong>이고, 같은 스냅샷에서 답글 2, 리포스트 0, 좋아요 36, 북마크 6, 인용 2, 조회 6,698입니다. 영문 문장은 “a few BIOS tweaks can unlock up to 43% better LLM performance in our tests”이고, 링크는 <a href="https://msi.gm/high-efficiency-mode">msi.gm/high-efficiency-mode</a>입니다. X 글의 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+<p>숫자 대조는 같은 날 연 1차 글입니다.</p>
+<ul>
+<li>MSI, Lindas Wu, 2026-09-24, <a href="https://us.msi.com/blog/msi-high-efficiency-mode-tested-maximize-local-llm-ai-performance">High-Efficiency Mode Tested: Maximize Local LLM AI Performance</a></li>
+<li>MSI, Manny Chang, 2026-07-30, <a href="https://www.msi.com/blog/msi-high-efficiency-mode-one-click-to-expo-ultra-low-latency-level-performance">One Click to EXPO Ultra Low Latency-Level Performance</a></li>
+<li>MSI, Manny Chang, 2024-08-15, <a href="https://us.msi.com/blog/boost-the-performance-of-amd-ryzen-9000-series-msi-pbo-enhanced-mode-set-thermal-point-and-high-efficiency-mode">PBO Enhanced Mode, Set Thermal Point, and High-Efficiency Mode</a></li>
+<li>모델 카드 <a href="https://huggingface.co/google/gemma-4-26B-A4B">google/gemma-4-26B-A4B</a></li>
+</ul>
+<p>이 글은 LM Studio를 실행하지 않았고, AIDA64를 돌리지 않았고, BIOS를 바꾸지 않았습니다. 아래 백분율 차이는 MSI가 적은 퍼센트에서 이 글이 나눈 값입니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>로컬 LLM을 돌리는 개발자에게 메모리 설정은 모델 선택 다음으로 체감이 갈리는 자리입니다. 가중치가 GPU 메모리에 다 들어가면 시스템 DDR 속도는 거의 안 보입니다. 일부가 시스템 RAM에 남으면, 토큰을 만드는 동안 그 조각이 DDR을 탑니다. 메인보드 벤더가 BIOS에 넣어 둔 타이밍 프리셋은, 그 경로에서만 공짜에 가까운 레버가 됩니다.</p>
+<p>MSI Gaming의 영문 포스트는 그 레버로 “최대 43%”를 말합니다. 한국어 포스트는 그 숫자를 Ryzen 9 9950X3D2와 DDR5-8000, 고효율 모드에 붙여, 같은 테스트에서 32%와 43%가 나왔다고 읽습니다. MSI 블로그는 두 플랫폼을 나눠 적습니다. AMD 쪽 상한은 <strong>32%</strong>, Intel 쪽 상한은 <strong>43%</strong>(본문 한 줄은 RTX 5080에서 <strong>43.5%</strong>)입니다. 둘 다 기준은 DDR5-4800입니다.</p>
+<p>기능을 처음 켠 사람이 확인할 질문은 슬로건보다 다음입니다.</p>
+<ul>
+<li>이것은 CPU 오버클럭인가, 메모리 타이밍인가.</li>
+<li>32%와 43%는 어느 CPU이고, 고효율 모드만의 차이인가.</li>
+<li>그 차이가 왜 이 모델, 이 오프로드에서 보이는가.</li>
+<li>이미 EXPO ULL 킷을 살 돈과, 지금 DDR 가격에서 그 클릭이 무엇을 대체하는가.</li>
+</ul>
+<h2 id="_2">기술 설명</h2>
+<h3 id="_3">고효율 모드는 무엇을 바꾸는가</h3>
+<p>MSI는 High-Efficiency Mode를 메인보드 BIOS에 들어 있는 메모리 최적화로 적습니다. 2026-07-30 글의 문장은 “built-in memory optimization feature”이고, 켜면 메모리 성능이 오르고 지연이 줄어든다고 합니다. 2024-08-15 글은 같은 기능을 Ryzen 9000용 안내 안에 이미 넣었습니다. 그때의 설명은 메모리 설정을 다듬어 지연을 낮추고 일부 게임 성능을 올린다는 것이고, 테스트 구성의 보드는 MAG X670E TOMAHAWK WIFI입니다. 2026년 9월 LLM 글이 기능을 처음 만든 문서는 아닙니다.</p>
+<p>CPU를 올리는 기능은 그 2024년 글의 다른 항목입니다. PBO Enhanced Mode는 AMD Precision Boost Overdrive 위에서 프로세서를 더 맞춘다고 적고, Ryzen 7 9700X에서 기본 대비 Cinebench R23이 최대 15%까지 오를 수 있다고 합니다. 고효율 모드와 이름이 이웃해 있을 뿐, 같은 스위치가 아닙니다.</p>
+<p>프리셋은 네 개입니다. 2024년 글, 2026-07-30 글, 2026-09-24 글이 같은 이름을 적습니다. <strong>Tightest, Tighter, Balance, Relax.</strong> 2026-07-30 FAQ는 Tightest가 가장 공격적인 타이밍이고 Relax가 가장 보수적이며, 불안정하면 더 느슨한 프리셋을 고르라고 합니다. LLM 벤치의 AMD 플랫폼은 이 중 <strong>Tighter</strong>입니다. Tightest가 아닙니다.</p>
+<p>켜는 경로는 플랫폼마다 다릅니다. AMD는 Delete로 BIOS에 들어가 Advanced Mode(F7), OC 메뉴에서 EXPO 또는 A-XMP가 켜져 있는지 본 뒤 High-Efficiency Mode를 Enabled로 두고, 아래에 뜨는 Memory Timing Preset에서 네 개 중 하나를 고릅니다. Intel 절차는 OC 메뉴에서 XMP를 확인한 뒤 <strong>Memory Extension Mode</strong>에서 High-Efficiency Mode를 고르라고만 적습니다. 그 Intel 절에는 Relax, Balance, Tighter, Tightest라는 이름이 없습니다.</p>
+<h3 id="1-expo-expo-ull">1차 타이밍, 서브타이밍, EXPO, EXPO ULL</h3>
+<p>광고에 찍히는 네 숫자는 CAS Latency(CL, tCL), tRCD, tRP, tRAS입니다. <a href="https://www.tomshardware.com/pc-components/ram/amd-expo-ull-ram-drops-at-jaw-dropping-usd1-099-despite-promises-of-it-being-effectively-the-same-price-ddr5-6000-c26-32gb-kit-sports-80-percent-ull-tax">Tom's Hardware가 2026-06-29에 정리한 문장</a>(가격 정정 2026-07-02)은 제조사와 판매 페이지가 보통 이 네 개만 보여주고, EXPO ULL 인증의 2차 타이밍 대부분(tREFI, tRRDS, tWR를 예로 듭니다)은 그 페이지에 안 나온다고 적습니다. 같은 글은 DDR5가 모듈 안에서 64비트 한 채널 대신 32비트 서브채널 두 개로 나뉘고, 버스트 길이가 BL8에서 BL16으로 늘면서 행을 더 오래 열어 두게 되어 tRAS가 커진다고 설명합니다. ULL 킷이 하는 일 가운데 하나는 그 tRAS를 다시 낮추는 것입니다.</p>
+<p>MSI의 정의는 이렇습니다. EXPO는 메모리 모듈에 저장된 검증 프로파일이고, BIOS에서 고르면 주파수와 타이밍이 적용됩니다. “1차 타이밍만 들어 있다”는 문장은 이 글에 없습니다. EXPO ULL은 거기서 한 걸음 더 가서 <strong>일부 서브타이밍을 조여</strong> 지연을 낮춘다고 적습니다. 고효율 모드는 ULL 킷이 없는 모듈에서 그와 비슷한 지연을 노리며, MSI 표현은 “specific memory timings”를 최적화한다는 것입니다. “secondary and tertiary”라는 단어는 MSI 블로그 본문에서 이 글이 읽은 범위에는 없고, <a href="https://www.tweaktown.com/news/112947/msi-adds-a-bios-toggle-to-tighten-standard-ddr5-timings-closer-to-expo-ull-kits/index.html">TweakTown의 2026-07-31 기사</a>가 그 기능을 2차·3차 서브타이밍을 자동으로 조이는 것으로 설명합니다.</p>
+<p>지연 숫자는 다른 벤치입니다. CPU는 Ryzen 7 9800X3D, 보드는 MSI B850MPOWER, 측정은 AIDA64, 속도는 DDR5-6000입니다. 메모리는 G.SKILL 16GB×2 두 종류입니다.</p>
+<table>
+<thead>
+<tr>
+<th>킷</th>
+<th>타이밍 표기</th>
+<th style="text-align: right;">고효율 모드 끔</th>
+<th style="text-align: right;">Tightest</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>일반 EXPO, F5-6000J3038F16GX2-TZ5N</td>
+<td>CL30-38-38-96</td>
+<td style="text-align: right;">79.4 ns</td>
+<td style="text-align: right;">71.6 ns</td>
+</tr>
+<tr>
+<td>EXPO ULL, F5-6000A3038F16GX2-TZ5NXRK</td>
+<td>CL30-38-38-32</td>
+<td style="text-align: right;">71.4 ns</td>
+<td style="text-align: right;">71.1 ns</td>
+</tr>
+</tbody>
+</table>
+<p>출처는 MSI 2026-07-30 표입니다. 79.4에서 71.6으로 줄어든 비율은 (79.4−71.6)/79.4 = <strong>9.8%</strong>이고, <a href="https://www.tomshardware.com/pc-components/motherboards/msi-promises-an-expo-ull-like-boost-for-your-existing-ddr5-high-efficiency-mode-brings-low-latency-tuning-to-older-ram">Tom's Hardware 2026-07-31 기사</a>도 9.8%라고 적습니다. Tightest를 켠 일반 킷 71.6 ns와 ULL 킷의 기본 71.4 ns 차이는 <strong>0.2 ns</strong>입니다. ULL 킷에 같은 모드를 더하면 71.4 ns에서 71.1 ns입니다. MSI는 둘 다 특정 타이밍을 최적화하므로 ULL 킷에서는 이득이 아주 제한적이라고 적습니다.</p>
+<p>이 두 킷의 앞 세 숫자(30-38-38)는 같고, 네 번째인 tRAS는 96과 32로 다릅니다. Tom's Hardware 가격 기사는 tRAS를 판매 페이지가 보여주는 네 개 1차 타이밍 중 하나로 둡니다. TweakTown은 이 비교를 “같은 1차 타이밍”이라고 적는데, MSI와 Tom's Hardware가 실은 문자열은 30-38-38-96과 30-38-38-32입니다. 서브타이밍만의 차이로 읽으면 공개된 1차 표기와 어긋납니다.</p>
+<p>이 AIDA64 표에는 읽기·쓰기·복사 대역폭(MB/s)이 없습니다. 데이터 레이트는 양쪽 모두 6000 MT/s입니다. 서브타이밍을 조이면 컨트롤러가 덜 멈추면서 실효 대역폭이 오를 수는 있으나, MSI가 그 벤치에서 공개한 열은 지연(ns)입니다.</p>
+<h3 id="_4">디코드가 대역폭에 묶이는 이유</h3>
+<p>토큰 생성(디코드)은 배치 1에서 토큰 하나를 낼 때마다 그 토큰이 쓰는 가중치를 다시 읽습니다. 프리필은 프롬프트의 많은 토큰이 같은 가중치를 재사용해서, 바이트당 연산이 많습니다. 그래서 같은 메모리 변경이 초당 토큰에는 크게 보이고, 첫 토큰까지 시간(TTFT)에는 작게 보이는 패턴이 납니다. MSI 표가 그 모양입니다. AMD RTX 5080에서 전송률과 모드를 합친 tokens/s는 기본 대비 <strong>+32%</strong>이고, TTFT 감소는 <strong>12.7%</strong>입니다.</p>
+<p>다만 “모델 전체 가중치”는 이 벤치의 모델에 그대로 적용되지 않습니다. <a href="https://huggingface.co/google/gemma-4-26B-A4B">Gemma 4 26B A4B 카드</a>는 Mixture-of-Experts입니다. 총 파라미터 <strong>25.2B</strong>, 토큰당 활성 <strong>3.8B</strong>, 층 <strong>30</strong>, 전문가 <strong>128개에 공유 1개</strong>, 활성 전문가는 <strong>8개</strong>입니다. 카드는 이름 가운데 A를 active parameters로 풀고, 추론 때는 약 4B 부분집합만 활성화된다고 적습니다. 전체 25.2B를 매 토큰 읽는 밀집 모델의 경험칙과, 활성 3.8B만 읽는 MoE의 경험칙은 바이트 수가 다릅니다.</p>
+<p>시스템 RAM이 그 경로에 끼는 이유는 MSI가 적은 오프로드입니다. 방법 절은 LM Studio에서 Gemma 4 26B A4B를 열고, 컨텍스트 <strong>8192</strong>, GPU offload는 기본값으로 <strong>RTX 5090 = 30, 그 외 = 19</strong>라고 합니다. 카드의 층 수는 30이고, 5090의 오프로드 값만 30입니다. 이 글은 LM Studio를 실행하지 않았습니다. 커뮤니티 프리셋은 이 칸을 “GPU Offload: 24 layers”처럼 <a href="https://lmstudio.ai/mitroshenkov87/huihui-gemma-4-26b-abliterated-4090-16-gb">층 수</a>로 적고, 다른 사용기는 같은 모델의 GPU 오프로드 상한을 <a href="https://note.com/catap_art3d/n/nf3fdfbe5928f">30</a>으로 적습니다. 카드의 30층과 그 숫자가 같습니다. 그 대응으로 읽으면 5090은 30층을 모두 GPU에 두고, 퍼센트가 공개된 나머지 카드는 19층만 GPU에 둡니다. <strong>11층은 GPU 밖에 남습니다.</strong> RTX 5080, 5070 Ti, 5070, 5060 Ti의 문장이 이쪽입니다. 5090의 tokens/s 변화는 그 본문에 없습니다.</p>
+<p>가중치가 GPU 메모리에 있으면 디코드의 바이트는 GDDR을 탑니다. 시스템 DDR을 4800에서 8000으로 올려도 그 조각의 상한은 그대로입니다. 11층이 시스템 RAM에 있으면, 그 층의 활성 가중치를 매 토큰 DDR에서 읽습니다. 그래서 이 벤치에서 시스템 메모리 속도가 tokens/s에 나타납니다. 모델 전체가 VRAM에 있는 구성으로 이 퍼센트를 옮기면 안 됩니다.</p>
+<p>컨텍스트 8192는 카드의 256K보다 훨씬 짧습니다. 이 런은 긴 문맥의 KV 캐시가 메모리를 채우는 테스트가 아닙니다. 프롬프트는 블로그 URL을 주고 요약을 요청하는 한 종류입니다. 반복 횟수와 오차 막대는 없습니다.</p>
+<p>피크 대역폭으로 상한을 가늠하면 아래와 같습니다. DDR5 모듈의 데이터 폭은 32비트 서브채널 두 개로 <strong>64비트 = 8바이트</strong>이고, 데스크탑 듀얼채널이면 채널이 둘입니다. DDR5-4800의 피크는 4800×8×2 = <strong>76.8 GB/s</strong>, DDR5-8000은 <strong>128 GB/s</strong>입니다. 8000/4800−1 = <strong>+66.7%</strong>입니다. 고효율 모드는 이 식의 MT/s를 바꾸지 않습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># 상한 추정. MSI는 양자화를 적지 않았다. 이 글은 LM Studio를 실행하지 않았다.</span>
+<span class="c1"># GPU 층 시간은 0으로 둔다. 실제 tokens/s는 이보다 낮다.</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">decode_upper_bound</span><span class="p">(</span><span class="n">mt_s</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">bytes_per_param</span><span class="p">,</span> <span class="n">cpu_frac</span><span class="p">,</span> <span class="n">channels</span><span class="o">=</span><span class="mi">2</span><span class="p">):</span>
+    <span class="n">bandwidth</span> <span class="o">=</span> <span class="n">mt_s</span> <span class="o">*</span> <span class="mi">1_000_000</span> <span class="o">*</span> <span class="mi">8</span> <span class="o">*</span> <span class="n">channels</span>
+    <span class="k">return</span> <span class="n">bandwidth</span> <span class="o">/</span> <span class="p">(</span><span class="n">params</span> <span class="o">*</span> <span class="n">bytes_per_param</span> <span class="o">*</span> <span class="n">cpu_frac</span><span class="p">)</span>
+
+<span class="n">ACTIVE</span> <span class="o">=</span> <span class="mf">3.8e9</span>     <span class="c1"># 카드의 active parameters</span>
+<span class="n">TOTAL</span> <span class="o">=</span> <span class="mf">25.2e9</span>     <span class="c1"># 카드의 total parameters</span>
+<span class="n">CPU_FRAC</span> <span class="o">=</span> <span class="mi">11</span> <span class="o">/</span> <span class="mi">30</span>  <span class="c1"># 오프로드 19이면 30층 중 11층이 GPU 밖이라는 비례 가정</span>
+
+<span class="k">for</span> <span class="n">mt</span> <span class="ow">in</span> <span class="p">(</span><span class="mi">4800</span><span class="p">,</span> <span class="mi">8000</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">label</span><span class="p">,</span> <span class="n">bpp</span><span class="p">,</span> <span class="n">frac</span><span class="p">,</span> <span class="n">params</span> <span class="ow">in</span> <span class="p">(</span>
+        <span class="p">(</span><span class="s2">"활성 fp16, 11/30층"</span><span class="p">,</span> <span class="mf">2.0</span><span class="p">,</span> <span class="n">CPU_FRAC</span><span class="p">,</span> <span class="n">ACTIVE</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"활성 q4, 11/30층"</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="n">CPU_FRAC</span><span class="p">,</span> <span class="n">ACTIVE</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"활성 q4, 전부 CPU"</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">ACTIVE</span><span class="p">),</span>
+        <span class="p">(</span><span class="s2">"전체 25.2B q4, 전부 CPU"</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="n">TOTAL</span><span class="p">),</span>
+    <span class="p">):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"DDR5-</span><span class="si">{</span><span class="n">mt</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">label</span><span class="si">}</span><span class="s2">: </span><span class="si">{</span><span class="n">decode_upper_bound</span><span class="p">(</span><span class="n">mt</span><span class="p">,</span><span class="w"> </span><span class="n">params</span><span class="p">,</span><span class="w"> </span><span class="n">bpp</span><span class="p">,</span><span class="w"> </span><span class="n">frac</span><span class="p">)</span><span class="si">:</span><span class="s2">.1f</span><span class="si">}</span><span class="s2"> tok/s"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>이 식을 그대로 돌리면 듀얼채널 기준 상한은 다음과 같습니다. 11/30은 층 수로 활성 파라미터를 나눈 가정이고, 전문가 크기가 층마다 같다는 뜻은 아닙니다.</p>
+<table>
+<thead>
+<tr>
+<th>가정</th>
+<th style="text-align: right;">DDR5-4800</th>
+<th style="text-align: right;">DDR5-8000</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>활성 3.8B, fp16, 11/30만 DDR</td>
+<td style="text-align: right;">27.6 tok/s</td>
+<td style="text-align: right;">45.9 tok/s</td>
+</tr>
+<tr>
+<td>활성 3.8B, 4비트, 11/30만 DDR</td>
+<td style="text-align: right;">110.2 tok/s</td>
+<td style="text-align: right;">183.7 tok/s</td>
+</tr>
+<tr>
+<td>활성 3.8B, 4비트, 활성 가중치 전부 DDR</td>
+<td style="text-align: right;">40.4 tok/s</td>
+<td style="text-align: right;">67.4 tok/s</td>
+</tr>
+<tr>
+<td>전체 25.2B, 4비트, 전부 DDR</td>
+<td style="text-align: right;">6.1 tok/s</td>
+<td style="text-align: right;">10.2 tok/s</td>
+</tr>
+</tbody>
+</table>
+<p>마지막 행이 “매 토큰 모델 전체를 읽는다”를 이 MoE에 적용한 경우입니다. 활성 파라미터만 읽는 행과 바이트가 약 6.6배 차이 납니다. MSI는 절대 tokens/s를 공개하지 않았으므로, 위 표는 LM Studio 화면의 재현이 아닙니다. 실측은 피크보다 낮습니다. 큰 순차 읽기도 피크에 못 미치고, 전문가 가중치는 한 덩어리 순차 읽기가 아니며, GPU에 올라간 19층도 시간이 듭니다. 양자화는 방법 절에 없습니다. fp16과 4비트는 그 빈칸의 양쪽입니다.</p>
+<p>같은 식이 말하는 또 하나는, DDR만 병목이고 GPU 시간이 0이면 4800→8000의 tokens/s 상한이 <strong>+66.7%</strong>라는 점입니다. MSI가 적은 AMD RTX 5080의 8000 MT/s 단독 이득은 <strong>+21.4%</strong>입니다. 상한보다 작습니다. GPU에 있는 층, 소프트웨어, 지연이 시스템 DDR 비율을 희석한다는 뜻으로 읽을 수 있고, 그 희석의 크기를 이 글이 따로 측정하지는 않았습니다.</p>
+<h3 id="msi-llm">MSI가 적은 LLM 숫자</h3>
+<p>공통 조건은 위와 같습니다. 비교는 세 칸입니다. (1) 기본, RAM 4800 MT/s. (2) 8000 MT/s. (3) 8000 MT/s에 고효율 모드. AMD는 Tighter입니다. CPU는 AMD Ryzen 9 9950X3D2와 Intel Core Ultra 7 270K Plus, 보드는 MEG X870E ACE MAX와 MEG Z890 ACE, DRAM은 ADATA 24GB×2 DDR5입니다. 키트의 정격 속도는 이 절에 없습니다. 8000은 테스트 프로파일의 오버클럭입니다. GPU 명단에는 RTX 5090 32G SUPRIM SOC, 5080 16G, 5070 Ti 16G, 5070 12G, 5060 Ti 16G가 있습니다.</p>
+<p>AMD, tokens/s, 4800 대비:</p>
+<table>
+<thead>
+<tr>
+<th>GPU</th>
+<th style="text-align: right;">8000 MT/s</th>
+<th style="text-align: right;">8000 + Tighter</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTX 5080 16G, RTX 5070 12G</td>
+<td style="text-align: right;">+21.4%</td>
+<td style="text-align: right;">+32%</td>
+</tr>
+<tr>
+<td>RTX 5070 Ti 16G</td>
+<td style="text-align: right;">+17.6%</td>
+<td style="text-align: right;">+26.8%</td>
+</tr>
+</tbody>
+</table>
+<p>AMD TTFT, 4800 대비: RTX 5080은 8000에서 6.3% 줄고, 고효율 모드까지 켜면 12.7% 줄어듭니다. RTX 5060 Ti 16G의 감소는 14.5%로 적혀 있고, 그 문장은 모드까지 켠 뒤의 문단입니다.</p>
+<p>Intel 쪽 문장은 “최대 43%”입니다. tokens/s, 4800 대비:</p>
+<table>
+<thead>
+<tr>
+<th>GPU</th>
+<th style="text-align: right;">8000 MT/s</th>
+<th style="text-align: right;">8000 + 고효율 모드</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>RTX 5080 16G</td>
+<td style="text-align: right;">+25.7%</td>
+<td style="text-align: right;">+43.5%</td>
+</tr>
+<tr>
+<td>RTX 5070 Ti 16G</td>
+<td style="text-align: right;">+24.9%</td>
+<td style="text-align: right;">+42.4%</td>
+</tr>
+<tr>
+<td>RTX 5070 12G</td>
+<td style="text-align: right;">+17.8%</td>
+<td style="text-align: right;">30%를 넘김</td>
+</tr>
+</tbody>
+</table>
+<p>Intel TTFT는 8000만으로는 테스트한 GPU 모두 10% 미만입니다. 모드를 더하면 RTX 5070 12G가 15.9% 줄고, 5080과 5070 Ti도 줄었다고만 적습니다. 그 둘의 TTFT 퍼센트는 없습니다.</p>
+<p>모드만 떼려면 8000 칸을 기준으로 다시 나눠야 합니다. 이 글의 계산입니다. AMD 5080·5070의 +32%는 8000 대비 (1.32/1.214)−1 = <strong>+8.7%</strong>입니다. AMD 5070 Ti는 (1.268/1.176)−1 = <strong>+7.8%</strong>입니다. Intel 5080의 +43.5%는 8000 대비 (1.435/1.257)−1 = <strong>+14.2%</strong>이고, 5070 Ti는 (1.424/1.249)−1 = <strong>+14.0%</strong>입니다. 광고에 가까운 32%포인트 가운데 21.4포인트, 43.5%포인트 가운데 25.7포인트는 4800→8000입니다. 모드 몫이 0이라는 뜻은 아닙니다. Intel 5080에서는 8000 위에 약 14%가 더 붙습니다. 그 14%가 43%의 전부는 아닙니다.</p>
+<h3 id="_5">안정성</h3>
+<p>2026-07-30 글의 주의는 두 줄입니다. 고효율 모드는 RAM 타이밍을 바꾸므로 시스템이 불안정해질 수 있고, 결과는 설정과 하드웨어에 따라 다릅니다. FAQ는 불안정하면 더 느슨한 프리셋으로 내리라고 합니다. 그 페이지에서 이 글이 읽은 텍스트에는 MemTest86나 OCCT라는 이름이 없습니다.</p>
+<p><a href="https://www.tweaktown.com/news/112947/msi-adds-a-bios-toggle-to-tighten-standard-ddr5-timings-closer-to-expo-ull-kits/index.html">TweakTown</a>은 MSI가 보수적인 프리셋에서 시작해 MemTest86나 OCCT로 스트레스 테스트를 하라고 권한다고 적습니다. 도구 이름은 그 기사의 전언입니다. <a href="https://hothardware.com/news/msi-unlocks-ull-performance-standard-ddr5">HotHardware의 2026-07-31 기사</a>는, 확인한 범위에서 이 기능이 안정성 검사나 검증을 스스로 하지 않으며 사용자가 확인해야 한다고 적습니다. 한 줄로 말하면, BIOS가 부팅에 성공한 것과 긴 추론이 버티는 것은 같은 검사가 아닙니다.</p>
+<h2 id="_6">비즈니스 인사이트</h2>
+<p>숫자와 문서 내용은 문장 옆에 출처를 붙입니다. 그 밖의 판단은 <strong>분석:</strong> 또는 <strong>(의견)</strong>으로 적습니다. 이 글은 유통 재고를 직접 조회하지 않았습니다.</p>
+<p><strong>보드 벤더는 EXPO ULL을 BIOS 기능으로 나눠 갖습니다.</strong> MSI의 2026-07-30 글은 ULL 킷을 새로 사지 않아도 고효율 모드로 지연을 낮출 수 있다고 위치를 잡습니다. 같은 시기 다른 보드의 공개 BIOS도 ULL 프로파일 지원을 적습니다. <a href="https://www.gigabyte.com/Motherboard/X870-AORUS-ELITE-WIFI7-rev-12/support">GIGABYTE X870 AORUS ELITE WIFI7 rev 1.2 지원 페이지</a>의 BIOS FA4(2026-05-21, AGESA 1.3.0.1)는 “AMD EXPO Technology: Featuring Ultra Low Latency support”이고, FA5e(2026-10-19, AGESA 1.3.0.1e)는 “Optimized performance for AMD EXPO Technology: Featuring Ultra Low Latency”입니다. 이 문장은 ULL 킷을 인식하는 쪽이지, MSI처럼 일반 킷의 서브타이밍을 네 단계로 조인다는 뜻은 아닙니다. <a href="https://www.tweaktown.com/news/111266/amd-launches-expo-1-2-for-cudimm-and-low-latency-ddr5-memory-with-asus-among-the-first-to-enable-support-on-x870-boards/index.html">TweakTown 2026-04-24</a>은 EXPO 1.2가 저지연 모드와 ULL 킷을 포함한다고 소개하고, ASUS가 X870 계열 베타 BIOS 2301에서 일찍 지원한 쪽이라고 적습니다. 그 기사의 뉴스 소스는 x.com이고, 본문은 오버클러킹 도구 개발자 1usmus의 설명을 전합니다. 이 글은 AMD.com의 EXPO 1.2 규격 페이지를 따로 열지 않았습니다.</p>
+<p><strong>ULL 프리미엄과 DDR 가격은 날짜마다 다른 스냅샷입니다.</strong> Tom's Hardware가 2026-06-29에 Newegg 가격으로 적은 Trident Z5 NeoX(ULL)와 Trident Z5 Neo(일반), 둘 다 DDR5-6000 2×16GB입니다. 기사는 2026-07-02에 전압과 가격을 고쳤다고 적습니다. AMD가 ULL 킷을 일반 EXPO와 “effectively the same price”라고 했다고 이 기사가 전하고, 실제 목록은 그렇지 않다고 적습니다. G.Skill 쪽 설명으로 기사가 전하는 문장은, ULL과 비ULL의 가격이 비슷하다는 것이고, 매장 차이는 더 싸게 사 둔 예전 재고 때문일 수 있다는 것입니다.</p>
+<table>
+<thead>
+<tr>
+<th>1차 타이밍</th>
+<th style="text-align: right;">ULL (NeoX)</th>
+<th style="text-align: right;">일반 (Neo)</th>
+<th>기사가 적은 프리미엄</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>26-36-36-32 대 26-36-36-96</td>
+<td style="text-align: right;">$1,099.99</td>
+<td style="text-align: right;">$699.99</td>
+<td>57%</td>
+</tr>
+<tr>
+<td>28-36-36-32 대 28-36-36-96</td>
+<td style="text-align: right;">$999.99</td>
+<td style="text-align: right;">$559.99</td>
+<td>79%</td>
+</tr>
+<tr>
+<td>30-38-38-32 대 30-38-38-96</td>
+<td style="text-align: right;">$619.99</td>
+<td style="text-align: right;">$544.44</td>
+<td>14%</td>
+</tr>
+<tr>
+<td>36-36-36-76 대 36-36-36-96</td>
+<td style="text-align: right;">$549.99</td>
+<td style="text-align: right;">$499.99</td>
+<td>본문 9%</td>
+</tr>
+</tbody>
+</table>
+<p>제목은 “80% ULL tax”입니다. C28 본문은 79%이고, 표의 (999.99−559.99)/559.99는 <strong>78.6%</strong>입니다. C36 본문은 9%이고, 표의 (549.99−499.99)/499.99는 <strong>10.0%</strong>입니다. C30의 (619.99−544.44)/544.44는 <strong>13.9%</strong>로, 기사의 14%와 맞습니다. TweakTown이 고효율 모드 기사에서 “최대 79%”라고 한 ULL 프리미엄은 이 목록의 C28 쪽을 가리킵니다. MSI가 AIDA64에 쓴 C30 쌍이 아닙니다.</p>
+<p>한 달 뒤 스냅샷은 다릅니다. Tom's Hardware 2026-07-31 고효율 모드 기사의 표는 같은 C30 일반 킷(F5-6000J3038F16GX2-TZ5N)을 <strong>$604.99</strong>, ULL(F5-6000A3038F16GX2-TZ5NXRK)을 <strong>$629.99</strong>로 적고, ULL이 그 위에 <strong>4.1%</strong> 더 비싸다고 합니다. (629.99−604.99)/604.99 = 4.1%입니다. 같은 문단은 품귀 전에 그 일반 킷이 <strong>$119.99</strong>였고, 지금은 원래 MSRP의 <strong>5배를 넘는다</strong>고 합니다. 604.99/119.99 = <strong>5.04배</strong>입니다.</p>
+<p><strong>분석:</strong> 2026년 6월의 C30 ULL 뱃지는 약 14%였고, 7월 말 MSI가 비교한 가격표에서는 약 4%로 좁아져 있었습니다. 그 사이 일반 킷 자체가 $544에서 $605로 올랐습니다. 개발자가 내는 돈의 큰 덩어리는 ULL이라는 이름보다 DDR 품귀입니다. 고효율 모드가 대체하는 것은, 이미 가진 6000 킷의 지연을 ULL 근처로 붙이려는 그 4%에서 14%의 차이입니다. 4800을 8000으로 만드는 칩과 컨트롤러의 여유까지 공짜로 만들지는 않습니다. LLM 벤치의 ADATA 24GB×2가 8000으로 설정된 것은 그 모듈의 정격이 8000이라는 문장이 아닙니다.</p>
+<p><strong>누가 이득을 보나.</strong> (1) MSI 보드에서 Gemma 4 26B A4B처럼 일부 층이 시스템 RAM에 남는 로컬 추론을 하는 사람. 공개된 32%와 43.5%는 그 오프로드(19층) 카드의 벤더 측정입니다. (2) DDR5-6000 일반 EXPO 킷을 이미 갖고 있고, ULL 킷의 지연만 사려다 AIDA64 기준으로 0.2 ns 차이를 본 사람. 그 0.2 ns는 9800X3D와 B850MPOWER, Tightest, 그 두 G.SKILL 킷의 결과입니다. (3) 긴 배치를 무인으로 돌리고, 타이밍 변경 뒤 메모리 테스트를 돌릴 시간이 있는 사람.</p>
+<p>이득이 문서 밖으로 새는 쪽도 분명합니다. 30층이 전부 GPU에 있는 5090 설정은 방법 절에만 있고 퍼센트가 없습니다. VRAM에 다 들어가는 양자화는 시스템 DDR을 거의 안 탑니다. Intel에서 네 개 프리셋 이름이 같은 메뉴에 있는지는 2026-09-24 절차에 없습니다. 게임 프레임은 이 LLM 글의 측정 항목이 아니고, TweakTown은 AIDA64 지연 옆에 게임 벤치가 없었다고 적습니다.</p>
+<p><strong>(의견)</strong> 로컬 추론 기계를 한 대 운영한다면, 클릭의 비용은 라이선스가 아니라 실패 비용입니다. 8.7%나 14%의 tokens/s는 긴 잡에서 의미가 있습니다. 그 대가로 한 시간에 한 번 재부팅이 나면 처리량은 마이너스입니다. 벤더 벤치의 기준점이 JEDEC에 가까운 4800이라는 점은, 이미 EXPO 6000으로 쓰는 사람 기준으로 32%가 남아 있지 않다는 뜻이기도 합니다. 6000에서 8000, 그리고 Tighter가 자기 모듈에서 안정한지는 블로그가 대신 보증하지 않습니다.</p>
+<p><strong>(의견)</strong> 마케팅 문장 “추가 하드웨어 없이, 클릭 몇 번”은 두 변경을 한 변경처럼 묶습니다. MSI 본문도 “zero-cost optimization”이라고 적습니다. 전송률을 4800에서 8000으로 올리는 일은 가진 모듈이 그 속도를 버틸 때만 비용이 0입니다. 서브타이밍 프리셋은 그 다음 칸입니다. 구매 비교는 “ULL 킷을 살까”와 “지금 킷을 8000까지 올릴 수 있나”를 따로 두는 편이 블로그의 세 프로파일과 맞습니다.</p>
+<h2 id="_7">팩트 체크</h2>
+<p>✅ 1차 자료와 맞음 / ⚠️ 핵심은 맞거나 범위·기준점·플랫폼이 빠짐 / ❌ 1차 자료와 어긋남</p>
+<p>원본은 <a href="https://x.com/ma_sane39/status/2119501016886558748">@ma_sane39, 2026-11-09 03:43 KST</a>입니다. 인용된 공식 포스트는 플랫폼을 적지 않은 채 “up to 43%”만 말합니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>고효율 모드는 CPU 오버클럭이 아니다. BIOS의 메모리 최적화다.</td>
+<td>✅</td>
+<td>MSI 2026-07-30: built-in memory optimization. 2026-09-24도 OC 메뉴의 메모리 항목으로 안내. CPU 부스트는 2024-08-15 글의 별도 기능인 PBO Enhanced Mode.</td>
+</tr>
+<tr>
+<td>AM5 보드에서 DDR5를 쓸 때 켤 수 있다.</td>
+<td>✅</td>
+<td>2026-09-24 AMD 절차: EXPO 또는 A-XMP 확인 후 High-Efficiency Mode. 네 개 프리셋은 그 AMD 절에 있음.</td>
+</tr>
+<tr>
+<td>그 기능이 AM5에만 있다.</td>
+<td>⚠️</td>
+<td>한국어 포스트는 “AM5에서 켤 수 있다”고 했지 “AM5만”이라고 쓰지는 않았습니다. 다만 43%가 나온 플랫폼은 그 글에 없습니다. 같은 MSI 글의 Intel 절차는 MEG Z890 ACE에서 Memory Extension Mode → High-Efficiency Mode.</td>
+</tr>
+<tr>
+<td>하는 일은 메모리 타이밍을 조이는 것이다.</td>
+<td>✅</td>
+<td>MSI 2026-07-30: 타이밍 조정, 불안정할 수 있음. FAQ: Tightest가 가장 공격적.</td>
+</tr>
+<tr>
+<td>EXPO는 보통 1차 타이밍만 조절하고, 고효율 모드는 그 위에 2차·3차를 조인다.</td>
+<td>⚠️</td>
+<td>MSI는 EXPO가 주파수와 타이밍을 적용한다고 하고, ULL이 일부 서브타이밍을 조인다고 합니다. “1차만”은 MSI 문장이 아닙니다. Tom's Hardware 2026-06-29는 판매 페이지가 1차 네 개(CL, tRCD, tRP, tRAS)만 보여주고 2차의 상당수는 안 보인다고 합니다. TweakTown은 고효율 모드를 2차·3차로 설명합니다. 비교 킷의 tRAS는 96 대 32로, 1차 표기 자체가 다릅니다.</td>
+</tr>
+<tr>
+<td>그래서 지연이 줄고 대역폭이 늘어난다.</td>
+<td>⚠️</td>
+<td>지연 감소는 AIDA64로 공개됨. 79.4 ns → 71.6 ns (Tightest, DDR5-6000). 같은 표에 대역폭 MB/s는 없고 데이터 레이트는 6000 그대로. 대역폭이 늘어나는 측정은 4800→8000 쪽입니다.</td>
+</tr>
+<tr>
+<td>프리셋은 Tightest, Tighter, Balance, Relax 네 개다.</td>
+<td>✅</td>
+<td>2024-08-15, 2026-07-30, 2026-09-24 AMD 절차가 같은 네 이름. Intel 절차에는 이름이 없음.</td>
+</tr>
+<tr>
+<td>수율에 따라 고르며, Tightest가 제일 빠르지만 모듈마다 안 될 수 있다.</td>
+<td>✅</td>
+<td>2026-07-30: 오버클럭 여유에 맞춰 고름. Tightest가 가장 공격적, 불안정하면 느슨한 프리셋. “제일 빠르다”의 처리량 순위표는 그 글에 없고, 지연 벤치는 Tightest 한 칸만 공개.</td>
+</tr>
+<tr>
+<td>토큰마다 모델 전체 가중치를 메모리에서 읽는다.</td>
+<td>❌</td>
+<td>벤치 모델은 Gemma 4 26B A4B. 카드: 총 25.2B, 활성 3.8B, 전문가 8/128+공유 1. 밀집 모델의 경험칙을 이 MoE에 그대로 쓰면 바이트를 약 6.6배 크게 잡습니다.</td>
+</tr>
+<tr>
+<td>메모리 대역폭과 지연이 곧 LLM 속도다.</td>
+<td>⚠️</td>
+<td>배치 1 디코드에서, 시스템 RAM에 남은 층의 활성 가중치에 한해 대역폭이 상한을 만듭니다. MSI의 tokens/s 변화가 TTFT보다 큰 것은 그 방향과 맞습니다. VRAM에 다 들어간 모델의 속도는 시스템 DDR이 아니고, 지연(ns)만으로 32%가 설명되지도 않습니다.</td>
+</tr>
+<tr>
+<td>9950X3D2에 DDR5-8000과 고효율 모드를 켜면 AI 성능이 최대 32%다.</td>
+<td>✅</td>
+<td>MSI 2026-09-24 AMD 절. RTX 5080과 RTX 5070이 +32%, 5070 Ti는 +26.8%. 기준은 4800. 프리셋은 Tighter. 32%는 모드 단독이 아닙니다.</td>
+</tr>
+<tr>
+<td>같은 AMD 테스트의 특정 LLM에서 최대 43%다.</td>
+<td>❌</td>
+<td>43%는 Intel Core Ultra 7 270K Plus 절의 상한입니다. RTX 5080은 43.5%, 5070 Ti는 42.4%. 모델은 AMD와 같은 Gemma 4 26B A4B이고, 다른 LLM이 아닙니다. 공식 영문 포스트의 “up to 43%”는 CPU를 적지 않습니다.</td>
+</tr>
+<tr>
+<td>32%와 43%가 고효율 모드만의 효과다.</td>
+<td>⚠️</td>
+<td>한국어 포스트는 “8000 + 고효율 모드”라고 조건을 같이 적습니다. 다만 이유 절은 모드가 43%의 이유인 것처럼 읽힙니다. 4800 대비 포인트의 대부분은 전송률입니다. 8000 대비 모드 몫은 이 글의 계산으로 AMD 5080 +8.7%, Intel 5080 +14.2%.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 고효율 모드는 CPU 오버클럭이 아니라 MSI BIOS의 메모리 타이밍 프리셋이고, AMD 경로에는 Tightest, Tighter, Balance, Relax가 있습니다. 로컬 LLM 숫자의 32%는 Ryzen 9 9950X3D2, 43%(본문 43.5%)는 Core Ultra 7 270K Plus이며, 둘 다 Gemma 4 26B A4B를 DDR5-4800과 비교한 값입니다. 9950X3D2에서 43%가 나온 테스트는 그 블로그에 없습니다. 공개된 퍼센트는 GPU offload 19인 카드 쪽이고, 카드상 30층 가운데 11층이 GPU 밖에 남는 조건입니다. 4800→8000이 포인트의 다수이고, 모드만의 추가분은 그 벤치에서 한 자릿수에서 약 14%입니다.</p>
+<h2 id="_8">참고 자료</h2>
+<ul>
+<li>로컬 LLM 벤치 — <a href="https://us.msi.com/blog/msi-high-efficiency-mode-tested-maximize-local-llm-ai-performance">MSI, 2026-09-24, Lindas Wu</a>. Gemma 4 26B A4B, LM Studio, 컨텍스트 8192, GPU offload 5090=30 · 그 외=19, 4800 / 8000 / 8000+고효율 모드(AMD는 Tighter).</li>
+<li>EXPO ULL 비교 — <a href="https://www.msi.com/blog/msi-high-efficiency-mode-one-click-to-expo-ultra-low-latency-level-performance">MSI, 2026-07-30, Manny Chang</a>. AIDA64, 9800X3D, B850MPOWER, 79.4 ns→71.6 ns, ULL 71.4 ns→71.1 ns.</li>
+<li>기능의 2024년 안내 — <a href="https://us.msi.com/blog/boost-the-performance-of-amd-ryzen-9000-series-msi-pbo-enhanced-mode-set-thermal-point-and-high-efficiency-mode">MSI, 2024-08-15, Manny Chang</a>. 네 개 프리셋. PBO Enhanced Mode는 별도.</li>
+<li>모델 카드 — <a href="https://huggingface.co/google/gemma-4-26B-A4B">google/gemma-4-26B-A4B</a>. 25.2B 총파라미터, 3.8B 활성, 30층, 전문가 8/128+공유 1, 컨텍스트 256K.</li>
+<li>지연과 킷 가격(7월 31일) — <a href="https://www.tomshardware.com/pc-components/motherboards/msi-promises-an-expo-ull-like-boost-for-your-existing-ddr5-high-efficiency-mode-brings-low-latency-tuning-to-older-ram">Tom's Hardware, 2026-07-31, Zhiye Liu</a>. C30 일반 $604.99, ULL $629.99, 프리미엄 4.1%. 품귀 전 $119.99.</li>
+<li>ULL 출시 가격 — <a href="https://www.tomshardware.com/pc-components/ram/amd-expo-ull-ram-drops-at-jaw-dropping-usd1-099-despite-promises-of-it-being-effectively-the-same-price-ddr5-6000-c26-32gb-kit-sports-80-percent-ull-tax">Tom's Hardware, 2026-06-29, 정정 2026-07-02</a>. C26 $1,099.99 대 $699.99, C28 $999.99 대 $559.99, C30 $619.99 대 $544.44.</li>
+<li>2차·3차 설명과 안정성 도구 전언 — <a href="https://www.tweaktown.com/news/112947/msi-adds-a-bios-toggle-to-tighten-standard-ddr5-timings-closer-to-expo-ull-kits/index.html">TweakTown, 2026-07-31, Hassam Nasir</a>.</li>
+<li>내장 안정성 검증이 없다는 평가 — <a href="https://hothardware.com/news/msi-unlocks-ull-performance-standard-ddr5">HotHardware, 2026-07-31, Zak Killian</a>.</li>
+<li>다른 벤더의 ULL BIOS — <a href="https://www.gigabyte.com/Motherboard/X870-AORUS-ELITE-WIFI7-rev-12/support">GIGABYTE X870 AORUS ELITE WIFI7 rev 1.2</a>, BIOS FA4(2026-05-21)와 FA5e(2026-10-19).</li>
+<li>EXPO 1.2와 ASUS 베타 BIOS 2301 — <a href="https://www.tweaktown.com/news/111266/amd-launches-expo-1-2-for-cudimm-and-low-latency-ddr5-memory-with-asus-among-the-first-to-enable-support-on-x870-boards/index.html">TweakTown, 2026-04-24</a>. 소스는 1usmus의 X 포스트로 기사가 밝힘.</li>
+<li>원본 X — <a href="https://x.com/ma_sane39/status/2119501016886558748">@ma_sane39, 2026-11-09 03:43 KST</a></li>
+<li>인용된 공식 X — <a href="https://x.com/msigaming/status/2119414646637826388">@msigaming, 2026-11-08 22:00 KST</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
