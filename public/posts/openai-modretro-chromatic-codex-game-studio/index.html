@@ -1,0 +1,327 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>오픈AI 게임기인가, ModRetro Chromatic인가? Supply Co. 예고 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-09 · <span class="chip">#OpenAI</span><span class="chip">#Codex</span><span class="chip">#ModRetro</span><span class="chip">#Chromatic</span><span class="chip">#GB Studio</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">오픈AI 게임기인가, ModRetro Chromatic인가? Supply Co. 예고 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#_3">영상이 실제로 보여 주는 것</a></li>
+<li><a href="#13-rom">협업 페이지와 13개 ROM</a></li>
+<li><a href="#codex-rom">Codex에서 ROM까지</a></li>
+<li><a href="#game-boy-color-gb-studio">Game Boy Color와 GB Studio가 남기는 상한</a></li>
+</ul>
+</li>
+<li><a href="#_4">비즈니스 인사이트</a></li>
+<li><a href="#_5">팩트 체크</a></li>
+<li><a href="#_6">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/i/status/2119541521922032103">@0ooooo0(아이반 IVAN)의 포스트</a>를 계기로 썼습니다. <code>screen_name</code>은 <code>0ooooo0</code>이고, 표시 이름은 아이반 IVAN입니다. 이 환경의 X API는 <code>client-not-enrolled</code>로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2119541521922032103">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. <code>created_at</code>은 <code>Sun Nov 08 21:24:12 +0000 2026</code>, <strong>2026-11-09 06:24 KST</strong>입니다. 그 응답의 본문은 이렇습니다. “속보) 오픈AI, AI 게임기 출시 예고.” 이어서 모드레트로 휴대용 게임기 크로매틱 협업으로 오픈AI 게임기가 나온다는 말, 영상 앞부분의 “바이브 코딩으로 게임 만들었다”와 “개발자 모드 버전도 팔아 달라”, “접수했음(NOTED.)”과 상자, 코덱스로 만든 게임을 이 기계에서 돌리는지는 아직 모르겠다는 말, 영상에는 기능 설명 없이 11월 9일과 Supply Co.만 있고 가격·스펙·한국 판매는 안 나왔다는 말이 있습니다. 같은 응답의 스냅샷은 답글 7, 리포스트 8, 좋아요 27, 북마크 10, 인용 0, 조회 2,871입니다. 프로필 설명은 “AI로 업무 자동화하기 매일 올라가용”으로 시작하고, <code>verification.type</code>은 <code>individual</code>, 팔로워는 14,014입니다. 읽은 시각은 2026-11-09 15:12 KST 무렵입니다.</p>
+<p>그 글이 인용한 공식 포스트는 <a href="https://x.com/OpenAIDevs/status/2119521359185478140">@OpenAIDevs</a>입니다. 같은 시각의 <a href="https://api.fxtwitter.com/status/2119521359185478140">fxtwitter 응답</a>(<code>code</code> 200)에서 본문은 <strong>“Tomorrow.”</strong> 이고, <code>created_at</code>은 <code>Sun Nov 08 20:04:05 +0000 2026</code>, <strong>2026-11-09 05:04 KST</strong>입니다. 스냅샷은 답글 534, 리포스트 695, 좋아요 11,556, 북마크 2,054, 인용 517, 조회 1,216,248입니다. 계정 이름은 OpenAI Developers, <code>verification.type</code>은 <code>organization</code>, 소개는 “Official updates for developers building with Codex &amp; the OpenAI Platform”입니다. 첨부 영상은 길이 15.515초, 1920×1080입니다. 이 글은 720p mp4(길이 15.573초, 컨테이너 <code>creation_time</code> <code>2026-11-08T20:04:06Z</code>)를 받아 앞 8초는 초당 8프레임, 나머지는 초당 2프레임으로 나눠 읽었습니다. X 글과 영상 속 인용 카드의 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+<p>아래 대조는 2026-11-09(KST)에 연 1차 자료입니다. 플러그인을 설치하지 않았고, Chromatic에 연결하거나 카트리지에 쓰지 않았으며, ROM을 에뮬레이터로 실행하지 않았습니다. ROM 절의 숫자는 파일을 받아 헤더 바이트를 읽은 결과입니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>개발자가 볼 질문은 “오픈AI가 콘솔 회사를 차렸는가”보다 다음입니다.</p>
+<ul>
+<li>예고된 상자가 누구의 기계인가. 영상 끝 로고는 <strong>OpenAI | ModRetro Chromatic</strong>입니다.</li>
+<li>Codex가 그 기계에서 네이티브로 게임을 돌리는가, 아니면 GB Studio 프로젝트를 빌드한 ROM을 에뮬레이터와 카트리지로 옮기는가.</li>
+<li>Game Boy Color의 팔레트·스프라이트·타일 한계가 그 워크플로에 그대로 남는가.</li>
+<li>11월 9일 Supply Co. 예고가 가격과 개발자 모드까지 확정했는가.</li>
+</ul>
+<p>코딩 에이전트가 소비자 하드웨어의 제작 도구로 붙는 사례입니다. 붙는 지점이 자유 형식 엔진이 아니라, 화면 160×144와 타일 메모리에 상한이 있는 기존 포맷이라는 점이 실무와 맞닿습니다.</p>
+<h2 id="_2">기술 설명</h2>
+<h3 id="_3">영상이 실제로 보여 주는 것</h3>
+<p>공식 포스트의 글자는 <code>Tomorrow.</code> 뿐입니다. 영상 글자는 따로 있습니다. 앞 8초를 초당 8프레임으로 읽었을 때 순서는 이렇습니다.</p>
+<ol>
+<li><code>CONTINUE</code> / <code>NEW GAME</code> 메뉴.</li>
+<li><code>@letsbuilddd</code>: “one of my best mates / vibe coded a video game”.</li>
+<li><code>@Bentist</code>: “Can't wait to build / some games with / this bad boy!”.</li>
+<li><code>@ANGOmarcello</code>: “I really hope you guys / sell dev mode versions”.</li>
+<li><code>@LLMJunky</code>: “Incredibly cool”.</li>
+<li><code>@Bobbychipman</code>: “If you haven't seen the / codex @ OpenAI x / @modretro collab you / are missing out.”.</li>
+<li>픽셀 글자 <code>NOTED.</code></li>
+<li><code>LOADING...</code></li>
+<li>앞면에 <strong>OpenAI</strong>가 인쇄된 검은 상자. 뚜껑에는 화면, 십자키, 버튼이 있는 휴대 기기 선화가 있습니다. 옆면의 작은 글자는 이 해상도에서 제품명으로 읽지 못했습니다.</li>
+<li><code>NOVEMBER 9</code> / <code>ON SUPPLY CO.</code></li>
+<li>로고 락업 <strong>OpenAI | MODRETRO CHROMATIC</strong>.</li>
+<li>어두운 화면의 나선과 흩어진 픽셀, 그리고 다시 <code>CONTINUE</code> / <code>NEW GAME</code>.</li>
+</ol>
+<p>초당 8프레임에서 이 다섯 장 말고 다른 인용 카드 문장은 보이지 않았습니다. 영상은 가격, 해상도, 배터리, 판매 국가, “개발자 모드가 이 상자에 들어 있다”는 문장을 넣지 않습니다. <code>dev mode</code>는 인용 카드의 요청으로만 나옵니다.</p>
+<h3 id="13-rom">협업 페이지와 13개 ROM</h3>
+<p><a href="https://developers.openai.com/modretro">developers.openai.com/modretro</a>의 문장은 이겁니다. ModRetro와 OpenAI가 ModRetro Chromatic의 게임 제작으로 협업하고, 그 협업은 ModRetro의 휴대 하드웨어와 OpenAI의 코딩 에이전트 Codex를 함께 둔다. “The games in this collection were built with Codex for Game Boy Color.” 브라우저에서 플레이하거나, 호환 하드웨어에 쓸 ROM을 받을 수 있다. 쇼케이스 홈의 카드 문장은 “ModRetro Chromatic Plugin for Codex / Build and play GameBoy Color games on real hardware.”입니다.</p>
+<p>목록은 13개입니다. 각 페이지의 ROM 경로를 2026-11-09에 받아 헤더를 읽었습니다. 헤더 체크섬(0x134–0x14C를 뺀 값의 하위 8비트와 0x14D)은 13개 모두 맞았습니다. Pan Docs 기준 0x143이 <code>$80</code>이면 CGB와 구형 Game Boy 양쪽, <code>$C0</code>이면 CGB 전용입니다. 0x147의 <code>$1B</code>는 MBC5+RAM+BATTERY, <code>$1E</code>는 MBC5+RUMBLE+RAM+BATTERY입니다. 0x146(SGB 플래그)은 13개 모두 <code>0x00</code>이었습니다.</p>
+<table>
+<thead>
+<tr>
+<th>페이지</th>
+<th>파일</th>
+<th style="text-align: right;">바이트</th>
+<th>내부 제목</th>
+<th>0x143</th>
+<th>0x147</th>
+<th>ROM 크기 코드</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>FlapGPT</td>
+<td><code>flapgpt.gb</code></td>
+<td style="text-align: right;">262,144</td>
+<td>FLAPGPT</td>
+<td><code>$C0</code> CGB 전용</td>
+<td><code>$1B</code></td>
+<td><code>$03</code> 256KB</td>
+</tr>
+<tr>
+<td>Ash &amp; Oath</td>
+<td><code>ash-and-oath-campaign.gbc</code></td>
+<td style="text-align: right;">524,288</td>
+<td>ASHAOATH</td>
+<td><code>$C0</code></td>
+<td><code>$1B</code></td>
+<td><code>$04</code> 512KB</td>
+</tr>
+<tr>
+<td>Codex Land</td>
+<td><code>codex-land-three-levels-preview-008.gbc</code></td>
+<td style="text-align: right;">262,144</td>
+<td>CODEXLAND</td>
+<td><code>$C0</code></td>
+<td><code>$1E</code></td>
+<td><code>$03</code> 256KB</td>
+</tr>
+<tr>
+<td>Arc Pocket</td>
+<td><code>arc-pocket-v2.gb</code></td>
+<td style="text-align: right;">131,072</td>
+<td>ARCPOCKET</td>
+<td><code>$80</code> CGB+GB</td>
+<td><code>$1E</code></td>
+<td><code>$02</code> 128KB</td>
+</tr>
+<tr>
+<td>Seedy’s Sweet Garden</td>
+<td><code>sugar-crush-v2.gbc</code></td>
+<td style="text-align: right;">524,288</td>
+<td>SUGARCRUSH</td>
+<td><code>$C0</code></td>
+<td><code>$1E</code></td>
+<td><code>$04</code> 512KB</td>
+</tr>
+<tr>
+<td>Swarmfall</td>
+<td><code>swarmfall.gbc</code></td>
+<td style="text-align: right;">65,536</td>
+<td>SWARMFALL</td>
+<td><code>$C0</code></td>
+<td><code>$1B</code></td>
+<td><code>$01</code> 64KB</td>
+</tr>
+<tr>
+<td>Hollow Descent</td>
+<td><code>hollow-descent.gbc</code></td>
+<td style="text-align: right;">262,144</td>
+<td>HOLLOWDESCENT</td>
+<td><code>$C0</code></td>
+<td><code>$1E</code></td>
+<td><code>$03</code> 256KB</td>
+</tr>
+<tr>
+<td>Cairn &amp; Cinder</td>
+<td><code>cairn-and-cinder.gbc</code></td>
+<td style="text-align: right;">1,048,576</td>
+<td>CAIRN CINDER</td>
+<td><code>$C0</code></td>
+<td><code>$1B</code></td>
+<td><code>$05</code> 1MB</td>
+</tr>
+<tr>
+<td>WhoadexWare</td>
+<td><code>whoadexware-v1.1.0.gbc</code></td>
+<td style="text-align: right;">524,288</td>
+<td>WHOADEXWARE</td>
+<td><code>$C0</code></td>
+<td><code>$1E</code></td>
+<td><code>$04</code> 512KB</td>
+</tr>
+<tr>
+<td>Fetch Frenzy</td>
+<td><code>fetch-frenzy.gbc</code></td>
+<td style="text-align: right;">131,072</td>
+<td>FETCH FRENZY</td>
+<td><code>$C0</code></td>
+<td><code>$1B</code></td>
+<td><code>$02</code> 128KB</td>
+</tr>
+<tr>
+<td>Pizza Dash</td>
+<td><code>pizza-dash.gbc</code></td>
+<td style="text-align: right;">131,072</td>
+<td>PIZZA DASH</td>
+<td><code>$C0</code></td>
+<td><code>$1B</code></td>
+<td><code>$02</code> 128KB</td>
+</tr>
+<tr>
+<td>Cloudfall</td>
+<td><code>cloudfall.gbc</code></td>
+<td style="text-align: right;">262,144</td>
+<td>CLOUDFALL</td>
+<td><code>$C0</code></td>
+<td><code>$1B</code></td>
+<td><code>$03</code> 256KB</td>
+</tr>
+<tr>
+<td>Ember Escape</td>
+<td><code>ember-escape.gbc</code></td>
+<td style="text-align: right;">131,072</td>
+<td>EMBER ESCAPE</td>
+<td><code>$C0</code></td>
+<td><code>$1B</code></td>
+<td><code>$02</code> 128KB</td>
+</tr>
+</tbody>
+</table>
+<p>페이지 문장은 13개 모두를 Game Boy Color용으로 적습니다. 헤더는 그 문장과 맞습니다. 12개는 <code>$C0</code>이고 Arc Pocket만 <code>$80</code>입니다. <code>$80</code>도 컬러 팔레트를 쓰는 CGB 대응 ROM이고, 구형 모노크롬 기동을 헤더가 허용한다는 뜻입니다. 파일 이름만 보면 FlapGPT와 Arc Pocket이 <code>.gb</code>라 모노크롬 전용처럼 보이는데, FlapGPT의 플래그는 <code>$C0</code>입니다. 확장자와 헤더가 다릅니다.</p>
+<p>파일 이름이 페이지 제목과 다른 경우가 있습니다. Codex Land 파일명에는 <code>three-levels-preview-008</code>이 들어 있습니다. 페이지는 그 파일명을 설명하지 않습니다. Seedy’s Sweet Garden 페이지의 파일은 <code>sugar-crush-v2.gbc</code>이고 내부 제목은 <code>SUGARCRUSH</code>입니다. 이 글은 그 바이트만 적고, 다른 게임과의 관계를 짓지 않습니다.</p>
+<p>FlapGPT 페이지는 “Your browser needs Canvas and WebAssembly to play.”라고 적고, 키보드를 Move=화살표, A=<code>X</code>/<code>Space</code>, B=<code>Z</code>, Start=<code>Enter</code>, Select=<code>M</code>으로 적습니다. ROM 링크 문구는 “Download ROM”입니다. 같은 페이지의 “Build your game”은 새 탭으로 열리고, 컬렉션 HTML의 외부 링크는 <a href="https://modretro.com/00011">modretro.com/00011</a>과 <a href="https://modretro.com/blogs/blog/create-for-chromatic">Create for the Chromatic</a>입니다. <code>00011</code>은 이 글의 <code>curl -I</code>에서 301로 <code>chromatic-codex-edition-quickstart-guide-By1iOlcMg</code>에 붙고, 그 주소가 다시 301로 아래 DevDay 퀵스타트에 붙었습니다. 블로그 글은 2024-06-02, 작성자 Chris Beach의 인디 개발 모집 글이고 Codex를 설명하지 않습니다.</p>
+<p>컬렉션은 “built with Codex”라고 적습니다. 커밋 이력, 사람 수정 비율, 플레이 시간은 그 페이지에 없습니다.</p>
+<h3 id="codex-rom">Codex에서 ROM까지</h3>
+<p>절차의 1차 자료는 ModRetro 지원 문서 <a href="https://support.modretro.com/en_us/chromatic-devday-edition-quickstart-guid-By1iOlcMg">Chromatic: DevDay Edition Quickstart Guide</a>입니다. 마크다운 대안 응답의 <code>Last updated</code>는 <code>2026-10-23T22:07:49.242Z</code>(2026-10-24 07:07 KST)입니다. 그 응답의 인용 블록 첫 줄은 “ModRetro Chromatic Codex Edition”이라고 쓰고, 본문 첫 문단은 “ModRetro Chromatic: DevDay Edition”이라고 씁니다. 같은 문서가 두 이름을 같이 둡니다. 11월 9일 영상보다 앞선 갱신입니다.</p>
+<p>문서가 적는 순서는 이렇습니다.</p>
+<ol>
+<li><a href="https://support.modretro.com/en_us/articles/chromatic-firmware-updater-ryhoYnzCx">Chromatic Firmware Updater</a>로 펌웨어를 갱신한다.</li>
+<li>DevDay Edition에 들어 있는 활성화 코드로, 그 컴퓨터의 Chromatic Developer-Mode를 켠다. Firmware Updater에서 <code>Ctrl-I</code>(macOS는 <code>Cmd-I</code>)입니다. 문서 문장은 이 모드가 <strong>그 에디션에 포함된 카트리지</strong>에 만든 게임을 쓸 수 있게 한다는 것입니다.</li>
+<li>Codex 데스크톱을 <a href="https://chatgpt.com/codex/">chatgpt.com/codex</a>에서 설치한다.</li>
+<li>Plugins 탭에서 “ModRetro Chromatic”을 찾아 설치한다.</li>
+<li>새 채팅에서 <code>@</code>로 ModRetro Chromatic Plugin을 붙이고 게임을 설명한다. 문서 문장은 “Game Boy Color compatible devices and emulators”용 스킬을 제공한다는 것입니다.</li>
+</ol>
+<p>준비 프롬프트는 문서에 이렇게 있습니다. 이 글은 실행하지 않았습니다.</p>
+<div class="highlight"><pre><span></span><code>Set up @ModRetro Chromatic Plugin so I can create games, build ROMs, and run automated playtests. Check what’s already installed and prepare the missing dependencies.
+</code></pre></div>
+
+<p>예시는 GB Studio 프로젝트입니다. 플러그인 패키지의 소스 트리는 이 글이 공개 저장소에서 확인하지 못했고, 아래는 가이드가 적어 둔 문장입니다.</p>
+<div class="highlight"><pre><span></span><code>Create and select a new GB Studio project at /absolute/existing-parent/MoonGarden. Make a small exploration game where a gardener collects three seeds and plants them to unlock a gate.
+</code></pre></div>
+
+<p>포함 예제 게임 이름은 “Wrecklight”입니다. 가이드는 그 리믹스를 고르고 오프닝을 버려진 연구 시설로 바꾸라고 적습니다.</p>
+<p>에뮬레이터 단계는 Codex 안의 브라우저 프리뷰입니다.</p>
+<div class="highlight"><pre><span></span><code>Build my selected game and open it in the playable browser preview. Reuse that preview as we make changes.
+</code></pre></div>
+
+<p>실기 단계는 그 다음이고, 문서가 범위를 못 박습니다. “Your game will be run in an emulator and streamed to your Chromatic.” 연결된 Chromatic 위에서 ROM이 카트리지를 읽어 부팅한다는 문장이 아닙니다. 에뮬레이터 화면과 소리를 기기로 보냅니다.</p>
+<div class="highlight"><pre><span></span><code>Stream a two-minute live demo of my built ROM to the connected Chromatic so I can try its controls, video, and audio.
+</code></pre></div>
+
+<p>카트리지에 쓰는 단계는 별도 프롬프트입니다.</p>
+<div class="highlight"><pre><span></span><code>Flash my built homebrew ROM to the connected Chromatic cartridge, then guide me through manual boot, gameplay, and audio checks.
+</code></pre></div>
+
+<p>문서의 면책 요지는 이겁니다. Chromatic 스킬은 사용자가 만든 원본 ROM만 대상이다. 불법 복제, 상용 게임 에뮬레이션, 보호 우회에 쓰지 말 것. Developer mode는 자기 책임이다. 제3자 IP 권리는 사용자가 확인한다. ModRetro는 사용자 콘텐츠를 검토하거나 보증하지 않는다. 사용은 <a href="https://modretro.com/eula">EULA</a>를 따른다.</p>
+<p>이 문서는 DevDay Edition의 코드와 동봉 카트리지를 전제로 플래시를 설명합니다. 스토어의 Smoke나 Cloud 같은 일반 SKU에도 같은 쓰기 경로가 열린다고 적지 않습니다. 11월 9일 영상도 그 코드가 상자에 든다고 적지 않습니다.</p>
+<h3 id="game-boy-color-gb-studio">Game Boy Color와 GB Studio가 남기는 상한</h3>
+<p>플러그인 프롬프트가 “Game Boy hardware limits”를 검사하라고 할 때의 상한은, 이 글이 연 <a href="https://www.gbstudio.dev/docs/project-editor/scenes/limits/">GB Studio 문서</a>와 <a href="https://gbdev.io/pandocs/Palettes.html">Pan Docs</a>에 있습니다. 에이전트가 문장을 잘 따라도 이 숫자 밖으로 픽셀을 늘리지는 못합니다.</p>
+<p>하드웨어 쪽은 Pan Docs입니다. PPU는 오브젝트를 최대 40개, 한 스캔라인에 10개까지 그립니다. 오브젝트 크기는 8×8 또는 8×16입니다. CGB 팔레트 RAM은 배경/윈도용 8개, 오브젝트용 8개이고, 팔레트마다 색 4개입니다. 색 하나는 RGB555입니다. 오브젝트 팔레트의 0번 색은 투명입니다. 배경 타일과 같은 2bpp 타일 포맷입니다.</p>
+<p>GB Studio가 그 위에 두는 엔진 상한은 문서의 Scene Limits입니다. 장면당 액터 20, 트리거 30입니다. 화면으로 읽는 바는 <code>A: 0/20 S: 0/96 T: 0/30</code> 형태이고, <code>S</code>는 스프라이트 시트의 고유 타일 수입니다. 160×144(타일 20×18) 안에 액터가 10개를 넘으면 일부가 안 보일 수 있다고 적습니다. 이 10은 엔진이 하드웨어의 라인당 10오브젝트에 맞춰 둔 경고이고, 액터 하나가 하드웨어 오브젝트 여러 개일 수 있으므로 두 숫자를 같은 카운터로 읽으면 문서와 어긋납니다.</p>
+<p>색 모드는 Settings에 셋입니다. Monochrome은 GB, GB Color, Super GB, Analogue Pocket. Color + Monochrome은 모노크롬 기기에서는 모노크롬으로, 컬러 기기에서는 팔레트로. Color Only는 타일 여유가 늘고 GB Color와 Analogue Pocket에서만 돕니다. Color Only가 아니면 배경 고유 8×8 타일은 장면당 192, Color Only면 384입니다. 가장 작은 배경도 160×144라 192타일 모드에서는 타일을 반복해야 한다고 배경 문서가 적습니다. 스프라이트 타일은 배경과 메모리를 나눕니다. Monochrome과 Color + Monochrome에서 배경이 128타일 이하면 스프라이트 타일 96, 배경이 192타일을 다 쓰면 64입니다. Color Only에서는 그 상한이 192과 128로 올라갑니다.</p>
+<p>장면 팔레트는 배경 8개, 스프라이트 8개입니다. 배경 8번째 팔레트는 대화창과 메뉴에도 쓰입니다. 자동 팔레트로 고유 팔레트가 7개를 넘으면 8번이 덮여 창이 깨질 수 있다고 색 문서가 적습니다.</p>
+<p>스프라이트 PNG가 허용하는 네 색과, 배경과의 차이는 문서에 이렇게 있습니다. <code>#306850</code>은 배경에는 있고 스프라이트에는 없습니다. <code>#65ff00</code>은 스프라이트에서 투명이고 배경에는 쓸 수 없습니다. 목록 밖 색은 가장 가까운 색으로 맞춥니다.</p>
+<div class="highlight"><pre><span></span><code>#071821  darkest
+#306850  backgrounds only
+#86c06c
+#e0f8cf  lightest
+#65ff00  sprite transparency
+</code></pre></div>
+
+<p>스프라이트 프레임의 단순 형태는 16×16을 가로로 잇는 PNG입니다. 한 프레임은 16×16, 걷기 액터는 96×16(앞 둘, 위 둘, 오른쪽 둘, 왼쪽은 오른쪽을 뒤집어 만듦)이라고 Sprites 문서가 적습니다. 짧은 애니메이션은 2프레임(32×16)에서 25프레임(400×16)까지입니다.</p>
+<p>가이드의 팔레트 프롬프트는 이 한계 안에서 “달빛, 파란 그림자, 따뜻한 창” 같은 문장을 색 팔레트로 바꾸라는 요청입니다. 한 타일에 색이 네 개를 넘거나, 장면 팔레트가 8개를 넘으면 GB Studio 빌드 경고의 영역입니다. Settings의 Build Options는 “too many unique tiles or palettes used in a scene” 경고를 예로 듭니다.</p>
+<p>카트리지 타입 기본값은 같은 Settings 문서가 MBC5, Batteryless 끄기라고 적습니다. 받은 13개 파일은 <code>$1B</code> 여덟 개와 <code>$1E</code> 다섯 개라, 저장 RAM 비트와 일부 럼블 비트가 켜져 있습니다. 럼블 비트가 본체 모터를 뜻하는지는 이 헤더만으로 말하지 않습니다. MBC5 럼블은 카트리지 매퍼 플래그입니다.</p>
+<p>Chromatic 상품 페이지가 적는 화면은 이 160×144과 같습니다. <a href="https://modretro.com/products/chromatic-tetris-bundle">chromatic-tetris-bundle</a> 페이지는 “160X144 pixel 2.56” IPS backlit LCD”, “FPGA-based architecture”, Game Boy와 Game Boy Color 카트리지 호환을 적습니다. <a href="https://modretro.com/products/chromatic-transparent">chromatic-transparent</a> 페이지도 160×144 IPS와 FPGA를 적고, “plays all original Game Boy and Game Boy Color cartridges with 100% accuracy, perfect sound, and zero lag”라고 적습니다. 정확도 문장은 ModRetro의 제품 설명이고, 이 글의 측정이 아닙니다.</p>
+<h2 id="_4">비즈니스 인사이트</h2>
+<p>숫자와 페이지 문장은 문장 옆에 출처를 붙입니다. 그 밖의 판단은 <strong>분석/의견</strong>입니다. 11월 9일 상자의 가격, 재고, 한국 배송은 이 글이 연 공식 응답에서 확인하지 못했습니다.</p>
+<p><strong>이미 팔리고 있는 기계는 ModRetro 스토어에 있습니다.</strong> <a href="https://modretro.com/collections/chromatic-consoles">Chromatic Consoles 컬렉션</a>은 Smoke, Purple, Green, Red를 <strong>$149.99 USD</strong>, Cloud, Midnight, Wave, Leaf, Inferno, Volt, Bubblegum을 <strong>From $199.99 USD</strong>로 적습니다. <code>products.json</code>의 <code>chromatic-transparent</code>는 그 네 색의 <code>price</code>가 <code>149.99</code>입니다. <code>product.js</code>의 같은 배리언트 <code>price</code> 정수는 14999입니다. 이 스토어의 달러 표시와 맞으므로 14999는 센트 단위입니다. <code>chromatic-tetris-bundle</code>의 <code>product.js</code>는 Gorilla 조합이 19999, Sapphire 조합이 29999입니다. 컬렉션의 “From $199.99”는 그 하단이고, Sapphire <strong>$299.99</strong>는 상품 JSON에 있습니다. 같은 방식의 <a href="https://modretro.com/products/m64.js">M64 <code>product.js</code></a>는 배리언트 4개의 <code>price</code>가 모두 22999, 즉 <strong>$229.99</strong>입니다. 재고 플래그는 이 글이 판매 가능 여부로 쓰지 않습니다. 홈 문구와 JSON의 <code>available</code>이 어긋날 수 있어, 여기서는 가격만 인용합니다.</p>
+<p><strong>Supply Co.는 이미 Codex 이름의 물건을 파는 채널입니다.</strong> <a href="https://openai.com/supply/">openai.com/supply</a>는 “Supply Co. documents the visual culture surrounding intelligent systems. Our latest drop: a collaboration with Chip Ganassi Racing”이라고 적습니다. 이 환경의 일반 HTTP 클라이언트는 <code>openai.com</code>에서 403이었고, 샵 본문은 페이지 렌더로 읽었습니다. <a href="https://openai.com/supply/shop/">샵</a> 응답에 보인 가격에는 Decal Hoodie $100, ’26 OpenAI 1:64 car $15, Codex Bubble Cap $40, Pixel Nalgene $25, Bloop Tote $45가 있고, <a href="https://openai.com/supply/product/codex-build-hoodie/">Codex Build Hoodie</a>는 $100, <a href="https://openai.com/supply/co-lab/work-louder/">Work Louder와 만든 Codex Micro</a>는 $230입니다. 그 샵 응답의 상품 이름에는 Chromatic도 ModRetro도 없었습니다. 예고 시각(2026-11-09 05:04 KST) 이후, 이 글을 쓴 15시대 KST의 응답이 그렇습니다. 제3자 재고 페이지의 가격은 공식 표로 쓰지 않습니다.</p>
+<p><strong>플러그인 가격표는 퀵스타트에 없습니다.</strong> <a href="https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan">Using Codex with your ChatGPT plan</a>은 Codex가 Free와 Go를 포함한 ChatGPT 플랜에 들어 있고, 사용 한도는 플랜마다 다르며, 현재 한도와 크레딧은 chatgpt.com/pricing을 보라고 적습니다. 그 페이지가 보여 준 갱신 표시는 “Updated: 4 days ago”였습니다. 달력 날짜로 바꾸지 않습니다. Codex Cloud는 Free와 Go에는 없고, 자격이 되는 Plus, 모든 Pro 단계, Business, Enterprise, Healthcare, Education에 롤아웃과 워크스페이스 설정이 붙는다고 같은 글이 적습니다. 퀵스타트가 시키는 클라이언트는 데스크톱 앱입니다.</p>
+<p><strong>분석/의견.</strong> 11월 9일 영상은 새 실리콘을 발표하는 형태가 아니라, 이미 $149.99부터 있는 FPGA 휴대기를 OpenAI 머천다이즈 채널에 올리겠다는 예고에 가깝습니다. 상자 앞면의 OpenAI 로고와 끝 카드의 ModRetro Chromatic이 한 화면에 있으므로, “오픈AI 게임기”라는 속보 문장이 생긴 이유는 있습니다. 사는 사람이 받는 호환 대상은 상품 페이지의 Game Boy / Game Boy Color 카트리지이고, 만드는 사람이 받는 산출물은 GB Studio ROM입니다. 에이전트 사용량은 기기 값과 따로, ChatGPT 플랜 한도에 있습니다. 하드웨어를 사도 플러그인이 한도를 면제한다는 문장은 퀵스타트에 없습니다.</p>
+<p><strong>누가 이 조합을 쓰게 되는가.</strong> (1) Chromatic이 없어도, 가이드의 3–6단계(Codex, 플러그인, GB Studio 프로젝트, 브라우저 프리뷰)까지는 본체가 문서의 조건이 아닙니다. 스트리밍과 플래시부터 본체가 필요합니다. (2) DevDay Edition과 활성화 코드를 가진 사람은 동봉 카트리지에 원본 홈브류를 쓰는 경로가 문서에 있습니다. (3) 컬렉션 ROM만 받으려는 사람은 브라우저나, 파일 헤더가 허용하는 호환 하드웨어가 대상입니다. 페이지는 “compatible hardware”라고만 적습니다. 어느 플래시 카트와 어느 에뮬레이터까지인지는 적지 않습니다.</p>
+<p><strong>분석/의견.</strong> 이득이 갈리는 쪽은 이렇게 보입니다. ModRetro는 자기 하드웨어와 카트리지 포맷을 유지한 채 Codex 사용자에게 노출됩니다. OpenAI는 코딩 에이전트를 웹 데모가 아니라 160×144 실물로 보여 주는 머천다이즈를 얻습니다. GB Studio로 이미 만드는 인디는, 팔레트 8개와 타일 상한을 프롬프트가 검사하게 만들 수 있으면 셋업 문장을 줄일 수 있습니다. 손해를 보는 기대는 “오픈AI가 설계한 차세대 콘솔”, “영상 속 dev mode 요청이 곧 일반 판매 기기의 사양”, “한 문장이 완성 상업 게임”입니다. 컬렉션은 제작 로그를 붙이지 않았고, Codex Land 파일명에는 preview가 남아 있습니다. 활성화 코드가 DevDay Edition에 묶여 있는 한, 공식 카트리지에 굽는 경로는 그 코드를 가진 기계 쪽으로 좁습니다. 시중의 다른 플래시 카트는 이 퀵스타트의 약속 밖입니다.</p>
+<p><strong>분석/의견.</strong> 도입에서 남는 일은 모델 요금이 아니라 검수입니다. 스프라이트에 <code>#65ff00</code> 대신 배경색을 쓰거나, 한 타일에 다섯 색을 넣거나, 160×144 안에 액터를 몰아넣으면 빌드 경고나 사라진 스프라이트로 돌아옵니다. 에이전트에게 맡길 확인 문장은 가이드가 이미 적어 둔 “Audit my project’s backgrounds and sprites for Game Boy hardware limits”이고, 그 감사의 기준 문서는 GB Studio의 장면 한계와 Pan Docs입니다. 스트리밍으로 버튼 느낌을 본 뒤에도, 카트리지 부팅은 별도 플래시입니다. 스트림이 잘 된 것을 실기 ROM 부팅으로 세면 문서보다 한 단계 이릅니다.</p>
+<h2 id="_5">팩트 체크</h2>
+<p>✅ 1차 자료와 맞음 / ⚠️ 핵심은 맞거나 범위·시점·문서 간 차이가 있음 / ❌ 1차 자료와 어긋남</p>
+<p>원본 X(<a href="https://x.com/0ooooo0/status/2119541521922032103">@0ooooo0</a>, 2026-11-09 06:24 KST)의 문장을 공식 영상, <a href="https://developers.openai.com/modretro">developers.openai.com/modretro</a>, <a href="https://support.modretro.com/en_us/chromatic-devday-edition-quickstart-guid-By1iOlcMg">퀵스타트</a>, Supply Co. 응답과 대조했습니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>오픈AI가 AI 게임기 출시를 예고했다</td>
+<td>⚠️</td>
+<td><a href="https://x.com/OpenAIDevs/status/2119521359185478140">@OpenAIDevs</a> 본문은 <code>Tomorrow.</code>입니다. 영상은 <code>NOVEMBER 9</code> / <code>ON SUPPLY CO.</code>와 휴대 기기 선화가 있는 상자를 보여 줍니다. 출시 예고로 읽을 재료는 있습니다. 제품 문장으로 화면에 있는 이름은 ModRetro Chromatic입니다.</td>
+</tr>
+<tr>
+<td>크로매틱 협업으로 오픈AI 게임기가 나온다</td>
+<td>❌</td>
+<td><a href="https://developers.openai.com/modretro">협업 페이지</a>는 “ModRetro’s handheld hardware and Codex”라고 적습니다. 영상 끝 락업은 OpenAI | MODRETRO CHROMATIC입니다. 퀵스타트 본문 이름은 ModRetro Chromatic: DevDay Edition이고, 같은 글의 인용 블록은 Chromatic Codex Edition입니다. 오픈AI가 만든 별도 콘솔의 스펙 페이지는 이 글이 연 자료에 없습니다.</td>
+</tr>
+<tr>
+<td>영상 앞에 바이브 코딩으로 게임을 만들었다는 글과, 개발자 모드 버전을 팔아 달라는 글이 있다</td>
+<td>✅</td>
+<td>읽은 프레임의 문장은 <code>@letsbuilddd</code>의 “vibe coded a video game”과 <code>@ANGOmarcello</code>의 “sell dev mode versions”입니다. 화면의 단어는 “dev mode”이고, 퀵스타트의 기능 이름은 “Chromatic Developer-Mode”입니다.</td>
+</tr>
+<tr>
+<td>그다음 “NOTED.”를 띄우고 상자를 공개한다</td>
+<td>✅</td>
+<td>인용 카드 다음에 픽셀 글자 <code>NOTED.</code>, <code>LOADING...</code>, OpenAI 로고 상자가 이어집니다.</td>
+</tr>
+<tr>
+<td>코덱스로 만든 게임을 이 기계에서 돌리는지는 아직 알 수 없다</td>
+<td>⚠️</td>
+<td>11월 9일 영상은 그 기능을 설명하지 않습니다. 그 판단은 영상 한정으로 맞습니다. 별도 1차 자료는 이미 있습니다. 컬렉션은 Codex로 만든 Game Boy Color 게임을 브라우저와 호환 하드웨어용 ROM으로 두고, 퀵스타트는 에뮬레이터 스트리밍과 DevDay Edition 카트리지 플래시를 적습니다. 오늘 상자가 그 플래시 경로를 포함하는지는 영상이 말하지 않습니다.</td>
+</tr>
+<tr>
+<td>영상은 기능 설명 없이 11월 9일과 Supply Co.만 예고한다</td>
+<td>✅</td>
+<td>기능 스펙 문장은 없고, 날짜와 채널 글자는 <code>NOVEMBER 9</code> / <code>ON SUPPLY CO.</code>입니다. 거기에 더해 끝 락업이 기기 이름을 ModRetro Chromatic으로 적습니다.</td>
+</tr>
+<tr>
+<td>가격, 스펙, 한국 판매는 이 영상에 없다</td>
+<td>✅</td>
+<td>영상 프레임에서 그 셋은 읽히지 않았습니다. 일반 Chromatic의 160×144 IPS, FPGA, $149.99–$299.99는 ModRetro 상품 페이지에 있고, 11월 9일 상자의 가격은 아닙니다. 한국 판매 문장은 연 페이지에서 찾지 못했습니다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 속보의 “오픈AI 게임기”는 영상과 개발자 페이지가 적는 이름과 다릅니다. 예고된 것은 OpenAI 로고가 들어간 ModRetro Chromatic이고, 채널은 Supply Co.입니다. 글을 쓰는 시각의 샵 응답에는 그 상품 줄이 없었습니다. Codex로 Game Boy Color ROM을 만드는 경로와, DevDay Edition에서 활성화 코드로 동봉 카트리지에 쓰는 경로는 10월 23일에 갱신된 퀵스타트와 공개 컬렉션에 이미 있습니다. 그 ROM 13개의 헤더 체크섬은 맞았고, 페이지가 말한 컬러 대상과 <code>$C0</code>/<code>$80</code> 플래그는 맞습니다. FlapGPT의 <code>.gb</code> 확장자만 그 플래그보다 모노크롬 쪽으로 보입니다.</p>
+<h2 id="_6">참고 자료</h2>
+<ul>
+<li>북마크한 X — <a href="https://x.com/i/status/2119541521922032103">@0ooooo0, 2026-11-09 06:24 KST</a>. 본문은 <a href="https://api.fxtwitter.com/status/2119541521922032103">fxtwitter</a> <code>code</code> 200. 조회 스냅샷은 2026-11-09 15:12 KST 무렵</li>
+<li>공식 예고 — <a href="https://x.com/OpenAIDevs/status/2119521359185478140">@OpenAIDevs, “Tomorrow.”, 2026-11-09 05:04 KST</a>. <a href="https://api.fxtwitter.com/status/2119521359185478140">fxtwitter</a>. 첨부 영상 15.515초. 이 글이 받은 720p mp4의 <code>creation_time</code>은 <code>2026-11-08T20:04:06Z</code></li>
+<li>컬렉션 — <a href="https://developers.openai.com/modretro">developers.openai.com/modretro</a>. 게임 페이지 예: <a href="https://developers.openai.com/modretro/flapgpt">FlapGPT</a> (<code>/modretro/roms/flapgpt.gb</code>), <a href="https://developers.openai.com/modretro/codex-land">Codex Land</a>, <a href="https://developers.openai.com/modretro/pizza-dash">Pizza Dash</a>, <a href="https://developers.openai.com/modretro/seedys-sweet-garden">Seedy’s Sweet Garden</a> (<code>sugar-crush-v2.gbc</code>). 쇼케이스 카드는 <a href="https://developers.openai.com/showcase">developers.openai.com/showcase</a></li>
+<li>짧은 주소 — <a href="https://modretro.com/00011">modretro.com/00011</a>은 301로 <code>chromatic-codex-edition-quickstart-guide</code>에, 다시 301로 DevDay 퀵스타트에 붙음. 같은 페이지의 다른 외부 글 <a href="https://modretro.com/blogs/blog/create-for-chromatic">Create for the Chromatic</a>은 2024-06-02, Chris Beach, Codex 설명 없음</li>
+<li>퀵스타트 — <a href="https://support.modretro.com/en_us/chromatic-devday-edition-quickstart-guid-By1iOlcMg">Chromatic: DevDay Edition Quickstart Guide</a>, <a href="https://support.modretro.com/en_us/chromatic-devday-edition-quickstart-guid-By1iOlcMg.md">마크다운</a>. <code>Last updated: 2026-10-23T22:07:49.242Z</code>. 펌웨어 업데이터는 <a href="https://support.modretro.com/en_us/articles/chromatic-firmware-updater-ryhoYnzCx">Chromatic Firmware Updater</a>. Codex 설치 링크로 문서가 적은 주소는 <a href="https://chatgpt.com/codex/">chatgpt.com/codex</a></li>
+<li>하드웨어 상품 — <a href="https://modretro.com/collections/chromatic-consoles">Chromatic Consoles</a> ($149.99, From $199.99). <a href="https://modretro.com/products/chromatic-transparent">chromatic-transparent</a> Smoke/Purple/Green/Red, products.json <code>price</code> <code>149.99</code>, 160×144 IPS, FPGA. <a href="https://modretro.com/products/chromatic-tetris-bundle">chromatic-tetris-bundle</a> Gorilla <code>price</code> 19999, Sapphire 29999. <a href="https://modretro.com/products/m64.js">M64</a> 배리언트 4개 <code>price</code> 22999</li>
+<li>Supply Co. — <a href="https://openai.com/supply/">openai.com/supply</a> (최신 드롭 문장은 Chip Ganassi Racing). <a href="https://openai.com/supply/shop/">샵</a>. <a href="https://openai.com/supply/product/codex-build-hoodie/">Codex Build Hoodie</a> $100. <a href="https://openai.com/supply/product/codex-bubble-cap/">Codex Bubble Cap</a> $40. <a href="https://openai.com/supply/co-lab/work-louder/">Codex Micro</a> $230. 이 글의 샵 응답에는 Chromatic 상품 줄이 없었음</li>
+<li>Codex 플랜 — <a href="https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan">Using Codex with your ChatGPT plan</a>. Free와 Go를 포함한 플랜에 포함, 한도는 플랜마다 다름, Codex Cloud는 Free·Go 제외. 페이지의 갱신 표시는 “Updated: 4 days ago”</li>
+<li>DevDay 날짜 — <a href="https://community.openai.com/t/openai-devday-2026-applications-are-now-open/1384509">커뮤니티 공지</a>는 2026-09-29 샌프란시스코. <a href="https://community.openai.com/t/join-us-for-the-openai-devday-2026-keynote/1401738">키노트 안내</a>의 송출 시각은 <code>2026-09-29T17:00:00Z</code>. 그 공지 본문에서 Chromatic 문장은 찾지 못했고, 이 글은 키노트 영상을 보지 않음</li>
+<li>GB Studio — <a href="https://www.gbstudio.dev/docs/project-editor/scenes/limits/">Scene Limits</a> (액터 20, 트리거 30, 스프라이트 타일 64–96 또는 Color Only에서 128–192). <a href="https://www.gbstudio.dev/docs/settings/">Settings</a> (색 모드 셋, 기본 팔레트 8+8, 기본 카트리지 MBC5). <a href="https://www.gbstudio.dev/docs/project-editor/scenes/color/">Color</a> (팔레트 8개, 8번은 대화창). <a href="https://www.gbstudio.dev/docs/assets/backgrounds/">Backgrounds</a> (8×8, 최소 160×144, 고유 타일 192 또는 384, <code>#071821</code> <code>#306850</code> <code>#86c06c</code> <code>#e0f8cf</code>). <a href="https://www.gbstudio.dev/docs/assets/sprites/">Sprites</a> (<code>#65ff00</code> 투명, <code>#306850</code> 불가, 16×16 프레임)</li>
+<li>하드웨어 — <a href="https://gbdev.io/pandocs/Palettes.html">Pan Docs, Palettes</a> (CGB 배경 8팔레트, 오브젝트 8팔레트, 팔레트당 4색, RGB555). <a href="https://gbdev.io/pandocs/OAM.html">Pan Docs, OAM</a> (오브젝트 40개, 라인당 10개, 8×8 또는 8×16)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
