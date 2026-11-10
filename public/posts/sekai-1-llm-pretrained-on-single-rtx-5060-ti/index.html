@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>5060 Ti 한 장으로 95.6M을 처음부터? Sekai-1 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-10 · <span class="chip">#Sekai-1</span><span class="chip">#LLM</span><span class="chip">#RTX 5060 Ti</span><span class="chip">#Hugging Face</span><span class="chip">#사전학습</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">5060 Ti 한 장으로 95.6M을 처음부터? Sekai-1 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#_3">공개된 저장소</a></li>
+<li><a href="#95581504">아키텍처와 95,581,504</a></li>
+<li><a href="#_4">토크나이저</a></li>
+<li><a href="#_5">데이터, 옵티마이저, 토큰 수</a></li>
+<li><a href="#_6">불러오기</a></li>
+<li><a href="#6nd">6×N×D는 추정이다</a></li>
+<li><a href="#_7">이 규모가 하는 일과 하지 않는 일</a></li>
+<li><a href="#_8">거부 응답과 안전</a></li>
+</ul>
+</li>
+<li><a href="#_9">비즈니스 인사이트</a></li>
+<li><a href="#_10">팩트 체크</a></li>
+<li><a href="#_11">참고 자료</a></li>
+<li><a href="#x">원문 X 링크</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/rS_alonewolf/status/2119748126387130424">@rS_alonewolf의 포스트</a>를 계기로 썼습니다. 같은 상태 주소는 <a href="https://x.com/i/status/2119748126387130424">x.com/i/status/2119748126387130424</a>입니다. 표시 이름은 rS_ローカルLLM×投資, <code>screen_name</code>은 <code>rS_alonewolf</code>입니다. 이 환경의 X API는 <code>client-not-enrolled</code>로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2119748126387130424">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. <code>created_at</code>은 <code>Mon Nov 09 11:05:11 +0000 2026</code>, <strong>2026-11-09 20:05 KST</strong>입니다. <code>is_note_tweet</code>은 true입니다. 본문은 「何が重要？」 뒤에서 잘리지 않았고, t.co 패싯은 사진(1160×1252)입니다.</p>
+<p>그 응답의 본문은 이렇습니다. RTX 5060 Ti 한 장으로 LLM을 처음부터 학습한 개인 개발자의 「Sekai-1」이 Hugging Face에 공개되었다. 한 일은 95.6M(약 9600만) 파라미터, RTX 5060 Ti 한 장으로의 사전학습, 기존 모델의 LoRA나 증류가 아님, 거부 응답을 포함한 데이터를 학습 때 제외, Apache 2.0 공개. 중요한 점으로는, 큰 GPU 클러스터 없이도 스스로 LLM을 설계해 처음부터 학습할 수 있는 실례이고, 아직 매우 작은 모델이라 실용 성능은 미지수이며, 로컬 LLM을 돌리는 데서 그치지 않고 학습 데이터와 모델 구조부터 연구할 수 있는 점이 매력이라고 적습니다. 마지막 문장은 RTX 5070 Ti로도 이런 연구를 해보고 싶어진다는 말입니다. 같은 응답의 스냅샷은 답글 3, 리포스트 13, 좋아요 100, 북마크 80, 인용 3, 조회 7,045입니다. <code>verification.type</code>은 <code>individual</code>, 팔로워는 4,669입니다. 읽은 시각은 2026-11-10 09:10 KST 무렵입니다. X 글과 첨부 그림의 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+<p>아래 대조는 2026-11-10(KST)에 연 1차 자료입니다. 가중치는 추론을 돌리지 않았고, <code>model.safetensors</code>는 앞 262,144바이트만 받아 헤더(28,184바이트)의 텐서 모양을 세었습니다. <code>tokenizer.json</code>은 받아서 어휘를 세었습니다. 학습은 재현하지 않았습니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>100M 안팎의 디코더를 처음부터 학습하는 일 자체는 새 문장이 아닙니다. <a href="https://github.com/karpathy/nanoGPT">nanoGPT README</a>는 GPT-2 124M을 OpenWebText로 8×A100 40GB 노드에서 약 4일 학습한다고 적고, 셰익스피어 문자 모델은 A100 한 장에서 약 3분이라고 적습니다. 이번에 확인할 질문은 “작은 사전학습이 가능한가”보다 다음입니다.</p>
+<ul>
+<li>Hugging Face에 <code>Sekai-1</code>이라는 가중치가 실제로 있는가. 이름은 상하이 AI Lab의 영상 데이터셋 <a href="https://huggingface.co/datasets/Lixsp11/Sekai">Lixsp11/Sekai</a>와 겹칩니다. 그 데이터셋은 1인칭 영상입니다. 이 글의 모델은 그 저장소가 아닙니다.</li>
+<li>95.6M은 반올림인가, 파일의 원소 수인가.</li>
+<li>“처음부터, 5060 Ti 한 장”은 카드 문장인가, 학습 로그인 가.</li>
+<li>LoRA가 아니라는 말과 증류가 아니라는 말은 같은 증거로 닫히는가.</li>
+<li>거부 응답을 뺐다는 문장이 사전학습 전체인지, SFT 문단인지, 필터가 공개됐는지.</li>
+<li>Apache-2.0은 라이선스 파일인가, 카드의 라이선스 필드인가.</li>
+</ul>
+<p>개발자에게 이 체크포인트가 의미 있는 지점은 제품 대체보다 규모입니다. 카드가 스스로 말하는 한계(사실 오류, 긴 대화, 다단계 추론, 안전 튜닝 없음, 영어만)를 숫자와 파일로 붙여 두면, “소비자 GPU로 LLM을 학습했다”는 문장을 어느 크기에서 읽을지가 갈립니다.</p>
+<h2 id="_2">기술 설명</h2>
+<h3 id="_3">공개된 저장소</h3>
+<p>모델은 <a href="https://huggingface.co/8BitStudio/Sekai-1">8BitStudio/Sekai-1</a>입니다. Hub API를 2026-11-10에 읽었을 때 <code>createdAt</code>은 <code>2026-11-08T00:42:36.000Z</code>(2026-11-08 09:42 KST), <code>lastModified</code>는 <code>2026-11-09T14:08:16.000Z</code>(2026-11-09 23:08 KST), <code>sha</code>는 <code>251811183992620942e861efd6e3c093d53ce9bc</code>입니다. 같은 응답의 다운로드는 290, 좋아요는 3, <code>pipeline_tag</code>는 <code>text-generation</code>, <code>library_name</code>은 <code>transformers</code>입니다. <code>safetensors.parameters</code>는 <code>{"F32": 95581504}</code>이고 <code>total</code>도 95,581,504입니다. 저장소가 쓰는 용량은 384,064,402바이트입니다.</p>
+<p>파일 목록은 <code>.gitattributes</code>, <code>Leaderboard.png</code>, <code>README.md</code>, <code>Sekai-1.png</code>, <code>chat_template.jinja</code>, <code>config.json</code>, <code>generation_config.json</code>, <code>model.safetensors</code>, <code>tokenizer.json</code>, <code>tokenizer_config.json</code>입니다. <code>adapter_config.json</code>도, <code>train.py</code>도, <code>LICENSE</code> 파일도 이 목록에 없습니다.</p>
+<p>계정은 Hub 사용자 <code>8BitStudio</code>입니다. <a href="https://huggingface.co/api/users/8BitStudio/overview">overview API</a>의 <code>type</code>은 <code>user</code>, <code>fullname</code>은 Jackson Yeskie, <code>orgs</code>는 빈 배열입니다. <code>createdAt</code>은 <code>2025-11-15T21:23:10.000Z</code>입니다. 같은 응답의 <code>hardwareItems</code>는 기본 GPU로 NVIDIA RTX 5060 Ti 1장, <code>mem</code> 16, 그리고 CPU로 AMD Ryzen Zen 4 7000(Ryzen 7), 메모리 32입니다. 프로필 HTML에는 <code>https://github.com/8-bitStudio</code> 링크가 있습니다. 그 GitHub 사용자의 공개 저장소는 2026-11-10 API 기준 9개(<code>3d-jelly</code>, <code>Amadeus</code>, <code>aniimage</code>, <code>ChunkClaim</code>, <code>db</code>, <code>Glance</code>, <code>retro-fin</code>, <code>The-worst-calculator</code>, <code>vakcodinglanguage</code>)이고, 이름에 Sekai가 들어간 저장소는 없습니다. 학습 설정 파일은 모델 저장소와 이 공개 저장소 목록 양쪽에서 찾지 못했습니다.</p>
+<p>같은 계정의 <a href="https://huggingface.co/8BitStudio/Aniimage-1">Aniimage-1 카드</a>는 다른 모델(256×256 애니 이미지)의 GPU를 “NVIDIA RTX 5060 Ti 16GB”라고 적습니다. 그 문장을 Sekai-1 런의 로그로 읽지는 않습니다.</p>
+<h3 id="95581504">아키텍처와 95,581,504</h3>
+<p>카드의 문장은 “Qwen3-style decoder-only”입니다. <code>config.json</code>의 <code>architectures</code>는 <code>Qwen3ForCausalLM</code>, <code>model_type</code>은 <code>qwen3</code>입니다. 이 클래스 이름은 가중치의 출처가 아닙니다. 비교로 연 <a href="https://huggingface.co/Qwen/Qwen3-0.6B/raw/main/config.json">Qwen/Qwen3-0.6B <code>config.json</code></a>은 <code>vocab_size</code> 151,936, <code>hidden_size</code> 1024, 층 28, 쿼리 헤드 16, KV 헤드 8, <code>head_dim</code> 128, <code>rope_theta</code> 1,000,000, <code>max_position_embeddings</code> 40,960, <code>torch_dtype</code> <code>bfloat16</code>입니다. Sekai-1은 아래와 같습니다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>Sekai-1 <code>config.json</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>층</td>
+<td>23, 모두 <code>full_attention</code></td>
+</tr>
+<tr>
+<td>hidden / intermediate</td>
+<td>576 / 1536</td>
+</tr>
+<tr>
+<td>쿼리 헤드 / KV 헤드 / head_dim</td>
+<td>9 / 3 / 64</td>
+</tr>
+<tr>
+<td>활성화</td>
+<td><code>silu</code> (SwiGLU의 게이트)</td>
+</tr>
+<tr>
+<td>정규화</td>
+<td>RMSNorm, <code>rms_norm_eps</code> 1e-6. 층마다 <code>input_layernorm</code>, <code>post_attention_layernorm</code>, <code>q_norm</code>, <code>k_norm</code></td>
+</tr>
+<tr>
+<td>위치</td>
+<td>RoPE, <code>rope_theta</code> 10,000, <code>rope_type</code> <code>default</code></td>
+</tr>
+<tr>
+<td>문맥</td>
+<td><code>max_position_embeddings</code> 2048, sliding window 없음</td>
+</tr>
+<tr>
+<td>어휘 / 임베딩</td>
+<td>24,576, <code>tie_word_embeddings</code> true</td>
+</tr>
+<tr>
+<td>dtype</td>
+<td><code>float32</code> (<code>torch_dtype</code>도 <code>float32</code>)</td>
+</tr>
+<tr>
+<td>체크포인트가 적은 transformers</td>
+<td><code>5.15.1</code></td>
+</tr>
+</tbody>
+</table>
+<p>헤더의 0번 층 모양은 이 표와 같습니다. <code>q_proj</code>는 <code>[576, 576]</code>, <code>k_proj</code>와 <code>v_proj</code>는 <code>[192, 576]</code>, <code>o_proj</code>는 <code>[576, 576]</code>, MLP의 <code>gate_proj</code>·<code>up_proj</code>는 <code>[1536, 576]</code>, <code>down_proj</code>는 <code>[576, 1536]</code>입니다. <code>lm_head</code> 텐서는 없습니다. 묶인 임베딩이라 출력 행렬은 <code>embed_tokens</code>와 같습니다.</p>
+<p>원소 수를 모양으로 다시 더하면 헤더의 95,581,504와 같습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># model.safetensors 헤더의 모양으로 센 값. 학습 재현이 아니다.</span>
+<span class="n">embed</span> <span class="o">=</span> <span class="mi">24_576</span> <span class="o">*</span> <span class="mi">576</span>                 <span class="c1"># 14,155,776</span>
+<span class="n">q</span> <span class="o">=</span> <span class="n">o</span> <span class="o">=</span> <span class="mi">576</span> <span class="o">*</span> <span class="mi">576</span>                    <span class="c1"># 331,776</span>
+<span class="n">k</span> <span class="o">=</span> <span class="n">v</span> <span class="o">=</span> <span class="mi">192</span> <span class="o">*</span> <span class="mi">576</span>                    <span class="c1"># 110,592</span>
+<span class="n">q_norm</span> <span class="o">=</span> <span class="n">k_norm</span> <span class="o">=</span> <span class="mi">64</span>
+<span class="n">gate</span> <span class="o">=</span> <span class="n">up</span> <span class="o">=</span> <span class="n">down</span> <span class="o">=</span> <span class="mi">1_536</span> <span class="o">*</span> <span class="mi">576</span>       <span class="c1"># 884,736</span>
+<span class="n">ln</span> <span class="o">=</span> <span class="mi">576</span>
+<span class="n">layer</span> <span class="o">=</span> <span class="n">q</span> <span class="o">+</span> <span class="n">k</span> <span class="o">+</span> <span class="n">v</span> <span class="o">+</span> <span class="n">o</span> <span class="o">+</span> <span class="n">q_norm</span> <span class="o">+</span> <span class="n">k_norm</span> <span class="o">+</span> <span class="n">gate</span> <span class="o">+</span> <span class="n">up</span> <span class="o">+</span> <span class="n">down</span> <span class="o">+</span> <span class="n">ln</span> <span class="o">+</span> <span class="n">ln</span>
+<span class="c1"># layer == 3,540,224</span>
+<span class="n">total</span> <span class="o">=</span> <span class="n">embed</span> <span class="o">+</span> <span class="mi">23</span> <span class="o">*</span> <span class="n">layer</span> <span class="o">+</span> <span class="mi">576</span>     <span class="c1"># 최종 RMSNorm</span>
+<span class="c1"># total == 95,581,504</span>
+</code></pre></div>
+
+<p>카드의 95.6M은 이 정수를 백만 단위로 반올림한 표기입니다. 95,581,504 × 4바이트는 382,326,016바이트, 364.6 MiB입니다. 추론용 FP32 가중치의 크기이고, 학습 중 VRAM은 아닙니다.</p>
+<h3 id="_4">토크나이저</h3>
+<p><code>tokenizer.json</code>의 <code>model.vocab</code> 길이는 24,576이고, 머지는 24,312개입니다. 특수 토큰은 <code>tokenizer_config.json</code>과 같습니다. <code>&lt;|endoftext|&gt;</code>가 0번이자 BOS·PAD·UNK, <code>&lt;|im_start|&gt;</code>가 1, <code>&lt;|im_end|&gt;</code>가 2, <code>&lt;|reserved_0|&gt;</code>부터 <code>&lt;|reserved_4|&gt;</code>가 3–7입니다. <code>model_max_length</code>는 2048입니다.</p>
+<p>숫자 토큰은 파일에서 확인됩니다. <code>"0"</code>부터 <code>"9"</code>는 id 23–32이고, 두 글자 이상의 숫자로만 된 토큰은 0개입니다. <code>"10"</code>, <code>"100"</code>, <code>"2024"</code>는 어휘에 없습니다. 카드의 “numbers into single digits”는 이 어휘와 맞습니다. 채팅 템플릿은 ChatML이고, 맨 앞에 BOS(<code>&lt;|endoftext|&gt;</code>)를 붙인 뒤 <code>&lt;|im_start|&gt;role\n...&lt;|im_end|&gt;\n</code>을 반복합니다.</p>
+<h3 id="_5">데이터, 옵티마이저, 토큰 수</h3>
+<p>카드 본문:</p>
+<ul>
+<li>사전학습 58.5B 토큰. 웹, 교육, 수학, 코드, 대화. Muon과 AdamW. warmup-stable-decay. 마지막 약 12B 토큰은 더 높은 품질 혼합에서의 decay.</li>
+<li>SFT 약 400M 토큰. 지시 따르기, 일상 대화, 짧은 답과 긴 답, 요약, 다시 쓰기, 코드 작성과 수정, 모델이 자신이 Sekai-1임을 알게 하는 소량의 identity 예시. chain-of-thought는 쓰지 않는다고 적습니다. 이 문단의 마지막 절은 “refusals were filtered out of the data”입니다.</li>
+</ul>
+<p>58.5B를 95,581,504로 나누면 파라미터당 <strong>612</strong> 토큰입니다. 약 12B / 58.5B는 <strong>20.5%</strong>입니다. 카드의 “~12B”이므로 이 비율도 근사입니다. SFT 400M은 58.5B의 <strong>0.68%</strong>입니다.</p>
+<p>카드 YAML의 <code>datasets</code>는 단계를 나누지 않은 한 목록입니다. 본문이 각 id를 사전학습과 SFT 중 어디에 얼마큼 넣었는지는 적지 않습니다. 목록은 <code>karpathy/climbmix-400b-shuffle</code>, <code>HuggingFaceTB/smollm-corpus</code>, <code>HuggingFaceTB/finemath</code>, <code>HuggingFaceTB/cosmopedia</code>, <code>openbmb/UltraX-Preview</code>, <code>allenai/dolma3_dolmino_mix-100B-1025</code>, <code>allenai/dolma3.5_pool</code>, <code>allenai/dolmino-mix-1124</code>, <code>IFM/TxT360-v2</code>, <code>nvidia/OpenMathInstruct-2</code>, <code>nvidia/Nemotron-MIND</code>, <code>openbmb/UltraData-Math</code>, <code>microsoft/orca-math-word-problems-200k</code>, <code>meta-math/MetaMathQA</code>, <code>OpenCoder-LLM/opc-annealing-corpus</code>, <code>HuggingFaceTB/smoltalk</code>, <code>HuggingFaceTB/smoltalk2</code>, <code>HuggingFaceH4/ultrachat_200k</code>, <code>allenai/tulu-3-sft-mixture</code>, <code>bigcode/commitpackft</code>입니다.</p>
+<p>이 가운데 세 장의 데이터 카드는 다른 모델이 쓴 문장이라고 밝힙니다.</p>
+<ul>
+<li><a href="https://huggingface.co/datasets/HuggingFaceTB/cosmopedia">HuggingFaceTB/cosmopedia</a>는 Mixtral-8x7B-Instruct-v0.1이 만든 합성 교과서·글이고, 25B 토큰 이상이라고 적습니다.</li>
+<li><a href="https://huggingface.co/datasets/nvidia/OpenMathInstruct-2">nvidia/OpenMathInstruct-2</a>는 Llama-3.1-405B-Instruct로 만든 1400만 문제-풀이 쌍이라고 적습니다.</li>
+<li><a href="https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k">HuggingFaceH4/ultrachat_200k</a>는 ChatGPT가 만든 140만 대화를 걸러 만든 집합이라고 적습니다. 원문의 “1.4M dialogues generated by ChatGPT”는 필터 전 UltraChat을 가리킵니다.</li>
+</ul>
+<p>목록에 있다는 사실이 그 데이터셋 전체를 썼다는 뜻은 아닙니다. 배치 크기, 학습률, 시퀀스 패킹, 정밀도, 마이크로배치, 피크 VRAM, 벽시계 시간은 카드에 없습니다. Muon과 AdamW를 어느 파라미터에 나눴는지도 없습니다.</p>
+<h3 id="_6">불러오기</h3>
+<p>카드의 예입니다. 이 글은 <code>generate()</code>를 실행하지 않았습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoModelForCausalLM</span><span class="p">,</span> <span class="n">AutoTokenizer</span>
+
+<span class="n">model_id</span> <span class="o">=</span> <span class="s2">"8BitStudio/Sekai-1"</span>
+<span class="n">tokenizer</span> <span class="o">=</span> <span class="n">AutoTokenizer</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForCausalLM</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_id</span><span class="p">)</span>
+
+<span class="n">messages</span> <span class="o">=</span> <span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="s2">"Who are you?"</span><span class="p">}]</span>
+<span class="n">inputs</span> <span class="o">=</span> <span class="n">tokenizer</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+    <span class="n">messages</span><span class="p">,</span> <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_tensors</span><span class="o">=</span><span class="s2">"pt"</span>
+<span class="p">)</span>
+<span class="n">outputs</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="o">**</span><span class="n">inputs</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">tokenizer</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="n">outputs</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">inputs</span><span class="p">[</span><span class="s2">"input_ids"</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]:],</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="kc">True</span><span class="p">))</span>
+</code></pre></div>
+
+<p><code>generation_config.json</code>에는 카드 본문이 적은 temperature 0.5, top-p 0.9, top-k 40, repetition penalty 1.1 외에 <code>min_p</code> 0.02, <code>max_new_tokens</code> 512, <code>do_sample</code> true, <code>eos_token_id</code> <code>[2, 0]</code>이 있습니다. 카드는 결정적 출력이 필요하면 <code>do_sample=False</code>를 넘기라고 합니다. 카드는 CPU에서 돌릴 수 있을 만큼 작다고 적고, 별도의 VRAM 요구는 적지 않습니다.</p>
+<h3 id="6nd">6×N×D는 추정이다</h3>
+<p>학습 FLOPs로 자주 쓰는 근사는 순전파 약 2ND, 역전파 약 4ND, 합이 6ND입니다. N은 파라미터 수, D는 토큰 수입니다. 아래는 그 식에 카드의 58.5B와 헤더의 N을 넣은 값입니다. 측정된 학습 시간이 아닙니다.</p>
+<div class="highlight"><pre><span></span><code><span class="n">N</span> <span class="o">=</span> <span class="mi">95_581_504</span>
+<span class="n">D</span> <span class="o">=</span> <span class="mi">58_500_000_000</span>          <span class="c1"># 카드의 사전학습 토큰. SFT 약 400M은 별도</span>
+<span class="n">flops</span> <span class="o">=</span> <span class="mi">6</span> <span class="o">*</span> <span class="n">N</span> <span class="o">*</span> <span class="n">D</span>           <span class="c1"># 3.354911e19</span>
+
+<span class="c1"># NVIDIA 비교표의 CUDA 코어 4608, 부스트 2.57 GHz.</span>
+<span class="c1"># 50 시리즈 칸은 Ada 칸과 달리 shader TFLOPS를 적지 않는다.</span>
+<span class="c1"># 2 * 코어 * 클럭은 FP32 FMA를 2 FLOP로 센 이 글의 추정이다.</span>
+<span class="n">peak</span> <span class="o">=</span> <span class="mi">2</span> <span class="o">*</span> <span class="mi">4608</span> <span class="o">*</span> <span class="mf">2.57e9</span>    <span class="c1"># 2.368512e13 FLOP/s, 23.685 TFLOP/s</span>
+<span class="n">seconds</span> <span class="o">=</span> <span class="n">flops</span> <span class="o">/</span> <span class="n">peak</span>      <span class="c1"># 1,416,463초 ≈ 393.5시간 ≈ 16.4일</span>
+</code></pre></div>
+
+<p>이 16.4일은 세 가지를 동시에 가정합니다. 6ND가 맞다, GPU가 부스트 클럭의 FP32 피크를 100% 쓴다, 사전학습 토큰만 센다. 셋 다 카드에 없습니다. 실제 학습 활용률은 100%보다 낮고, BF16 텐서 코어를 썼다면 피크가 다릅니다. NVIDIA 비교표의 5060 Ti “5th Generation 759 AI TOPS”는 그 표에서 정밀도를 밝히지 않아서, 이 글은 그 숫자를 학습 시간으로 바꾸지 않습니다. SFT 400M을 같은 6ND로 넣으면 2.29e17 FLOPs로, 사전학습 추정의 0.68%입니다. 이것도 추정입니다.</p>
+<p>가중치만 364.6 MiB라는 사실과, 학습 VRAM을 알 수 없다는 사실은 같이 두어야 합니다. AdamW라면 가중치·기울기·1차·2차 모멘텀이 파라미터당 상태를 더하지만, 카드는 Muon과 AdamW를 같이 썼다고만 하고 비율을 적지 않습니다. 활성화 메모리는 배치와 2048 문맥에 붙는데 배치가 없습니다. 그래서 이 글은 학습 VRAM 예산을 숫자로 내놓지 않습니다.</p>
+<h3 id="_7">이 규모가 하는 일과 하지 않는 일</h3>
+<p>카드의 Limitations는 사실 실수, 긴 대화에서 맥을 잃음, 다단계 추론과 간단한 산술을 넘는 수학에 약함, 안전 튜닝과 거부 행동이 없음, 영어만 이해함입니다. “don't use it anywhere that needs either”의 either는 안전 튜닝과 거부입니다.</p>
+<p>첨부 <code>Leaderboard.png</code>를 2026-11-10에 OCR했습니다. 제목은 “Open SLM Leaderboard — Under 100M”이고, 캡션은 zero-shot HellaSwag, ARC-Easy, ARC-Challenge, PIQA, ArithMark-3를 Intelligence Index로 합친다고 합니다. 다른 점수는 <a href="https://huggingface.co/spaces/AxiomicLabs/Open_SLM_Leaderboard">AxiomicLabs/Open_SLM_Leaderboard</a>의 100M 미만 필터, 2026-11-07, 상위 20개에서 가져왔고 Sekai-1은 같은 과제를 로컬에서 채점했다고 캡션이 적습니다. 막대 안의 숫자는 첫 막대 <strong>30.26</strong>, 주황 막대(Sekai-1) <strong>26.22</strong>로 읽혔습니다. 30.26은 <a href="https://huggingface.co/MinimaLabs/KLM-1.5">KLM-1.5 카드</a>가 자신의 Intelligence Index로 적은 30.26과 같습니다. 그 카드의 리더보드 시점은 2026-10-22입니다. 이 글은 lm-eval을 다시 돌리지 않았습니다. 26.22는 저자가 올린 그림의 로컬 점수입니다.</p>
+<p>같은 크기대의 공개 숫자와 나란히 두면 이렇습니다. 점수를 한 표로 섞지 않았습니다. 과제와 토큰 정의가 다릅니다.</p>
+<table>
+<thead>
+<tr>
+<th>모델</th>
+<th>출처가 적은 규모</th>
+<th>학습 규모로 출처가 적은 것</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sekai-1</td>
+<td>95,581,504, 문맥 2048, 어휘 24,576</td>
+<td>사전학습 58.5B + SFT 약 400M. GPU는 카드 문장</td>
+</tr>
+<tr>
+<td><a href="https://huggingface.co/MinimaLabs/KLM-1.5">KLM-1.5</a></td>
+<td>99.0M(카드는 98,975,308도 적음), 문맥 2048, 어휘 4,100</td>
+<td>“trained from scratch on 100B tokens”. 본문은 stable 80B, decay 20B, 워밍업은 ClimbMix 128B를 약 18B 연산으로 덮는다고 적음</td>
+</tr>
+<tr>
+<td><a href="https://huggingface.co/HuggingFaceTB/SmolLM-135M">SmolLM-135M</a></td>
+<td>135M, 문맥 2048, 임베딩 묶음, GQA</td>
+<td>600B 토큰, bfloat16, GPU 64×H100, 프레임워크 Nanotron</td>
+</tr>
+<tr>
+<td><a href="https://huggingface.co/openai-community/gpt2">GPT-2 small</a></td>
+<td>HF 카드 “124M”, 어휘 50,257, 문맥 1024</td>
+<td>WebText 40GB. 카드는 토큰 수와 작은 모델의 학습 시간을 적지 않음</td>
+</tr>
+<tr>
+<td><a href="https://github.com/karpathy/nanoGPT">nanoGPT</a></td>
+<td>README의 GPT-2 124M 재현</td>
+<td>OpenWebText, 8×A100 40GB, 약 4일, val loss 약 2.85. 토큰 수는 그 README에 없음</td>
+</tr>
+</tbody>
+</table>
+<p>600B / 58.5B는 약 <strong>10.3</strong>입니다. SmolLM-135M은 파라미터도 135/95.6 ≈ 1.4배입니다. KLM-1.5 카드는 같은 다섯 과제에서 ARC-Easy 59.68, ARC-Challenge 32.68, HellaSwag 43.74, PIQA 68.55, ArithMark-3 48.20을 적습니다. Sekai-1 카드 본문은 과제별 점수를 글로 적지 않고 그림에 합산 지수만 둡니다.</p>
+<p>작은 사전학습이 하는 일은 여기까지입니다. 영어 다음 토큰과 짧은 ChatML 대화를 목표로, CPU에 올라가는 체크포인트를 만들고, 저자 채점으로는 100M 미만 다섯 과제의 합산 지수에서 KLM-1.5 다음에 두는 것입니다. 하지 않는 일도 카드에 있습니다. 사실을 지키는 모델, 긴 맥락, 다단계 수학, 거부가 필요한 자리. nanoGPT가 보여 준 “한 노드에서 124M”과 SmolLM이 보여 준 “64장의 H100으로 600B” 사이에, 이 릴리스는 소비자 카드 한 장이라는 <strong>저자의 문장</strong>과 채팅 SFT가 붙은 가중치를 더합니다. 학습 코드는 더하지 않습니다.</p>
+<h3 id="_8">거부 응답과 안전</h3>
+<p>확인할 문장은 SFT 문단에 있습니다. “refusals were filtered out of the data.” 사전학습 문단은 웹·교육·수학·코드·대화를 말할 뿐, 거부 문장을 걸렀다고 적지 않습니다. 걸러 낸 예시의 수, 필터 스크립트, 걸러 내기 전과 후의 샘플은 저장소에 없습니다.</p>
+<p>첨부 그림의 ①번 칸은 OCR로 “拒否応答の除外は作者の説明。具体的な処理は未確認”입니다. 포스트의 글머리표는 제외를 사실로 적고, 같은 포스트의 그림은 처리가 확인되지 않았다고 적습니다.</p>
+<p>Limitations의 안전 문장은 측정치가 아니라 저자의 사용 제한입니다. 안전 튜닝이 없고 거부 행동이 없으니, 둘 중 하나가 필요한 곳에는 쓰지 말라고 합니다. 이 글은 그 문장을 행동 실험으로 확인하지 않았습니다. 거부 문장을 SFT에서 빼면 모델이 거부 문장을 따라 하도록 배우지 않게 하려는 데이터 선택입니다. 그 선택이 유해 요청에 어떻게 답하는지는 별도 평가입니다. 평가 수치를 카드는 주지 않습니다. 사전학습에 들어간 공개 코퍼스 안에 거부처럼 보이는 문장이 남아 있는지도 카드가 말하지 않습니다.</p>
+<p>학습이 끝난 뒤 거부 방향을 지우는 작업과는 단계가 다릅니다. 그 갈래는 이 사이트의 <a href="/posts/heretic-2-llm-abliteration/">Heretic 2</a>가 다룹니다. Sekai-1 카드는 그 절차를 쓰지 않았다고 적지 않고, 데이터에서 거부를 걸렀다고만 적습니다.</p>
+<h2 id="_9">비즈니스 인사이트</h2>
+<p>숫자와 제품 문장은 옆에 출처를 붙입니다. 그 밖의 판단은 <strong>분석/의견</strong>입니다. 전기요금, 임대료, 매출은 출처가 없어 만들지 않습니다.</p>
+<p><strong>어느 시장인가.</strong> 100M 전후의 영어 디코더는 SmolLM, KLM, GPT-2 small이 이미 있는 연구·온디바이스 구간입니다. Sekai-1이 저자 그림에서 26.22로 2위라는 말은 다섯 개 zero-shot 과제의 합산이고, 코딩 에이전트나 다국어, 안전 평가가 아닙니다. KLM-1.5는 99M, 처음부터 학습, Apache-2.0, Intelligence Index 30.26을 자기 카드에 적습니다. <strong>분석/의견.</strong> 이 구간에서 경쟁 상대는 호스팅 API가 아니라, 같은 크기에서 데이터와 학습 코드를 더 많이 공개한 체크포인트입니다. Sekai-1은 가중치와 카드는 공개하고 학습 코드는 공개하지 않았습니다.</p>
+<p><strong>누가 이득을 보나.</strong> (1) transformers로 CPU에 올려 영어 짧은 생성을 만져 보려는 사람. FP32 가중치 364.6 MiB는 파일에서 계산됩니다. (2) 숫자를 한 자리 토큰으로 나누는 24,576 BPE가 작은 모델에서 어떤 차이를 만드는지를 보려는 사람. 어휘 파일은 그 분할을 보여 주고, 태스크별 점수는 보여 주지 않습니다. (3) 거부가 필요하거나 사실 확인이 필요한 제품을 만드는 팀. 카드가 그 용도를 하지 말라고 적습니다. <strong>분석/의견.</strong> 세 번째 팀에게 이 가중치는 부품이 아니라 반례에 가깝습니다. 앞에 필터를 두라는 문장은 카드의 한계 절이 이미 합니다.</p>
+<p><strong>소비자 GPU 사전학습의 비용.</strong> <a href="https://www.nvidia.com/en-us/geforce/news/ultimate-guide-to-5060/">NVIDIA의 5060 안내</a>는 RTX 5060 Ti를 2025년 4월에 소개하면서 시작 가격 <strong>$379</strong>, 실제 가격은 제조사와 판매처에 따라 다르다고 적고, 8GB 또는 16GB GDDR7, CUDA 코어 4608, 부스트 2.57 GHz를 적습니다. <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/compare/?section=compare-specs">비교표</a>는 같은 코어·클럭에 더해 메모리 버스 128-bit, 대역폭 448 GB/s, TGP 180W, 권장 시스템 전원 600W, Blackwell, PCIe Gen 5를 적습니다. 8GB와 16GB가 한 행에 있고, Sekai-1 카드는 둘 중 어느 쪽인지 적지 않습니다. 계정 overview의 장비 목록만 16GB 한 장을 가리킵니다. <strong>분석/의견.</strong> 보이는 비용은 카드 한 장의 가격입니다. 보이지 않는 비용은 실패한 런, 데이터 준비, 전기, 그리고 코드를 공개하지 않아서 다음 사람이 같은 런을 다시 짜는 시간입니다. 위의 16.4일은 그 전기요금을 계산하는 입력이 아닙니다.</p>
+<p><strong>개발자에게 남는 것.</strong> Apache-2.0은 카드 YAML과 Hub 태그 <code>license:apache-2.0</code>에 있습니다. 파일 목록에 <code>LICENSE</code> 본문은 없습니다. 허브가 그 태그로 라이선스를 표시하는 방식과, 저장소 안에 라이선스 전문이 없는 상태는 같이 보는 편이 낫습니다. 영어만, 안전 튜닝 없음, 학습 재현에 필요한 배치·정밀도·스크립트 없음. <strong>분석/의견.</strong> 이 릴리스에서 재사용할 수 있는 것은 가중치와, 카드가 글로 적은 구조(23층, 576, GQA 9/3, 숫자 한 자리, 58.5B, decay 약 12B)입니다. “클러스터 없이 연구할 수 있다”는 X의 문장은, 연구가 가중치를 읽는 데 그치면 맞고, 같은 학습을 다시 돌리는 데까지 가면 코드가 빠져 있습니다.</p>
+<h2 id="_10">팩트 체크</h2>
+<p>✅ 1차 자료와 맞음 / ⚠️ 핵심은 맞거나 범위가 다르거나, 저자 문장 외에 확인할 자료가 없음 / ❌ 1차 자료와 어긋남</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Sekai-1이 Hugging Face에 공개되어 있다</td>
+<td>✅</td>
+<td>https://huggingface.co/8BitStudio/Sekai-1 생성 <code>2026-11-08T00:42:36Z</code>. 영상 데이터셋 Lixsp11/Sekai와는 다른 저장소</td>
+</tr>
+<tr>
+<td>개인 개발자 계정이 올렸다</td>
+<td>✅</td>
+<td>overview API: <code>type=user</code>, <code>fullname</code> Jackson Yeskie, <code>orgs=[]</code>. https://huggingface.co/api/users/8BitStudio/overview</td>
+</tr>
+<tr>
+<td>95.6M 파라미터</td>
+<td>✅</td>
+<td>카드의 95.6M. safetensors <code>F32</code> 합과 모양 재합산 모두 <strong>95,581,504</strong></td>
+</tr>
+<tr>
+<td>RTX 5060 Ti 한 장으로 처음부터 사전학습</td>
+<td>⚠️</td>
+<td>카드 첫 문장이 “trained from scratch on a single RTX 5060 Ti”이다. 프로필 장비는 5060 Ti 16GB 1장이다. 저장소에 학습 스크립트·로그·시간·배치는 없다. 장비 목록은 그 런의 영수증이 아니다. 8GB/16GB는 카드가 적지 않는다</td>
+</tr>
+<tr>
+<td>기존 모델의 LoRA가 아니다</td>
+<td>✅</td>
+<td><code>model.safetensors</code> 하나, <code>lm_head</code> 없음, <code>adapter_config.json</code> 없음. 어휘 24,576·층 23·hidden 576은 Qwen3-0.6B(어휘 151,936, 층 28, hidden 1024)와 다르다. 카드는 from scratch라고 적는다</td>
+</tr>
+<tr>
+<td>기존 모델의 증류가 아니다</td>
+<td>⚠️</td>
+<td>카드는 “증류가 아니다”라고 적지 않는다. 로짓 증류의 교사 이름도 없다. 동시에 cosmopedia(Mixtral 생성), OpenMathInstruct-2(Llama-3.1-405B-Instruct 생성), ultrachat_200k(ChatGPT 대화의 필터본)가 데이터 목록에 있다. 문장 수준의 합성 데이터와 로짓 증류는 다르고, 카드는 둘 중 어느 쪽도 부정하지 않는다</td>
+</tr>
+<tr>
+<td>거부 응답이 들어 있는 데이터를 학습에서 제외했다</td>
+<td>⚠️</td>
+<td>그 문장은 SFT 문단의 “refusals were filtered out of the data”이다. 사전학습 문단에는 없다. 필터, 건수, 샘플이 없다. 같은 X 그림 ①은 “作者の説明。具体的な処理は未確認”이라고 적는다. Limitations는 안전 튜닝과 거부 행동이 없다고 적는다. 이 글은 모델 행동을 측정하지 않았다</td>
+</tr>
+<tr>
+<td>Apache 2.0으로 공개</td>
+<td>✅</td>
+<td>카드 YAML <code>license: apache-2.0</code>, Hub 태그 <code>license:apache-2.0</code>. 파일 목록에는 <code>LICENSE</code> 전문이 없다</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 저장소, 95,581,504개, Qwen 가중치의 LoRA가 아니라는 점, Apache-2.0 태그는 파일과 카드로 닫힙니다. “5060 Ti 한 장으로 처음부터”는 저자 문장이고 로그가 없습니다. “증류가 아니다”와 “거부 데이터를 학습에서 뺐다”는 카드가 그 범위로 말해 주지 않습니다. 안전에 대해 카드가 말하는 사용 제한은, 거부가 필요한 곳에 쓰지 말라는 것입니다.</p>
+<h2 id="_11">참고 자료</h2>
+<ul>
+<li>모델 카드·가중치 — <a href="https://huggingface.co/8BitStudio/Sekai-1">8BitStudio/Sekai-1</a> (API 2026-11-10: F32 95,581,504, 다운로드 290, 좋아요 3, sha <code>25181118…</code>)</li>
+<li>계정 — <a href="https://huggingface.co/api/users/8BitStudio/overview">8BitStudio overview</a> (Jackson Yeskie, <code>orgs</code> 없음, 장비 목록 5060 Ti 16GB ×1). 프로필이 링크한 <a href="https://github.com/8-bitStudio">github.com/8-bitStudio</a> 공개 저장소 9개, Sekai 학습 저장소 없음 (API 2026-11-10)</li>
+<li>구조 비교 — <a href="https://huggingface.co/Qwen/Qwen3-0.6B/raw/main/config.json">Qwen/Qwen3-0.6B config</a></li>
+<li>리더보드 그림 — 모델 저장소의 <code>Leaderboard.png</code>. 공간은 <a href="https://huggingface.co/spaces/AxiomicLabs/Open_SLM_Leaderboard">AxiomicLabs/Open_SLM_Leaderboard</a></li>
+<li>같은 구간 — <a href="https://huggingface.co/MinimaLabs/KLM-1.5">MinimaLabs/KLM-1.5</a>, <a href="https://huggingface.co/HuggingFaceTB/SmolLM-135M">HuggingFaceTB/SmolLM-135M</a>, <a href="https://huggingface.co/blog/smollm">SmolLM 블로그</a>, <a href="https://huggingface.co/openai-community/gpt2">openai-community/gpt2</a>, <a href="https://github.com/karpathy/nanoGPT">karpathy/nanoGPT</a></li>
+<li>합성 데이터 카드 — <a href="https://huggingface.co/datasets/HuggingFaceTB/cosmopedia">cosmopedia</a>, <a href="https://huggingface.co/datasets/nvidia/OpenMathInstruct-2">OpenMathInstruct-2</a>, <a href="https://huggingface.co/datasets/HuggingFaceH4/ultrachat_200k">ultrachat_200k</a></li>
+<li>GPU — <a href="https://www.nvidia.com/en-us/geforce/news/ultimate-guide-to-5060/">NVIDIA 5060 안내</a> (시작가 $379, 2025-04), <a href="https://www.nvidia.com/en-us/geforce/graphics-cards/compare/?section=compare-specs">NVIDIA 비교표</a> (CUDA 4608, 부스트 2.57 GHz, 8GB/16GB, 448 GB/s, TGP 180W, 759 AI TOPS)</li>
+<li>이름만 같은 데이터셋 — <a href="https://huggingface.co/datasets/Lixsp11/Sekai">Lixsp11/Sekai</a></li>
+<li>관련 글 — <a href="/posts/heretic-2-llm-abliteration/">Heretic 2</a></li>
+</ul>
+<h2 id="x">원문 X 링크</h2>
+<ul>
+<li>북마크 — <a href="https://x.com/rS_alonewolf/status/2119748126387130424">@rS_alonewolf</a> (id <code>2119748126387130424</code>, <a href="https://x.com/i/status/2119748126387130424">x.com/i/status/2119748126387130424</a>)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
