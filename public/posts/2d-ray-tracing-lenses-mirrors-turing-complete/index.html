@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>렌즈와 거울이 튜링 완전? 2차원 ABCD 광선추적 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-10 · <span class="chip">#광선추적</span><span class="chip">#ABCD</span><span class="chip">#튜링 완전</span><span class="chip">#가역 계산</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">렌즈와 거울이 튜링 완전? 2차원 ABCD 광선추적 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#_3">논문이 놓인 자리</a></li>
+<li><a href="#_4">광선은 두 개의 유리수다</a></li>
+<li><a href="#1-18">행렬식 1은 렌즈 세 장, 같은 초점은 최대 18장</a></li>
+<li><a href="#1214">식 (12)–(14)를 다시 곱함</a></li>
+<li><a href="#_5">거울이 더하는 노드</a></li>
+<li><a href="#4-y">테이프는 4진법으로 y와 θ에</a></li>
+<li><a href="#_6">앞의 논문들이 말한 차원</a></li>
+</ul>
+</li>
+<li><a href="#_7">비즈니스 인사이트</a></li>
+<li><a href="#_8">팩트 체크</a></li>
+<li><a href="#_9">참고 자료</a></li>
+<li><a href="#x">원문 X 링크</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/ronkeisha_info/status/2119992759092191535">@ronkeisha_info(論計舎)의 포스트</a>를 계기로 썼습니다. 같은 상태 주소는 <a href="https://x.com/i/status/2119992759092191535">x.com/i/status/2119992759092191535</a>입니다. 표시 이름은 論計舎, <code>screen_name</code>은 <code>ronkeisha_info</code>, 사용자 id는 <code>1386136682970312711</code>입니다. 이 환경의 X API는 <code>client-not-enrolled</code>로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2119992759092191535">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. <code>created_at</code>은 <code>Tue Nov 10 03:17:15 +0000 2026</code>, <strong>2026-11-10 12:17 KST</strong>입니다. <code>lang</code>은 <code>ja</code>, <code>is_note_tweet</code>은 true입니다. 같은 응답의 스냅샷은 답글 3, 리포스트 112, 좋아요 524, 북마크 261, 인용 15, 조회 23,943입니다. <code>verification.type</code>은 <code>individual</code>, 팔로워는 1,251입니다. 프로필 설명은 수이론리학·이론컴퓨터과학을 전문으로 하는 온라인 사설 학원이고, 초고에 AI를 쓴다고 적혀 있습니다. 읽은 시각은 2026-11-10 22:12 KST 무렵입니다. X 글의 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+<p>일본어 본문은 이렇습니다. 렌즈와 거울만으로 모든 계산을 할 수 있다. 얇은 렌즈와 평면거울에 의한 2차원 레이트레이싱이 튜링 완전으로 밝혀졌고, 광학 계산의 만능성에 3차원이 필요한가 하는 Reif 등 1994의 미해결 문제를 해결했다. 거울이 없으면 행렬식 1인 2×2 행렬에 지나지 않지만, 거울을 더하면 만능이 된다. 링크는 <a href="https://arxiv.org/abs/2606.24218">arXiv:2606.24218</a>이고, 해시태그는 <code>#計算論</code> <code>#生成AI</code>입니다.</p>
+<p>아래 대조는 2026-11-10(KST)에 연 1차 자료입니다. 본문 식은 <a href="https://arxiv.org/html/2606.24218v1">arXiv HTML v1</a>입니다. 회의 판은 <a href="https://doi.org/10.4230/LIPIcs.MFCS.2026.91">LIPIcs MFCS 2026, 91</a>이고, 그 쪽의 Related Version이 같은 arXiv를 Full Version으로 가리킵니다. 행렬 곱은 이 호스트의 NumPy 1.26.4로 다시 계산했습니다. 렌즈와 거울을 실험대에 올리지는 않았습니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>광선이 렌즈와 거울을 지나 정해진 선에 닿는지 묻는 문제는, 그래픽스와 광학 설계에서 시뮬레이터가 매일 푸는 질문입니다. 그 질문의 이상화된 한 형태가 결정 불가능이면, “충분히 오래 돌리면 항상 답이 나온다”는 전제가 깨집니다. 멈춤 문제와 같은 종류입니다. 입력을 유한하게 적어도, 모든 입력에 대해 유한 시간에 예·아니오를 내는 알고리즘은 없습니다.</p>
+<p><a href="https://arxiv.org/abs/2606.24218">Adejoh, Jakoby, Mohanty, Schindelhauer</a>의 Theorem 2가 그 문장입니다. 2차원에서 얇은 렌즈는 근축 ABCD 행렬로, 평면거울은 반사 법칙으로 다룰 때, 시작 광선이 종료선에 닿는지는 튜링 완전입니다. 구성은 가역 튜링 기계를 시뮬레이트하고, 기계가 멈추는 것과 광선이 Halt 노드에 닿는 것을 같게 둡니다.</p>
+<p>개발자에게 남는 이름은 두 개입니다.</p>
+<ul>
+<li><strong>실수로 튜링 완전한 시스템.</strong> 분기(거울의 검사)와 가역 선형 변환(렌즈)이 한 시뮬레이션에 들어가면, 도달 가능성은 일반 알고리즘의 대상에서 빠집니다. 광선 추적기, 광학 CAD, 교육용 렌즈 상자 시뮬레이터가 이 모델을 그대로 구현하면 그 질문에 해당합니다.</li>
+<li><strong>가역 계산.</strong> 렌즈 행렬의 행렬식은 1이라 역행렬이 있고, 거울의 검사는 거꾸로 가면 단언이 됩니다. 에너지를 논의하는 물리 컴퓨터와, 정보를 지우지 않는 계산 모델이 여기서 만납니다.</li>
+</ul>
+<p>확인할 질문은 슬로건보다 다음입니다.</p>
+<ul>
+<li>만능이라는 말이 어느 광학 모델의 말인가.</li>
+<li>렌즈만 있을 때의 계산이 어디까지인가.</li>
+<li>Reif, Tygar, Yoshida 1994가 열어 둔 문장과, 이번 정리가 닫는 문장이 같은가.</li>
+<li>이 구성이 광컴퓨터 제품의 설계도인가.</li>
+</ul>
+<h2 id="_2">기술 설명</h2>
+<h3 id="_3">논문이 놓인 자리</h3>
+<p>저자는 네 명입니다. Rosemary U. Adejoh와 Andreas Jakoby는 Bauhaus University Weimar, Faculty of Media입니다. Sneha Mohanty와 Christian Schindelhauer는 University of Freiburg, Computer Networks and Telematics입니다. 메일은 <code>uni-weimar.de</code> 둘, <code>informatik.uni-freiburg.de</code> 둘입니다.</p>
+<p>arXiv API가 2026-11-10에 돌려준 항목은 <strong>v1 하나</strong>입니다. <code>published</code>는 <code>2026-06-23T07:06:02Z</code>, <strong>2026-06-23 16:06 KST</strong>입니다. 주제는 <code>cs.CC</code>이고, arXiv DOI는 <a href="https://doi.org/10.48550/arXiv.2606.24218">10.48550/arXiv.2606.24218</a>입니다. <code>comment</code> 원문은 이렇습니다.</p>
+<blockquote>
+<p>Submission version accepted at 51st International Symposium on Mathematical Foundations of Computer Science (MFCS) 2026. This is Technical Report version 1</p>
+</blockquote>
+<p>HTML 첫머리에도 Technical Report가 있습니다. 그래서 전문은 기술보고 v1입니다. 동시에 저자 주석은 MFCS 2026 채택본이라고 적습니다.</p>
+<p>회의 목록은 <a href="https://mfcs2026.irif.fr/accepted-papers.html">MFCS 2026 accepted papers</a>에 같은 제목과 같은 네 저자로 있습니다. 회의 기간은 그 페이지 기준으로 <strong>2026-08-24–28, 파리</strong>입니다. 프로시딩은 <a href="https://doi.org/10.4230/LIPIcs.MFCS.2026.91">LIPIcs 10.4230/LIPIcs.MFCS.2026.91</a>이고, Dagstuhl 문서 쪽의 Publication Date는 <strong>2026-08-21</strong>, 분량은 <strong>14쪽</strong>, 라이선스는 CC-BY 4.0입니다. 그 쪽은 arXiv를 Full Version으로 링크합니다. 이 글의 식 번호 (12)–(14)는 arXiv HTML에서 읽은 번호입니다. 14쪽 프로시딩과 식 번호를 한 줄씩 맞추지는 않았습니다.</p>
+<h3 id="_4">광선은 두 개의 유리수다</h3>
+<p>근축 모델에서 광선은 기준축에서의 높이 <code>y</code>와, 그 축에 대한 각 <code>θ</code>입니다. 빈 공간 길이 <code>d</code>와 초점거리 <code>f</code>의 얇은 렌즈는 논문 식 (8), (10)입니다.</p>
+<div class="highlight"><pre><span></span><code>S_d = [[1, d], [0, 1]]
+T_f = [[1, 0], [-1/f, 1]]
+</code></pre></div>
+
+<p><code>1/f = (n-1)(1/R_1 - 1/R_2)</code>는 렌즈 제작자 공식으로 논문에 적혀 있습니다. 공기 굴절률은 1로 둡니다. 작은 각 근사는 <code>sin θ ≈ θ</code>입니다. 빈 공간의 정확한 높이 변화는 <code>d sin θ</code>이고, ABCD는 그 사인을 각 자체로 바꿉니다. 두 행렬 모두 행렬식이 1이라 <code>SL(2)</code>에 들어갑니다. 아래 코드가 그 행렬식을 다시 계산합니다.</p>
+<p>렌즈를 여러 장 통과한 결과는 행렬 곱 하나입니다. 거울이 없으면 분기가 없습니다. 입력 <code>(y,θ)</code>에 행렬 하나를 곱하는 일은 닫힌 형식으로 계산됩니다.</p>
+<h3 id="1-18">행렬식 1은 렌즈 세 장, 같은 초점은 최대 18장</h3>
+<p>Theorem 3은 유리수 성분, 행렬식 1인 2×2 행렬을 <strong>초점거리를 행렬에 맞게 고른</strong> 얇은 렌즈 <strong>세 장</strong>과 간격으로 만들 수 있다고 말합니다. 세 장보다 적게는 안 되는 행렬이 있다는 문장도 같은 정리에 있습니다. “모든 행렬의 최소 장수가 3”이라는 뜻까지 적혀 있지는 않습니다. 초록의 “exactly three”는 이 구성의 장수입니다.</p>
+<p>초점을 하나로 고정하면 Theorem 4입니다. 유리수 <code>f&gt;0</code> 한 종류와 간격을 조절해, 유리수 행렬식 1 행렬을 <strong>최대 18장</strong>으로 만듭니다. 부록은 세 장의 서로 다른 초점을, 고정 초점 여섯 장짜리 광학계로 각각 바꿔 18이 나오게 설명합니다. <code>f&lt;0</code>인 오목 렌즈만으로는 성분이 음이 아닌 행렬과 <code>S_d</code>만 곱하게 되어, 음의 성분이 있는 행렬을 못 만든다고 논문이 적습니다. 18은 상한이고, 8절은 이 상한을 줄이는 일을 열린 문제로 남깁니다.</p>
+<p>Theorem 5는 충분히 긴 전체 길이 <code>d</code>를 상수 개의 같은 렌즈로 정확히 채울 수 있다고 말합니다. 바로 이어서, 그 일반 구성의 렌즈 위치는 이차방정식에서 나와 무리수일 수 있다고 적습니다. 난해성 증명에는 그 일반 정리를 쓰지 않고, 길이가 9와 12인 유리수 배치를 하나 집어 식 (12)–(14)로 둡니다. 8절은 “충분히 긴 유리수 전체 길이를 유리수 파라미터만으로 채울 수 있는가”를 따로 열린 문제로 남깁니다.</p>
+<h3 id="1214">식 (12)–(14)를 다시 곱함</h3>
+<p>논문이 고른 세 부품입니다. 각 <code>T</code>는 초점 1이고, 렌즈는 부품마다 세 장입니다. 곱의 오른쪽이 광선에 먼저 적용됩니다.</p>
+<div class="highlight"><pre><span></span><code>M_{mult}=S_1 T_1 S_{5/2} T_1 S_4 T_1 S_{3/2}
+M_{switch}=S_3 T_1 S_3 T_1 S_4 T_1 S_2
+M_{wire}=S_1 T_1 S_3 T_1 S_3 T_1 S_2
+</code></pre></div>
+
+<p>간격의 합은 <code>1+5/2+4+3/2=9</code>, <code>3+3+4+2=12</code>, <code>1+3+3+2=9</code>입니다. 논문의 “overall lengths 9 and 12”와 같습니다. 목표 행렬은 <code>diag(2,1/2)</code>, <code>[[0, 1], [-1, 0]]</code>, 단위행렬입니다. 스위치 행렬은 회전 <code>θ→-π/2</code>의 <code>[[cosθ, -sinθ], [sinθ, cosθ]]</code>와 같은 행렬입니다. 논문은 이 행렬을 Switch라고 부릅니다.</p>
+<p>이 호스트에서 실행한 코드입니다. NumPy 1.26.4, 성분은 float64입니다. <code>1,2,3,4,1/2,3/2,5/2</code>는 이진 부동소수로 정확히 표현됩니다.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">S</span><span class="p">(</span><span class="n">d</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="n">d</span><span class="p">],</span> <span class="p">[</span><span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]])</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">T</span><span class="p">(</span><span class="n">f</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">0.0</span><span class="p">],</span> <span class="p">[</span><span class="o">-</span><span class="mf">1.0</span> <span class="o">/</span> <span class="n">f</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">]])</span>
+
+<span class="n">M_mult</span> <span class="o">=</span> <span class="n">S</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mf">2.5</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mf">1.5</span><span class="p">)</span>
+<span class="n">M_switch</span> <span class="o">=</span> <span class="n">S</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mi">4</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+<span class="n">M_wire</span> <span class="o">=</span> <span class="n">S</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mi">3</span><span class="p">)</span> <span class="o">@</span> <span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span> <span class="o">@</span> <span class="n">S</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">M</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"mult"</span><span class="p">,</span> <span class="n">M_mult</span><span class="p">),</span> <span class="p">(</span><span class="s2">"switch"</span><span class="p">,</span> <span class="n">M_switch</span><span class="p">),</span> <span class="p">(</span><span class="s2">"wire"</span><span class="p">,</span> <span class="n">M_wire</span><span class="p">):</span>
+    <span class="nb">print</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">M</span><span class="p">,</span> <span class="s2">"det"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">M</span><span class="p">))</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"det S"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">S</span><span class="p">(</span><span class="mi">1</span><span class="p">)),</span> <span class="s2">"det T"</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="n">T</span><span class="p">(</span><span class="mi">1</span><span class="p">)))</span>
+</code></pre></div>
+
+<p>출력은 다음과 같았습니다.</p>
+<table>
+<thead>
+<tr>
+<th>이름</th>
+<th>행렬</th>
+<th style="text-align: right;">det</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>S_1</code>, <code>T_1</code></td>
+<td>정의 그대로</td>
+<td style="text-align: right;">1.0, 1.0</td>
+</tr>
+<tr>
+<td><code>M_{mult}</code></td>
+<td><code>[[2, 0], [0, 0.5]]</code></td>
+<td style="text-align: right;">1.0</td>
+</tr>
+<tr>
+<td><code>M_{switch}</code></td>
+<td><code>[[0, 1], [-1, 0]]</code></td>
+<td style="text-align: right;">1.0</td>
+</tr>
+<tr>
+<td><code>M_{wire}</code></td>
+<td><code>[[1, 0], [0, 1]]</code></td>
+<td style="text-align: right;">1.0</td>
+</tr>
+</tbody>
+</table>
+<p>같은 곱을 <code>fractions.Fraction</code>으로 다시 하면 <code>M_{mult}</code>는 <code>diag(2,1/2)</code>, 스위치는 위의 정수 행렬, 와이어는 단위행렬, 행렬식은 모두 1이었습니다. float64 출력과 같습니다.</p>
+<p>논문의 나눗셈 행렬도 같이 확인했습니다. <code>M_{switch}^3=[[0, -1], [1, 0]]</code>이고, <code>M_{div}=M_{switch} M_{mult} M_{switch}^3=diag(1/2,2)</code>입니다. <code>M_{mult} M_{div}</code>와 <code>M_{switch}^4</code>는 단위행렬이었습니다.</p>
+<p>와이어가 필요한 이유는 빈 공간이 단위행렬이 아니기 때문입니다. 길이 <code>g</code>의 빈 칸은 <code>S_g</code>라서 높이가 <code>gθ</code>만큼 이동합니다. 격자 칸을 “그냥 지나가게” 하려면 렌즈로 그 이동을 상쇄한 단위행렬이 필요합니다.</p>
+<h3 id="_5">거울이 더하는 노드</h3>
+<p>평면거울은 행렬 곱 바깥에 있습니다. 논문은 입사각과 반사각이 같다는 반사 법칙을 쓰고, 45도로 기울인 거울로 광선을 격자 위에서 왼쪽이나 오른쪽으로 보냅니다. 나가는 각은 <code>π/2-θ</code>라고 적습니다.</p>
+<p>추상 기계는 변수 두 개의 선형 가역 순서도입니다. Definition 3의 축소형은 검사와 단언을 <code>y&lt;1</code>만 쓰고, 단계 연산은 네 개입니다.</p>
+<ul>
+<li><code>y</code>를 1 올리거나 1 내리기</li>
+<li><code>M_{mult}=diag(2,1/2)</code></li>
+<li><code>M_{switch}=[[0, 1], [-1, 0]]</code></li>
+</ul>
+<p>검사(Test)는 조건에 따라 갈라지고, 단언(Assertion)은 들어오는 쪽이 그 조건을 만족한다고 설계자가 보장하는 합류입니다. 거꾸로 돌리면 검사와 단언이 바뀌고, 단계의 행렬은 역행렬이 됩니다. Theorem 1은 이 축소 순서도가 가역 튜링 완전이라고 말합니다. 7절은 그 순서도를 격자 위에 올리고, 식 (12)–(14)를 변에, 거울을 꼭짓점에 넣습니다. 접힌 뒤의 격자 간격으로 <code>g=8</code>을 적습니다. 이 글은 그 접힘의 그림을 재구성하지 않았고, 변에 놓인 세 행렬 곱만 계산했습니다.</p>
+<h3 id="4-y">테이프는 4진법으로 <code>y</code>와 <code>θ</code>에</h3>
+<p>가역 튜링 기계의 알파벳은 <code>{0,1,β}</code>이고, <code>v(0)=0</code>, <code>v(1)=1</code>, <code>v(β)=2</code>입니다. 헤드 칸을 <code>s_0</code>로 두면 논문 식 (2), (3)입니다.</p>
+<div class="highlight"><pre><span></span><code>y=Σ_{i=0}^{∞} v(s_i)4^{-i-1}, θ=Σ_{i=1}^{∞} v(s_{-i})4^{-i}
+</code></pre></div>
+
+<p>오른쪽 테이프와 헤드 칸이 <code>y</code>, 왼쪽이 <code>θ</code>입니다. 빈 테이프는 모든 칸이 <code>β</code>라서 등비급수 <code>2·(1/4)/(1-1/4)=2/3</code>입니다. <code>y=θ=2/3</code>. 정수에 닿지 않는다는 논문의 말과 맞습니다. 정수는 거울 경계에 맞는 광선을 피하려고 빼 둡니다.</p>
+<p>예시로, 헤드 칸이 1, 바로 오른쪽이 0, 그 밖과 왼쪽이 모두 빈칸인 테이프를 같은 식으로 더했습니다.</p>
+<table>
+<thead>
+<tr>
+<th>양</th>
+<th>값</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>y</code></td>
+<td><code>7/24</code></td>
+</tr>
+<tr>
+<td><code>θ</code></td>
+<td><code>2/3</code></td>
+</tr>
+<tr>
+<td><code>⌊ 4y⌋</code></td>
+<td>1, 즉 헤드 기호 1</td>
+</tr>
+<tr>
+<td><code>⌊ 4θ⌋</code></td>
+<td>2, 즉 왼쪽 기호 <code>β</code></td>
+</tr>
+</tbody>
+</table>
+<p>헤드를 오른쪽으로 옮기는 논문 식 (4), (5)는 <code>y ← 4y - v(s_0)</code>, <code>θ ← (θ + v(s_0)) / 4</code>입니다. <code>v(s_0)=1</code>을 넣으면 <code>y=1/6</code>, <code>θ=5/12</code>입니다. 헤드를 한 칸 옮긴 뒤의 테이프를 식 (2), (3)으로 다시 인코딩해도 <code>1/6</code>, <code>5/12</code>였습니다.</p>
+<p><code>M_{mult}</code>를 <code>(7/24,2/3)</code>에 곱하면 <code>(7/12,1/3)</code>입니다. <code>M_{wire}</code>는 그 벡터를 그대로 둡니다. <code>M_{switch}</code>는 <code>(2/3,-7/24)</code>를 냅니다. 셋 다 Fraction 곱의 결과입니다.</p>
+<p>변수의 절댓값을 2 미만으로 두는 구성은 <code>sin θ ≈ θ</code>를 크게 벗어난다고 논문이 스스로 적습니다. 그래서 유리수 <code>ε&gt;0</code>, 예로 <code>ε=1/100</code>을 곱해 구간을 <code>(-2ε, 2ε)</code>으로 줄이고, 검사도 <code>y &lt; ε</code>, 이동도 <code>±ε</code>으로 바꿉니다. 행렬 곱 자체는 그대로입니다. 줄인 뒤에도 모델은 근사입니다.</p>
+<p>같은 인코딩을 float64에 넣으면 먼 칸이 사라집니다. 이 호스트에서 <code>np.float64(0.25) + np.float64(4)**(-40)</code>은 <code>0.25</code>와 같게 비교되었습니다. <code>4^{-40}=2^{-80}</code>인 칸의 기호 1은 그 dtype의 0.25에 더해지지 않습니다. 논문의 증명은 유리수 정확 연산을 가정합니다. float64 광선 추적기가 이 테이프를 보존한다는 문장은 위 한 줄과 맞지 않습니다.</p>
+<h3 id="_6">앞의 논문들이 말한 차원</h3>
+<p><a href="https://doi.org/10.1007/BF02574009">Reif, Tygar, Yoshida, <em>Discrete &amp; Computational Geometry</em> 11:265–288, 1994</a>의 초록은 광선 추적을 결정 문제로 정의합니다. 광학계와 초기 광선이 주어졌을 때, 광선이 지정한 점에 닿는가. 본문이 보인 결정 불가능성은 <strong>3차원 기하광학</strong>입니다. 유리 이차 반사·굴절, 유리 선형 굴절, 직사각형 반사·굴절, 일부 무리수 부등식을 허용한 반사·부분반사가 그 목록에 있습니다. 3차원 유리 선형 반사·부분반사는 PSPACE-난해이고, 임의의 <code>d&gt;2</code>에서 축에 평행하거나 수직인 유리 반사만 있는 계는 PSPACE에 들어간다고 적습니다. 접수 표기는 1991-02-19, 수정은 1993-06-14와 1993-08-08입니다.</p>
+<p>6절 “Conclusion and Further Problems”가 열어 둔 항목은 세 개입니다. 인용은 그 PDF 본문입니다.</p>
+<ul>
+<li>반사 또는 굴절이 있는 <strong>2차원 유리 광학계</strong>의 광선 추적에 하한을 찾을 것.</li>
+<li>반사와 부분반사만 있는 <strong>2차원 유리 선형</strong> 광학계의 하한을 찾을 것. 3차원은 PSPACE-난해이나 2차원 하한은 없다고 적습니다.</li>
+<li>반사 선형면만 있는 유리 광학계의 광선 추적이 <strong>결정 가능한지</strong> 판정할 것.</li>
+</ul>
+<p>“3차원이 필요한가”라는 문장은 2026년 논문의 요약이지, 1994년 6절의 항목 문장은 아닙니다. 1994년 모델은 반사·굴절의 기하광학이고, 2026년 정리는 <code>sinθ≈θ</code>인 ABCD입니다. 2026년 8절의 마지막 질문은, 근사에 기대지 않는 자연 광학에서도 2차원 광선 추적이 튜링 완전인지입니다. 그 문장은 열린 문제로 남아 있습니다.</p>
+<p><a href="https://doi.org/10.1103/PhysRevLett.64.2354">Moore, Physical Review Letters 64:2354–2357, 1990-05-14</a>의 초록은, 자유도 세 개(3차원 퍼텐셜 속의 입자)의 운동이 튜링 기계와 동등할 수 있다고 말합니다. 초기 조건을 정확히 알아도 장기 동역학에 대한 거의 모든 질문이 결정 불가능하다는 문장입니다. 본문은 그 구현의 쉬운 길을 당구로 두고, 포물 거울로 확장·수축을 만든 뒤 벽을 매끈한 퍼텐셜로 부드럽게 한다고 적습니다. 2026년 논문은 이것을 “3차원 거울 미로 속의 공 하나가 2-카운터 기계를 시뮬레이트한다”로 요약합니다. 이 글이 읽은 Moore 초록과 당구 문단에는 2-카운터라는 단어가 없고, 일반화 시프트와 튜링 기계가 있습니다.</p>
+<p>같은 저자들의 <a href="https://doi.org/10.4230/LIPIcs.FSTTCS.2025.4">Pinball Wizards, FSTTCS 2025</a>는 Publication Date <strong>2025-12-09</strong>, 18쪽, CC-BY 4.0입니다. 초록은 일방 문, 평면 벽, 포물 벽, 움직이는 평면 벽, 범퍼로 된 핀볼이 2-스택 푸시다운 오토마타를 시뮬레이트하고, <strong>2차원에서도</strong> 튜링 완전하다고 적습니다. 2026년 논문은 그 구성을, 한쪽 스택을 위치에, 다른 스택을 도착 시각에 넣어 <strong>2.5차원</strong>이라고 다시 부릅니다. 두 문장은 같은 저자 그룹의 서로 다른 논문에 있습니다. 2026년 구성은 움직이는 벽, 일방 문, 포물 거울을 빼겠다고 8절에 적습니다.</p>
+<p><a href="https://arxiv.org/abs/2512.19156">Miranda, Ramos, arXiv:2512.19156</a>는 API 기준 <code>published</code>가 <code>2025-12-22T08:52:50Z</code>입니다. 2026-11-10에 연 HTML의 제목은 <strong>Two-Dimensional Billiards Are Turing Complete</strong>이고, 주석은 제목을 바꿨으며 최종본이 <em>Proceedings of the National Academy of Sciences</em>에 실릴 예정이라고 적습니다. 2026년 광선 논문의 참고문헌 제목은 아직 <strong>Classical billiards can compute</strong>입니다. 현재 HTML 서론은 평면 당구, 입자 하나, 고정 벽으로 범용 튜링 기계를 시뮬레이트한다고 말하고, 제어 벽을 셀 수 있는 직선 조각을 한 매끈한 호로 이은 진동 윤곽으로 설명합니다. 다각형이 아니라고 적습니다. 2026년 광선 논문의 관련 연구 문장은 “fractal zig–zag profile”입니다. 그 형용과 현재 HTML의 진동 윤곽을 같은 그림에서 대조하지는 않았습니다.</p>
+<h2 id="_7">비즈니스 인사이트</h2>
+<p>금액과 제품 문장에는 출처를 붙입니다. 그 밖의 판단은 <strong>분석/의견</strong>입니다. 이 글은 렌즈 가격, 전력, 수율을 측정하지 않았습니다. 논문에도 그 숫자가 없습니다.</p>
+<p><strong>이 결과는 컴퓨터 제품이 아닙니다.</strong> 구성은 두께를 0으로 둔 얇은 렌즈, 지름을 무시한 렌즈, 정확한 유리수, 작은 각 근사, 그리고 테이프가 길어질수록 더 많은 4진 자릿수를 요구합니다. Halt에 닿는지를 모든 입력에 대해 결정하는 알고리즘은 없다는 것이 정리의 내용입니다. 그 문장은 제품을 돌리는 절차가 아닙니다.</p>
+<p><strong>어느 시장인가.</strong> 빛을 계산이나 연결에 쓰는 회사의 공개 라운드는 이 정리와 별도로 존재합니다.</p>
+<p><a href="https://lightmatter.com/press-release/lightmatter-raises-400m-series-d-quadruples-valuation-to-4-4b-as-photonics-leader-for-next-gen-ai-data-centers/">Lightmatter 보도자료</a>의 표기는 2024-10-16, Series D <strong>4억 달러</strong>, 평가액 <strong>44억 달러</strong>, 헤드라인은 차세대 AI 데이터센터용 포토닉스입니다. <a href="https://www.reuters.com/technology/photonic-startup-lightmatter-raises-400-million-amid-ai-datacenter-boom-eyes-ipo-2024-10-16/">Reuters 2024-10-16</a>도 Series D 4억 달러, 평가액 44억 달러, 리드가 T. Rowe Price이고, 회사를 데이터센터 네트워킹 칩의 포토닉 기술을 만드는 마운틴뷰 회사로 적습니다. 누적 조달액은 2차 데이터베이스끼리 숫자가 달라 이 글에 적지 않습니다. 2024-10-16 이후의 라운드를 이 글이 회사 원문에서 새로 확인하지는 않았습니다.</p>
+<p><a href="https://lumai.ai/resources/lumai-secures-more-than-10m-investment-2">Lumai의 2025-04-02 글</a>은 <strong>1,000만 달러를 넘는</strong> 투자, 리드는 Constructor Capital, 옥스퍼드 스핀아웃이라고 적습니다. 함께 적힌 투자자는 IP Group, PhotonVentures, Journey Ventures, LIFTT, Qubits Ventures, State Farm Ventures, TIS Inc.입니다. 같은 글의 성능 문장은 회사 주장입니다. 추론 비용을 당시 상위 솔루션의 10분의 1로, 실리콘만 있는 가속기 대비 성능 50배, 데이터센터 AI 전력의 10%를 쓴다고 합니다. <a href="https://optics.org/news/photonic-computing-startup-lumai-lands-10m">optics.org 2025-04-02</a>도 그 투자와 50배·10% 문장을 회사 발표로 전합니다. 이 글은 그 배율을 재지 않았습니다. Lumai 본문은 연산을 3차원 공간을 지나는 광선 다발의 행렬 곱으로 설명합니다.</p>
+<p><strong>누가 이득을 보나.</strong> (1) 광학 시뮬레이터에서 “광선이 목표에 닿는가”를 항상 결정하는 API를 약속하려는 사람. 이 모델에서는 그 약속이 정리와 충돌합니다. (2) 가역 순서도와 행렬식 1 변환을 수업이나 검증 코드로 다루는 사람. 식 (12)–(14)는 짧은 곱으로 재현됩니다. (3) 광컴퓨팅 발표의 “만능” “빛으로 모든 계산”을 읽는 사람. 비교 대상이 정리의 어느 줄인지 물을 수 있습니다.</p>
+<p><strong>비용과 채택.</strong> 논문은 BOM, 지연, 전력, 정렬 허용오차를 주지 않습니다. <strong>분석/의견.</strong> 데이터센터 포토닉스의 청구서는 인터커넥트와 행렬-벡터 곱의 처리량·전력이고, 이 논문의 장부에는 그 칸이 없습니다. 채택을 이 정리에서 끌어내면 안 됩니다. 정확한 유리수 테이프는 양자화와 맞먹지 않고, float64 한 줄은 이미 먼 칸을 잃었습니다. 렌즈 장수 상한 18은 임의의 <code>SL(2)</code> 행렬을 고정 초점 렌즈로 만드는 조합 상한이지, 제품의 부품 수 견적이 아닙니다.</p>
+<p><strong>개발자의 일과 제품에 남는 것.</strong> 런타임을 바꾸지 않습니다. 렌더러의 반사·굴절을 이 근사로 바꿀 이유도 이 논문은 주지 않습니다. 남는 것은 불변 조건입니다. 분기가 있는 이상 광학계의 도달 가능성을 단위 테스트로 “항상 종료”라고 적으면, 그 문장은 이 모델에서 거짓입니다. 유한 정밀도로 자른 근사는 다른 문제이고, 그 잘린 문제가 결정 가능하다는 증명을 이 논문은 하지 않습니다.</p>
+<p><strong>분석/의견.</strong> Lumai가 발표한 광학 행렬 곱은, 이 논문이 “거울 없는 렌즈는 행렬 하나”라고 둔 쪽에 가깝습니다. 만능이 되려면 논문에서는 평면거울의 검사·단언이 더 필요합니다. Lightmatter의 Reuters 설명은 네트워킹 칩입니다. 둘 다 Theorem 2의 구현 일정이 아닙니다. 해시태그 <code>#生成AI</code>와 논문 본문 사이에는, 이 글이 찾은 공통 기술 문장이 없습니다.</p>
+<h2 id="_8">팩트 체크</h2>
+<p>✅ 1차 자료 또는 이 글의 실행과 맞음 / ⚠️ 범위가 다르거나, 저자 문장 외에 확인할 자료가 없음 / ❌ 1차 자료와 어긋남</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>얇은 렌즈와 평면거울의 2차원 광선 추적이 튜링 완전이다</td>
+<td>✅</td>
+<td>Theorem 2. 대상은 ABCD 렌즈와 평면거울, 유리수 입력·간격·행렬. https://arxiv.org/abs/2606.24218</td>
+</tr>
+<tr>
+<td>거울이 없으면 행렬식 1인 2×2 행렬 하나다</td>
+<td>✅</td>
+<td>초록. 렌즈 조합은 행렬-벡터 곱 하나로 줄어든다. <code>AD-BC=1</code></td>
+</tr>
+<tr>
+<td>거울을 더하면 만능이 된다</td>
+<td>✅</td>
+<td>거울이 Test·Assertion이 되고, 축소 선형 가역 순서도가 가역 튜링 기계를 시뮬레이트한다. Theorem 1, Theorem 2</td>
+</tr>
+<tr>
+<td>렌즈와 거울만으로 모든 계산을 할 수 있다</td>
+<td>⚠️</td>
+<td>논문의 만능은 위 모델에서의 시뮬레이트다. 8절은 근사 없는 자연 광학을 열린 문제로 남긴다. 실험 컴퓨터가 아니다</td>
+</tr>
+<tr>
+<td>Reif 등 1994의 미해결, 즉 3차원이 필요한가 하는 문제를 해결했다</td>
+<td>⚠️</td>
+<td>2026 초록은 그렇게 적는다. Reif 6절의 열린 항목은 2차원 유리 광학의 하한, 2차원 선형 반사의 하한, 선형 반사만의 결정 가능성이다. 1994 모델은 기하광학이고 이번 정리는 <code>sinθ≈θ</code>다. https://doi.org/10.1007/BF02574009</td>
+</tr>
+<tr>
+<td>행렬식 1인 임의의 행렬은 얇은 렌즈 세 장이다</td>
+<td>✅</td>
+<td>Theorem 3, 유리수 행렬, 초점을 맞게 고른 세 장. 세 장 미만으로는 안 되는 행렬이 있다는 문장도 있다. 모든 행렬의 최소 장수가 3이라는 문장은 없다</td>
+</tr>
+<tr>
+<td>초점거리 하나를 고정하면 렌즈는 최대 18장이다</td>
+<td>✅</td>
+<td>Theorem 4와 부록. <code>f&gt;0</code> 유리수. 8절은 18을 줄일 수 있다고 적는다. <code>f&lt;0</code>만으로는 음의 성분을 못 만든다</td>
+</tr>
+<tr>
+<td>식 (12)–(14)가 <code>M_{mult}</code>, <code>M_{switch}</code>, 단위행렬이다</td>
+<td>✅</td>
+<td>이 호스트 NumPy 1.26.4와 Fraction 재계산. 길이 9, 12, 9. det 1</td>
+</tr>
+<tr>
+<td>테이프는 <code>y,θ</code>의 4진 전개이고 빈 테이프는 <code>2/3</code>이다</td>
+<td>✅</td>
+<td>식 (2), (3). 이 글의 합도 <code>2/3</code>. 예시 <code>(7/24,2/3)</code>의 오른쪽 이동은 <code>(1/6,5/12)</code></td>
+</tr>
+<tr>
+<td>arXiv v1은 기술보고다</td>
+<td>✅</td>
+<td>저자 주석 원문: “This is Technical Report version 1”. 같은 주석은 MFCS 2026 채택 제출본이라고도 적는다</td>
+</tr>
+<tr>
+<td>같은 결과가 MFCS 2026 프로시딩에 있다</td>
+<td>✅</td>
+<td>LIPIcs 출판일 2026-08-21, 14쪽, CC-BY 4.0. Full Version 링크가 arXiv다. https://doi.org/10.4230/LIPIcs.MFCS.2026.91</td>
+</tr>
+<tr>
+<td>Moore 1990이 3차원 거울 미로의 2-카운터 시뮬레이션이다</td>
+<td>⚠️</td>
+<td>2026 논문의 요약은 그렇다. Moore 초록은 자유도 3의 운동이 튜링 기계와 동등할 수 있다는 문장이고, 본문은 포물 거울 당구와 일반화 시프트다. https://doi.org/10.1103/PhysRevLett.64.2354</td>
+</tr>
+<tr>
+<td>Pinball Wizards가 2차원에서 이미 튜링 완전이다</td>
+<td>✅</td>
+<td>FSTTCS 2025 초록은 2차원에서도 완전하다고 적는다. 같은 저자들의 2026 논문은 도착 시각 때문에 2.5차원이라고 다시 부른다. https://doi.org/10.4230/LIPIcs.FSTTCS.2025.4</td>
+</tr>
+<tr>
+<td>참고문헌의 당구 논문 제목이 Classical billiards can compute이다</td>
+<td>⚠️</td>
+<td>2026 논문 참고문헌은 그 제목과 arXiv:2512.19156을 적는다. 2026-11-10의 arXiv HTML 제목은 Two-Dimensional Billiards Are Turing Complete이고, 주석은 제목이 바뀌었다고 한다</td>
+</tr>
+<tr>
+<td>이 구성이 실용적인 광컴퓨터다</td>
+<td>❌</td>
+<td>X의 첫 문장은 렌즈와 거울만으로 모든 계산이 가능하다고 말한다. 논문이 주는 것은 위 모델의 결정 불가능성이다. 두께 0, 유리수 정확 연산, 작은 각 근사. 이 호스트에서 <code>0.25 + 4**(-40)</code>의 float64 합은 <code>0.25</code>와 같았다</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 거울 없는 ABCD 렌즈가 행렬식 1인 행렬 하나이고, 평면거울을 더하면 그 모델에서 2차원 광선 추적이 튜링 완전하다는 정리는 논문과 식 (12)–(14)의 재계산으로 닫힙니다. X 글의 “1994년 문제를 해결했다”와 “모든 계산”은 그 정리보다 넓습니다. Reif가 적어 둔 2차원 기하광학의 하한·결정 가능성은 그대로이고, 저자도 근사 없는 광학을 열린 문제로 남겼습니다.</p>
+<h2 id="_9">참고 자료</h2>
+<ul>
+<li>전문 — <a href="https://arxiv.org/abs/2606.24218">arXiv:2606.24218v1</a> (제출 <code>2026-06-23T07:06:02Z</code>, <code>cs.CC</code>, 주석: MFCS 2026 채택 제출본, Technical Report version 1). HTML은 <a href="https://arxiv.org/html/2606.24218v1">arxiv.org/html/2606.24218v1</a>. DOI <a href="https://doi.org/10.48550/arXiv.2606.24218">10.48550/arXiv.2606.24218</a></li>
+<li>프로시딩 — <a href="https://doi.org/10.4230/LIPIcs.MFCS.2026.91">LIPIcs MFCS 2026, Article 91</a> (출판일 2026-08-21, 14쪽, CC-BY 4.0, Full Version은 위 arXiv). 회의 안내 <a href="https://mfcs2026.irif.fr/accepted-papers.html">mfcs2026.irif.fr</a> (2026-08-24–28, 파리)</li>
+<li>1994 — John H. Reif, J. Doug Tygar, A. Yoshida, <a href="https://doi.org/10.1007/BF02574009">Computability and complexity of ray tracing</a>, <em>Discrete &amp; Computational Geometry</em> 11:265–288</li>
+<li>1990 — Cristopher Moore, <a href="https://doi.org/10.1103/PhysRevLett.64.2354">Unpredictability and undecidability in dynamical systems</a>, <em>Physical Review Letters</em> 64:2354–2357 (1990-05-14)</li>
+<li>핀볼 — <a href="https://doi.org/10.4230/LIPIcs.FSTTCS.2025.4">How Pinball Wizards Simulate a Turing Machine</a>, LIPIcs FSTTCS 2025, 출판일 2025-12-09</li>
+<li>당구 — Eva Miranda, Isaac Ramos, <a href="https://arxiv.org/abs/2512.19156">arXiv:2512.19156</a> (API <code>published</code> 2025-12-22, 현재 HTML 제목 Two-Dimensional Billiards Are Turing Complete, 주석에 PNAS 게재 예정)</li>
+<li>가역 순서도 — 2026 논문이 인용한 Yokoyama, Axelsen, Glück, <em>Theoretical Computer Science</em> 611:87–115, 2016, <a href="https://doi.org/10.1016/j.tcs.2015.07.046">10.1016/j.tcs.2015.07.046</a>. 이 글은 그 논문을 다시 읽지 않았다</li>
+<li>Lightmatter — <a href="https://lightmatter.com/press-release/lightmatter-raises-400m-series-d-quadruples-valuation-to-4-4b-as-photonics-leader-for-next-gen-ai-data-centers/">회사 보도자료 2024-10-16</a>, <a href="https://www.reuters.com/technology/photonic-startup-lightmatter-raises-400-million-amid-ai-datacenter-boom-eyes-ipo-2024-10-16/">Reuters 2024-10-16</a></li>
+<li>Lumai — <a href="https://lumai.ai/resources/lumai-secures-more-than-10m-investment-2">회사 글 2025-04-02</a>, <a href="https://optics.org/news/photonic-computing-startup-lumai-lands-10m">optics.org 2025-04-02</a></li>
+</ul>
+<h2 id="x">원문 X 링크</h2>
+<ul>
+<li>북마크 — <a href="https://x.com/ronkeisha_info/status/2119992759092191535">@ronkeisha_info</a> (id <code>2119992759092191535</code>, <a href="https://x.com/i/status/2119992759092191535">x.com/i/status/2119992759092191535</a>)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
