@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>수 초 스캔으로 최적 LLM? llmfit 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-10 · <span class="chip">#llmfit</span><span class="chip">#로컬 LLM</span><span class="chip">#llama.cpp</span><span class="chip">#Ollama</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">수 초 스캔으로 최적 LLM? llmfit 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#_3">저장소가 품고 있는 목록</a></li>
+<li><a href="#_4">하드웨어를 읽는 곳</a></li>
+<li><a href="#_5">메모리를 만드는 식</a></li>
+<li><a href="#moe">MoE와 오프로드</a></li>
+<li><a href="#_6">순위가 최대화하는 것</a></li>
+<li><a href="#readme">README에 있는 명령</a></li>
+<li><a href="#_7">한계</a></li>
+</ul>
+</li>
+<li><a href="#_8">비즈니스 인사이트</a></li>
+<li><a href="#_9">팩트 체크</a></li>
+<li><a href="#_10">참고 자료</a></li>
+<li><a href="#x">원문 X 링크</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/EngMoElgaraihy/status/2119789009601708049">@EngMoElgaraihy의 포스트</a>를 계기로 썼습니다. 같은 상태 주소는 <a href="https://x.com/i/status/2119789009601708049">x.com/i/status/2119789009601708049</a>입니다. 표시 이름은 Mo Elgaraihy, <code>screen_name</code>은 <code>EngMoElgaraihy</code>, 사용자 id는 <code>1759922300671975424</code>입니다. 이 환경의 X API는 <code>client-not-enrolled</code>로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2119789009601708049">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. <code>created_at</code>은 <code>Mon Nov 09 13:47:38 +0000 2026</code>, <strong>2026-11-09 22:47 KST</strong>입니다. <code>lang</code>은 <code>ar</code>, <code>is_note_tweet</code>은 true입니다. 같은 응답의 스냅샷은 답글 2, 리포스트 16, 좋아요 153, 북마크 169, 인용 0, 조회 7,311입니다. <code>verification.type</code>은 <code>individual</code>, 팔로워는 60,159입니다. 첨부 영상은 856×704, 길이 46.39초이고, 퍼블리셔는 <code>@alextalksai</code>의 <a href="https://x.com/alextalksai/status/2119444759823446379">상태 2119444759823446379</a>입니다. 그 글의 fxtwitter 본문은 도구 이름을 llmfit이라고 적습니다. 아랍어 본문에는 저장소 이름이 없고, “GitHub 링크는 첫 댓글”이라고만 적습니다. 답글 본문은 이 환경에서 읽지 못했습니다. 영상 프레임은 받아 적지 않았습니다. 읽은 시각은 2026-11-10 19:16 KST 무렵입니다. X 글의 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+<p>아랍어 본문이 말하는 것은 이렇습니다. 무료 오픈소스 도구가 CPU, GPU, RAM을 수 초 안에 검사하고, 받기 전에 기기 능력과 모델 요구를 비교하고, 기기가 가장 효율적으로 돌릴 수 있는 모델의 정렬된 목록을 준다. 무작위로 받아 메모리를 잡아먹고 시스템을 멈추게 하는 일을 끝내 주며, 버튼 한 번으로 로컬 실행을 바로 시작한다는 문장도 있습니다.</p>
+<p>아래 대조는 2026-11-10(KST)에 연 1차 자료입니다. 소스 인용은 <code>main</code> <code>7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9</code>(커밋 시각 <code>2026-11-09T21:31:22Z</code>)입니다. 실행은 릴리스 <a href="https://github.com/AlexsJones/llmfit/releases/tag/v1.1.20">v1.1.20</a>(<code>2026-11-03T17:39:35Z</code>)의 <code>x86_64-unknown-linux-gnu</code> 바이너리입니다. 가중치는 받지 않았고, llama.cpp도 이 호스트에 없어 <code>llmfit run</code>은 호출하지 않았습니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>로컬 LLM을 고를 때 먼저 막히는 숫자는 벤치마크 점수가 아니라 메모리입니다. 가중치 파일, 양자화에 따른 바이트, 문맥이 늘릴 KV 캐시, GPU에 다 안 들어갈 때의 CPU 오프로드가 한 번에 움직여서, 디스크에 다 받은 뒤에야 “안 올라간다”를 알게 되는 경우가 있습니다.</p>
+<p><a href="https://github.com/AlexsJones/llmfit">llmfit</a>은 그 순서를 바꾸겠다는 도구입니다. README의 한 줄은 “Hundreds of models &amp; providers. One command to find what runs on your hardware.”입니다. GitHub API가 2026-11-10에 돌려준 스타는 <strong>38,870</strong>, 포크는 <strong>2,511</strong>, 라이선스 SPDX는 <strong>MIT</strong>, 기본 언어는 Rust, <code>created_at</code>은 <code>2026-02-15T16:11:31Z</code>입니다. 사용자 <a href="https://github.com/AlexsJones">AlexsJones</a>의 <code>name</code>은 Alex Jones입니다. <code>LICENSE</code> 첫 줄은 MIT License, 저작권은 “Copyright (c) 2026 Alex Jones”입니다.</p>
+<p>확인할 질문은 “로컬 모델을 추천해 주는 프로그램이 있는가”보다 다음입니다.</p>
+<ul>
+<li>하드웨어를 실제로 읽는지, 그 읽기가 수 초 안에 끝나는지.</li>
+<li>비교가 가중치 다운로드 전에 끝나는지.</li>
+<li>정렬이 “가장 효율적인 모델”인지, 다른 가중합인지.</li>
+<li>메모리 숫자가 측정인지, 파라미터 수에 계수를 곱한 추정인지.</li>
+<li>버튼 한 번이 추론 프로세스를 띄우는지.</li>
+</ul>
+<h2 id="_2">기술 설명</h2>
+<h3 id="_3">저장소가 품고 있는 목록</h3>
+<p>모델 목록은 <code>llmfit-core/data/hf_models.json</code>에 있고, 빌드할 때 바이너리에 들어갑니다. 위 커밋의 그 파일 git blob은 <code>c91df9db4d2dddb08c8c432999c1da85947dc04a</code>, 크기는 17,293,734바이트입니다. JSON 배열 길이는 <strong>19,192</strong>이고, <code>name</code>도 19,192개로 겹치지 않습니다. <code>provider</code> 문자열은 <strong>6,119</strong>종입니다. 이 필드는 Hugging Face 조직·게시자 이름입니다. 추론 런타임 개수가 아닙니다. <code>is_moe</code>가 true인 행은 <strong>3,564</strong>개입니다.</p>
+<p><code>format</code> 개수: <code>gguf</code> 15,606, <code>safetensors</code> 1,391, <code>mlx</code> 1,339, <code>awq</code> 441, <code>gptq</code> 282, <code>autoround</code> 123, 필드가 없는 행 10. README의 “Hundreds”는 이 파일의 행 수보다 작습니다. 최종 사용자 카탈로그는 릴리스에 구워집니다. v1.1.20에서 <code>llmfit list --json</code>의 배열 길이는 <strong>18,044</strong>였습니다. <code>main</code>의 19,192와 같은 파일이 아닙니다.</p>
+<p><a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/how-it-works.md">docs/how-it-works.md</a>는 목록을 Hugging Face API에서 <code>scripts/scrape_hf_models.py</code>로 만든다고 적습니다. 같은 문서가 이름으로 드는 계열은 Meta Llama, Mistral, Qwen, Gemma, Phi, DeepSeek, Granite, OLMo, Grok, Cohere, BigCode, 01.ai, Upstage, Falcon, Hugging Face, GLM, Kimi, ERNIE입니다. 19,192행이 그 이름들만으로 이루어져 있다는 뜻은 아닙니다. 상위 <code>provider</code>에는 <code>facebook</code> 1,089, <code>mlx-community</code> 621, <code>unsloth</code> 440, <code>Alibaba</code> 352, <code>nvidia</code> 248도 있습니다.</p>
+<h3 id="_4">하드웨어를 읽는 곳</h3>
+<p><a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/how-it-works.md">docs/how-it-works.md</a>와 <code>llmfit-core/src/hardware.rs</code>의 <code>detect()</code>는 같은 방향입니다.</p>
+<ul>
+<li>RAM과 CPU 코어는 <code>sysinfo</code>입니다. 바이트를 <code>1024³</code>으로 나눠 GiB로 둡니다. <code>available_memory</code>가 0이면 폴백이 있습니다.</li>
+<li>NVIDIA는 <code>nvidia-smi</code>이고, 비면 Linux sysfs입니다. 여러 장의 VRAM을 더합니다. 문서에는 보고가 실패하면 GPU 이름에서 VRAM을 추정하는 폴백이 있다고 적혀 있습니다.</li>
+<li>AMD는 <code>rocm-smi</code> 또는 sysfs입니다. <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/platform-support.md">플랫폼 문서</a>는 AMD와 Ascend에서 “VRAM may be unknown”이라고 적습니다.</li>
+<li>Intel Arc 독립 GPU는 sysfs <code>mem_info_vram_total</code>, 내장은 <code>lspci</code>입니다.</li>
+<li>Apple Silicon은 <code>system_profiler</code>이고, 문서의 문장은 “VRAM = system RAM”입니다.</li>
+<li>Ascend는 <code>npu-smi</code>입니다.</li>
+<li>독립 GPU의 핏 풀은, 여유 VRAM을 알면 그 값과 총량 중 작은 쪽입니다. 통합 메모리는 총량을 씁니다. <code>gpu_fit_pool_gb</code> 주석이 그렇게 적습니다.</li>
+</ul>
+<p>이 글의 호스트에서 v1.1.20 <code>llmfit system --json</code>은 GPU 0, 백엔드 <code>CPU (x86)</code>, CPU <code>Intel(R) Xeon(R) Processor</code> 4코어, 총 RAM 15.63GB, 가용 RAM 4.88GB를 출력했습니다. 직후의 <code>recommend --json</code>은 가용 RAM을 4.8GB로 적었습니다. 가용 RAM은 그 순간의 여유 메모리입니다. llama.cpp 제공자는 <code>available: false</code>, 힌트는 <code>not in PATH, set LLAMA_CPP_PATH</code>였습니다.</p>
+<p>같은 바이너리를 bash <code>TIMEFORMAT='%R'</code>로 재었습니다. <code>llmfit system --json</code>은 <strong>0.009초</strong>, <code>llmfit fit -n 5</code>는 <strong>0.440초</strong>였습니다. 한 대의 4코어 VM, 한 번씩입니다. 저장소는 이 시간을 스펙으로 적지 않습니다.</p>
+<h3 id="_5">메모리를 만드는 식</h3>
+<p>기본 추정 문맥은 <code>DEFAULT_ESTIMATION_CTX</code> = <strong>8,192</strong>입니다. <code>fit.rs</code>는 모델이 광고하는 최대 문맥(예: 262,144)으로 KV를 잡으면 과대 추정이라고 주석합니다. 지정하지 않으면 <code>min(모델 문맥, 8192)</code>입니다. <code>--max-context</code>가 있으면 그 값으로 다시 제한합니다. CLI 문서는 이 플래그가 없으면 <code>OLLAMA_CONTEXT_LENGTH</code>를 쓴다고 적습니다.</p>
+<p>가중치 크기는 <code>params_b() * quant_bpp(quant)</code>입니다. <code>params_b</code>는 <code>parameters_raw / 1_000_000_000</code>입니다. 10진 GB로 취급하는 곱입니다. <code>quant_bpp</code>의 일부는 이렇습니다.</p>
+<table>
+<thead>
+<tr>
+<th>양자화</th>
+<th><code>quant_bpp</code> (메모리)</th>
+<th><code>quant_bytes_per_param</code> (대역폭 추정)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Q8_0</td>
+<td>1.05</td>
+<td>1.0</td>
+</tr>
+<tr>
+<td>Q6_K</td>
+<td>0.80</td>
+<td>0.75</td>
+</tr>
+<tr>
+<td>Q5_K_M</td>
+<td>0.68</td>
+<td>0.625</td>
+</tr>
+<tr>
+<td>Q4_K_M, Q4_0</td>
+<td>0.58</td>
+<td>0.5</td>
+</tr>
+<tr>
+<td>Q3_K_M</td>
+<td>0.48</td>
+<td>0.375</td>
+</tr>
+<tr>
+<td>Q2_K</td>
+<td>0.37</td>
+<td>0.25</td>
+</tr>
+<tr>
+<td>mlx-4bit</td>
+<td>0.55</td>
+<td>0.5</td>
+</tr>
+<tr>
+<td>mlx-8bit</td>
+<td>1.0</td>
+<td>1.0</td>
+</tr>
+<tr>
+<td>AWQ-4bit, GPTQ-Int4, AutoRound-4bit</td>
+<td>0.5</td>
+<td>0.5</td>
+</tr>
+</tbody>
+</table>
+<p>모르는 라벨은 메모리 쪽에서 0.58, 대역폭 쪽에서 0.5입니다. 같은 이름의 양자화가 두 표를 탑니다.</p>
+<p><code>estimate_memory_gb_with_kv</code>는 주석 그대로 <strong>가중치 + KV 캐시 + 런타임 오버헤드</strong>입니다. 오버헤드는 상수 <strong>0.5</strong>입니다. 기본 KV dtype은 fp16입니다.</p>
+<p>KV는 층 수, KV 헤드 수, <code>head_dim</code>이 있으면 이 식입니다.</p>
+<div class="highlight"><pre><span></span><code>kv_bytes = 2 * n_layers * n_kv_heads * head_dim * ctx * dtype_bytes
+</code></pre></div>
+
+<p>바이트를 <code>2^30</code>으로 나눕니다. 전체 어텐션 층만 문맥에 비례하고, linear/SSM 층의 순환 상태는 이 KV에 넣지 않는다고 주석합니다. MLA(<code>deepseek_v2</code>, <code>deepseek_v3</code>, <code>kimi_k2</code> 등)는 K·V를 헤드마다 두지 않고, 폭 576의 압축 잠재 벡터로 계산합니다. 메타데이터가 없으면 <code>0.000008 * params_b * ctx</code>에 dtype 비율을 곱하는 폴백입니다.</p>
+<p>양자화 사다리는 품질이 높은 쪽부터 <code>Q8_0</code>, <code>Q6_K</code>, <code>Q5_K_M</code>, <code>Q4_K_M</code>, <code>Q3_K_M</code>, <code>Q2_K</code>입니다. MLX는 <code>mlx-8bit</code>, <code>mlx-4bit</code>입니다. 예산 안에 들어오는 가장 높은 품질을 고르고, 하나도 없으면 문맥을 한 번 반으로 줄여 1024 이상일 때 다시 봅니다. 예산은 풀의 <strong>98%</strong>입니다. <code>quant_budget</code>이 <code>pool * 0.98</code>입니다.</p>
+<p>핏 등급은 <code>memory_required / memory_available</code> 하나입니다.</p>
+<table>
+<thead>
+<tr>
+<th>사용률</th>
+<th>등급</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>60% 이하</td>
+<td>Perfect</td>
+</tr>
+<tr>
+<td>85% 이하</td>
+<td>Good</td>
+</tr>
+<tr>
+<td>98% 이하</td>
+<td>Marginal</td>
+</tr>
+<tr>
+<td>98% 초과</td>
+<td>Too Tight</td>
+</tr>
+</tbody>
+</table>
+<p>GPU와 텐서 병렬만 Perfect에 닿습니다. MoE 오프로드, CPU+GPU, CPU는 Perfect여도 Good으로 내립니다. <code>fit.rs</code> 주석은 Perfect를 “여유 있게 들어가고, GPU에서 돈다”로 정의합니다. <code>recommended_ram_gb</code>는 판정에 쓰지 않습니다. 주석은 그 필드를 카탈로그 전역의 <code>model_size × 2.0</code> 휴리스틱이라고 부릅니다.</p>
+<p>속도의 기본 식은, GPU 대역폭을 알 때 <code>(bandwidth_GB_s / model_size_GB) × 0.55</code>입니다. 0.55는 TUI <code>A</code>로 바꾸는 기본 효율입니다. 대역폭을 모르면 백엔드 상수입니다. CUDA 220, Metal 160, ROCm 180, SYCL 100, CPU ARM 90, CPU x86 70, Ascend 390. 폴백은 <code>K / params_b × quant_speed_multiplier</code>입니다. 프리필은 fp16 TFLOPS를 알 때만 <code>prefill_tps</code>와 <code>ttft_ms</code>를 채우고, 모르면 <code>null</code>입니다.</p>
+<p>신뢰도는 <code>measured_local</code>, <code>measured_community</code>, <code>calibrated</code>, <code>estimated</code>, <code>unsupported</code> 중 먼저 맞는 것입니다. 커뮤니티 측정은 <code>llmfit bench</code>가 저장하고, <code>--share</code>가 장치 흐름으로 이 저장소에 PR을 연다고 README가 적습니다.</p>
+<h3 id="moe">MoE와 오프로드</h3>
+<p>카탈로그의 <code>mistralai/Mixtral-8x7B-Instruct-v0.1</code>은 <code>parameters_raw</code> 46,702,792,704, <code>active_parameters</code> 12,900,000,000, 전문가 8 중 활성 2, 문맥 32,768, 양자화 필드 <code>Q4_K_M</code>, <code>min_vram_gb</code> 23.9, <code>min_ram_gb</code> 26.1, <code>recommended_ram_gb</code> 43.5입니다. 층 32, KV 헤드 8, <code>head_dim</code> 128, <code>format</code>은 <code>gguf</code>, 라이선스 필드는 <code>apache-2.0</code>입니다.</p>
+<p><code>moe_active_vram_gb_at</code>은 활성 파라미터에 <code>quant_bpp</code>를 곱해 <code>2^30</code>으로 나누고 <strong>1.1</strong>을 곱합니다. 하한은 0.5입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="n">active</span> <span class="o">=</span> <span class="mi">12_900_000_000</span>
+<span class="n">bpp</span> <span class="o">=</span> <span class="mf">0.58</span>  <span class="c1"># quant_bpp("Q4_K_M")</span>
+<span class="n">gib</span> <span class="o">=</span> <span class="p">(</span><span class="n">active</span> <span class="o">*</span> <span class="n">bpp</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">1024</span> <span class="o">**</span> <span class="mi">3</span><span class="p">)</span> <span class="o">*</span> <span class="mf">1.1</span>
+<span class="c1"># gib == 7.665</span>
+</code></pre></div>
+
+<p>v1.1.20 <code>llmfit info "mistralai/Mixtral-8x7B-Instruct-v0.1"</code>은 “Active VRAM: <strong>7.7 GB</strong> (vs 23.9 GB full model)”를 출력했습니다. 같은 화면의 디스크 추정은 Q4_K_M <strong>27.1 GB</strong>입니다. <code>46,702,792,704 / 1e9 * 0.58</code>은 27.088이고, 화면의 Q8_0 49.0, Q6_K 37.4, Q5_K_M 31.8, Q3_K_M 22.4, Q2_K 17.3도 같은 <code>quant_bpp</code> 표와 소수 한 자리에서 맞습니다.</p>
+<p><a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/how-it-works.md">how-it-works.md</a>의 문장은 다릅니다. Mixtral 8x7B가 총 46.7B, 토큰당 약 12.9B이고, 전문가 오프로드가 VRAM을 23.9GB에서 <strong>약 6.6GB</strong>로 줄인다고 적습니다. 6.6은 활성 파라미터에 대역폭 표의 0.5바이트를 넣어 1.1을 곱한 값과 같습니다. <code>(12_900_000_000 * 0.5) / 2^30 * 1.1</code>은 6.608입니다. 문서의 예와, 소스의 <code>quant_bpp</code> 경로와, v1.1.20이 찍은 7.7은 한 숫자가 아닙니다.</p>
+<p>오프로드가 성립하려면 활성 쪽 VRAM이 GPU 풀 안이고, 비활성 전문가 RAM이 가용 RAM 안이어야 합니다. 비활성 RAM은 <code>(총 파라미터 − 활성 파라미터) * quant_bpp / 2^30</code>입니다. 이 행에 Q4_K_M을 넣으면 약 <strong>18.3 GiB</strong>입니다. 이 계산은 함수를 카탈로그 숫자에 적용한 것이고, 아래 실행은 그 분기를 타지 않았습니다.</p>
+<p>GPU가 없으면 <code>cpu_path</code>가 MoE에 대해 다른 숫자를 씁니다. 주석과 함께 <code>min_ram_gb</code>를 요구 메모리로 반환합니다. 노트 문장은 “MoE architecture, but expert offloading requires a GPU”입니다. v1.1.20 info가 이 호스트에서 출력한 문장도 그것이고, 사용률은 <strong>537.8% (26.1 / 4.9 GB)</strong> 였습니다. 26.1은 카탈로그 <code>min_ram_gb</code>입니다. 상태 🔴 Too Tight, 런 모드는 CPU, 추정 속도 1.9 tok/s, 전체 점수 43.2, 분해는 Quality 79, Speed 5, Fit 0, Context 100, 신뢰도는 <code>estimated</code>였습니다. 노트는 추정 문맥을 8192로 잘랐고 모델 문맥은 32768이라고 적었습니다. 같은 화면은 “Baseline error band is roughly +/-30%”라고 적습니다. 그 문장은 이 바이너리의 출력이고, 제가 별도 오차 실험을 한 값은 아닙니다.</p>
+<p>조밀 모델이 풀에 들어가면 경로는 다릅니다. 먼저 돌린 <code>fit -n 5</code> 표의 1위는 <code>AlignmentResearch/Llama-3.3-Tiny-Instruct-boolq</code>, 75M, 점수 77, Q8_0, CPU, 상태 Good, 메모리 12.8%였습니다. 사용률 12.8%에서 상태가 Good인 것은, CPU 경로가 Perfect를 Good으로 내리는 규칙과 같습니다. 그다음 <code>recommend --json --limit 1</code>도 같은 이름이 1위였습니다. 점수 <strong>77.2</strong>, <code>best_quant</code> Q8_0, <code>run_mode</code> CPU, <code>fit_level</code> Good, <code>memory_required_gb</code> <strong>0.63</strong>, <code>disk_size_gb</code> <strong>0.08</strong>, <code>memory_available_gb</code> 4.8, <code>effective_context_length</code> 8192, 모델 문맥 131072, <code>estimate_confidence</code> <code>estimated</code>, <code>estimate_basis.method</code> <code>cpu_constant</code>, <code>efficiency</code> 0.55였습니다. 성분은 quality 42.9, speed 100, fit 100, context 100입니다. 채팅 기본 가중 0.40, 0.35, 0.15, 0.10을 곱하면 77.16이고, JSON의 77.2와 소수 한 자리에서 맞습니다. 두 호출 사이의 가용 RAM은 달랐으므로 12.8%와 0.63/4.8을 한 스냅샷으로 묶지는 않습니다.</p>
+<p>0.63과 디스크 0.08의 차이는, 75M에서는 상수 오버헤드 0.5GB가 가중치보다 크다는 뜻에 가깝습니다. 0.075 × 1.05는 0.079입니다. 이 모델의 층 메타데이터로 KV를 다시 풀지는 않았습니다.</p>
+<p>실행 모드는 문서 기준으로 GPU(VRAM에 상주), MoE(활성은 VRAM, 비활성은 RAM), CPU+GPU(일부 오프로드), CPU(RAM 전체)입니다. 속도 가중에 쓰이는 런 모드 계수의 기본값은 텐서 병렬 0.9, MoE 오프로드 0.8, CPU 오프로드 0.5, CPU만 0.3입니다.</p>
+<h3 id="_6">순위가 최대화하는 것</h3>
+<p>각 축은 0–100이고, 가중합을 소수 한 자리로 반올림합니다. <code>ScoringWeights</code> 기본값입니다. 순서는 품질, 속도, 핏, 문맥입니다.</p>
+<table>
+<thead>
+<tr>
+<th>용도</th>
+<th>품질</th>
+<th>속도</th>
+<th>핏</th>
+<th>문맥</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>General</td>
+<td>0.45</td>
+<td>0.30</td>
+<td>0.15</td>
+<td>0.10</td>
+</tr>
+<tr>
+<td>Coding</td>
+<td>0.50</td>
+<td>0.20</td>
+<td>0.15</td>
+<td>0.15</td>
+</tr>
+<tr>
+<td>Reasoning</td>
+<td>0.55</td>
+<td>0.15</td>
+<td>0.15</td>
+<td>0.15</td>
+</tr>
+<tr>
+<td>Chat</td>
+<td>0.40</td>
+<td>0.35</td>
+<td>0.15</td>
+<td>0.10</td>
+</tr>
+<tr>
+<td>Multimodal</td>
+<td>0.50</td>
+<td>0.20</td>
+<td>0.15</td>
+<td>0.15</td>
+</tr>
+<tr>
+<td>Embedding</td>
+<td>0.30</td>
+<td>0.40</td>
+<td>0.20</td>
+<td>0.10</td>
+</tr>
+</tbody>
+</table>
+<p>속도 점수는 용도별 목표 tok/s로 나눕니다. General·Coding·Multimodal·Chat은 40, Reasoning은 25, Embedding은 200입니다. 핏 점수는 요구량이 가용량을 넘으면 0이고, 사용률 70%까지는 100을 유지한 뒤 시그마 0.20의 한쪽 가우시안으로 내려갑니다. 주석은 예전 80% 절벽(79%는 100, 81%는 70)을 없앤 변경이라고 적습니다. 문맥 점수는 목표(일반·채팅 4096, 코딩·추론 8192, 임베딩 512)를 넘으면 100, 절반 이상이면 70, 아니면 30입니다. 정렬에서 Too Tight는 칼럼과 상관없이 맨 뒤입니다.</p>
+<p>품질 축에는 양자화 감점이 있습니다. Q8_0은 0, Q4_K_M은 −5, Q2_K는 −12입니다. 용도 정렬은 <code>use_case_benchmarks.json</code>을 보고, 없는 계열은 이름 휴리스틱이라고 문서가 적습니다. 이 글은 그 표의 리더보드 출처를 다시 열지 않았습니다.</p>
+<p>추론 런타임 enum은 llama.cpp, MLX, vLLM, bitnet.cpp, unsupported입니다. vLLM은 AWQ·GPTQ·AutoRound 쪽 주석이 붙어 있습니다. 이것과 별도로, 받아 둔 모델을 알아보는 런타임 연동은 <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/providers.md">docs/providers.md</a>에 Ollama(<code>http://localhost:11434</code>), llama.cpp, MLX(<code>mlx-community</code>), Docker Model Runner(<code>http://localhost:12434</code>), LM Studio(<code>http://127.0.0.1:1234</code>)가 적혀 있습니다. TUI에서 <code>d</code>는 그 제공자로 받는 키입니다. 제공자가 여러 개면 고르는 창이 열립니다.</p>
+<h3 id="readme">README에 있는 명령</h3>
+<p>설치와 사용은 README와 <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/cli.md">docs/cli.md</a>의 예입니다. 이 글이 이 호스트에서 실제로 실행한 것은 그중 <code>system</code>, <code>fit -n 5</code>, <code>recommend --json --limit 1</code>, <code>info</code>, <code>list --json</code>, <code>run --help</code>입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="c1"># README의 설치 예</span>
+winget<span class="w"> </span>install<span class="w"> </span>--exact<span class="w"> </span>--id<span class="w"> </span>AlexsJones.llmfit
+scoop<span class="w"> </span>install<span class="w"> </span>llmfit
+brew<span class="w"> </span>install<span class="w"> </span>AlexsJones/llmfit/llmfit
+brew<span class="w"> </span>install<span class="w"> </span>llmfit
+port<span class="w"> </span>install<span class="w"> </span>llmfit
+curl<span class="w"> </span>-fsSL<span class="w"> </span>https://llmfit.axjns.dev/install.sh<span class="w"> </span><span class="p">|</span><span class="w"> </span>sh
+uv<span class="w"> </span>tool<span class="w"> </span>install<span class="w"> </span>-U<span class="w"> </span>llmfit
+uvx<span class="w"> </span>llmfit
+
+<span class="c1"># README / CLI 문서의 사용 예</span>
+llmfit
+llmfit<span class="w"> </span>recommend
+llmfit<span class="w"> </span>recommend<span class="w"> </span>--json
+llmfit<span class="w"> </span>fit
+llmfit<span class="w"> </span>fit<span class="w"> </span>--perfect<span class="w"> </span>-n<span class="w"> </span><span class="m">5</span>
+llmfit<span class="w"> </span>fit<span class="w"> </span>--show-incompatible
+llmfit<span class="w"> </span>info<span class="w"> </span><span class="s2">"Mistral-7B"</span>
+llmfit<span class="w"> </span>system
+llmfit<span class="w"> </span>doctor
+llmfit<span class="w"> </span>serve<span class="w"> </span>--host<span class="w"> </span><span class="m">0</span>.0.0.0<span class="w"> </span>--port<span class="w"> </span><span class="m">8787</span>
+llmfit<span class="w"> </span>--memory<span class="o">=</span>24G<span class="w"> </span>--ram<span class="o">=</span>64G<span class="w"> </span>--cpu-cores<span class="o">=</span><span class="m">8</span><span class="w"> </span>fit
+llmfit<span class="w"> </span>--max-context<span class="w"> </span><span class="m">8192</span><span class="w"> </span>fit<span class="w"> </span>--perfect<span class="w"> </span>-n<span class="w"> </span><span class="m">5</span>
+llmfit<span class="w"> </span>plan<span class="w"> </span><span class="s2">"Qwen/Qwen3-4B-MLX-4bit"</span><span class="w"> </span>--context<span class="w"> </span><span class="m">8192</span><span class="w"> </span>--target-tps<span class="w"> </span><span class="m">25</span><span class="w"> </span>--json
+</code></pre></div>
+
+<p><code>v1.1.20 --help</code>는 바이너리 하나로 추천, 비교, 하드웨어 계획, GGUF 다운로드, 추론 실행을 할 수 있다고 적습니다. <code>llmfit run</code>의 전제 조건은 따로 있습니다. <code>llama-cli</code>(서버 모드면 <code>llama-server</code>)가 PATH에 있어야 하고, GGUF가 로컬에 있어야 합니다. 도움말은 그 전에 <code>llmfit download</code>를 쓰라고 합니다. 대화 모드의 기본 <code>--ctx-size</code>는 4096입니다. <code>download</code>는 <code>--quant</code>를 생략하면 하드웨어에 맞는 양자화를 고르고, <code>--list</code>는 파일을 받기 전에 나열합니다.</p>
+<p>클러스터 모드는 README가 <strong>Preview</strong>라고 적고, 지금까지 mock Ray Dashboard에 대해서만 시험했다고 적습니다. <code>llmfit cluster init</code>은 Ray 대시보드를 한 번 읽어 <code>cluster.toml</code>을 쓰고, 스케줄은 하지 않는다고 같은 절이 적습니다.</p>
+<h3 id="_7">한계</h3>
+<ul>
+<li>기본 점수의 신뢰도 라벨은 <code>estimated</code>일 수 있습니다. 측정으로 바꾸려면 그 모델을 올린 뒤 <code>llmfit bench</code>가 필요합니다. info가 안내하는 <code>llama-bench</code> 행도 받은 파일의 경로가 있어야 합니다.</li>
+<li>기본 비교 문맥은 8192입니다. 모델 카드의 최대 문맥에서 돌아간다는 판정이 아닙니다.</li>
+<li>KV 기본은 fp16입니다. q8, q4, TurboQuant는 다른 경로이고, TurboQuant 주석은 연구 연동이며 업스트림 vLLM에는 아직 없다고 적습니다.</li>
+<li>오버헤드 0.5GB는 모델 크기와 무관한 상수입니다. 75M 예에서는 디스크 0.08GB와 요구 0.63GB가 같이 나왔습니다.</li>
+<li>GPU가 없는 MoE는 가중치+KV 식 대신 카탈로그 <code>min_ram_gb</code>로 판정합니다.</li>
+<li>메모리용 바이트와 속도용 바이트가 다릅니다. 문서의 Mixtral 6.6GB와 바이너리의 7.7GB가 그 차이로 설명됩니다.</li>
+<li>AMD·Ascend는 VRAM을 모를 수 있습니다. Android, Termux, PRoot에서는 GPU 자동 탐지가 없다고 플랫폼 문서가 적습니다. <code>--memory=8G</code>는 점수 우회이지 탐지가 아닙니다.</li>
+<li>백엔드가 안 맞는 행은 기본 표에서 숨깁니다. 이 호스트의 <code>fit -n 5</code>는 “4540 models hidden — incompatible backend”를 출력했습니다.</li>
+<li>카탈로그는 컴파일 타임입니다. README는 최종 사용자가 <code>brew upgrade</code>나 새 릴리스로 갱신한다고 적습니다. v1.1.20의 18,044와 <code>main</code>의 19,192는 그 간극의 한 예입니다.</li>
+<li>Too Tight는 맨 아래로 갈 뿐, 다운로드 자체를 막지는 않습니다.</li>
+</ul>
+<h2 id="_8">비즈니스 인사이트</h2>
+<p>숫자와 제품 문장에는 출처를 붙입니다. 그 밖의 판단은 <strong>분석/의견</strong>입니다. 전기요금과 GPU 시세는 이 글에서 측정하지 않아 만들지 않습니다.</p>
+<p><strong>어느 시장인가.</strong> 로컬로 모델을 띄우는 런타임과, 띄우기 전에 맞는 파일을 고르는 도구는 이웃입니다. GitHub API 2026-11-10 기준 <a href="https://github.com/ollama/ollama">ollama/ollama</a>는 스타 <strong>186,506</strong>, SPDX <strong>MIT</strong>, 설명은 “Get up and running with Kimi, GLM, MiniMax, DeepSeek, gpt-oss, Qwen, Gemma and other models.”입니다. <a href="https://github.com/ggml-org/llama.cpp">ggml-org/llama.cpp</a>는 스타 <strong>133,891</strong>, SPDX <strong>MIT</strong>, 설명은 “LLM inference in C/C++”입니다. llmfit은 스타 38,870, MIT, Rust이고, 최신 릴리스는 v1.1.20입니다. <a href="https://crates.io/crates/llmfit">crates.io의 llmfit</a> <code>max_version</code>은 1.1.20, <code>downloads</code>는 18,447, <code>updated_at</code>은 <code>2026-11-03T17:52:08Z</code>였습니다.</p>
+<p><a href="https://lmstudio.ai/pricing">LM Studio 가격 페이지</a>를 2026-11-10에 읽었습니다. 회사 표기는 Element Labs, Inc. © 2026입니다. Free는 <strong>$0</strong>이고 문장은 “Run local LLMs on your machine”입니다. 포함 항목에 “Run local LLMs using llama.cpp and MLX”가 있습니다. FAQ “Can I use Bionic for free?”의 답은 “Yes. The Free plan includes Bionic Agent and local model support.”입니다. Bionic+는 <strong>$20 USD / month</strong>, Pro는 <strong>$100 USD / month</strong>입니다. 유료 칸의 문장은 US-hosted 오픈 모델과 사용량입니다. 로컬 런타임 칸과 클라우드 추론 칸이 한 페이지에 있습니다.</p>
+<p>API 단가는 <a href="https://www.anthropic.com/pricing">Anthropic 가격 페이지</a>를 같은 날 읽은 값입니다. 입력/출력은 백만 토큰당입니다. Fable 5.2는 입력 $8, 출력 $40. Opus 5.5는 입력 $4, 출력 $20. Sonnet 5.5는 입력 $2, 출력 $10. Haiku 5.5는 프롬프트 10만 토큰 이하에서 입력 $0.10, 출력 $0.50이고, 10만 토큰을 넘으면 입력 $0.50, 출력 $2.50입니다. <a href="https://platform.claude.com/docs/en/about-claude/pricing">플랫폼 문서의 가격 페이지</a>도 Opus 5.5 입력 $4, 출력 $20을 반복하고, 예시로 입력 50,000토큰은 $0.20, 출력 15,000토큰은 $0.30이라고 적습니다. OpenAI 가격 URL은 이 환경에서 JavaScript 확인 페이지를 돌려주어 숫자를 가져오지 않았습니다.</p>
+<p><strong>누가 이득을 보나.</strong> (1) GGUF나 MLX를 받기 전에 양자화와 8,192 문맥 기준의 추정을 보고 싶은 사람. <code>download --list</code>와 <code>fit</code>은 그 순서입니다. (2) <code>recommend --json</code>과 <code>llmfit serve</code>의 <code>/api/v1/models</code>로 고르는 스크립트. (3) <code>--memory</code>, <code>--ram</code>으로 지금 기계가 아닌 목표 사양을 표로 보고 싶은 사람. <strong>분석/의견.</strong> 측정 tok/s가 필요한 팀에게 기본 표의 <code>est</code>는 대기열의 첫 줄입니다. info가 적는 확인 절차는 bench이거나, 받은 파일에 대한 llama-bench입니다.</p>
+<p><strong>로컬과 API의 비용.</strong> 위에 적은 Claude 단가는 토큰에 비례합니다. LM Studio Free의 로컬 항목은 소프트웨어 가격 $0입니다. llmfit 바이너리도 MIT이고 README에 사용료가 없습니다. <strong>분석/의견.</strong> 로컬로 바꿔 사라지는 청구서는 토큰 단가이고, 남는 비용은 이미 가진 메모리와 전기와, 잘못 받은 수십 GB입니다. Mixtral 행의 Q4_K_M 디스크 추정 27.1GB는 그 “받기 전에 거절할 파일”의 크기입니다. 이 호스트의 판정은 Too Tight였고, 파일을 받지 않았습니다. 전기요금을 27.1GB나 1.9 tok/s에서 환산하지는 않습니다. 와트를 재지 않았습니다.</p>
+<p><strong>개발자에게 남는 것.</strong> 런타임을 새로 만들지 않습니다. Ollama, llama.cpp, MLX, LM Studio, Docker Model Runner가 이미 받는 쪽이고, llmfit은 그 앞에 추정과 정렬을 둡니다. README가 대안으로 적은 <a href="https://github.com/Pavelevich/llm-checker">llm-checker</a>는 2026-11-10에 <code>https://github.com/signerless/llm-checker</code>로 301이었습니다. 그 저장소의 GitHub API 스타는 3,056, 라이선스 필드는 <code>NOASSERTION</code>이고, README 배지는 NPDL-1.0이라고 적습니다. 그 README는 Node.js, Ollama 연동, 품질·속도·핏·문맥, “55k+ exact artifacts”, “in seconds”를 자사 설명으로 적습니다. 55,000은 그 README의 문장이고 이 글이 파일을 세어 확인한 수가 아닙니다. llmfit README는 llm-checker가 MoE를 조밀 모델로 취급한다고 적습니다. llm-checker 현재 README는 그 한계를 반복하지 않고, 코드 검색 API는 인증을 요구해 이 글은 소스에서 MoE 처리를 확인하지 못했습니다. <strong>분석/의견.</strong> 둘을 벤치마크 순위로 나열할 근거는, 서로 다른 카탈로그와 서로가 쓴 설명뿐입니다.</p>
+<h2 id="_9">팩트 체크</h2>
+<p>✅ 1차 자료 또는 이 글의 실행과 맞음 / ⚠️ 범위가 다르거나, 저자 문장 외에 확인할 자료가 없음 / ❌ 1차 자료와 어긋남</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>무료다</td>
+<td>✅</td>
+<td><code>LICENSE</code>는 MIT, “free of charge”. README 설치 경로에 가격이 없다. https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/LICENSE</td>
+</tr>
+<tr>
+<td>오픈소스다</td>
+<td>✅</td>
+<td>같은 MIT 파일. GitHub <code>AlexsJones/llmfit</code>, 라이선스 SPDX MIT. API 2026-11-10</td>
+</tr>
+<tr>
+<td>CPU, GPU, RAM을 검사한다</td>
+<td>✅</td>
+<td><code>hardware.rs</code> <code>detect()</code>, README, 플랫폼 문서. v1.1.20 <code>system --json</code>이 이 호스트의 CPU 4코어, RAM 15.63/4.88GB, GPU 없음을 출력</td>
+</tr>
+<tr>
+<td>수 초 안에 검사한다</td>
+<td>✅</td>
+<td>이 호스트에서 <code>system --json</code> 0.009초, <code>fit -n 5</code> 0.440초. 저장소가 적은 SLA는 아니다. 기계는 4코어, GPU 없음, 한 번씩</td>
+</tr>
+<tr>
+<td>받기 전에 모델 요구와 비교한다</td>
+<td>✅</td>
+<td>카탈로그는 바이너리에 들어 있다. <code>fit</code>과 <code>info</code>는 가중치를 받지 않았다. <code>download --list</code>는 받기 전 나열이라고 <code>download --help</code>가 적는다</td>
+</tr>
+<tr>
+<td>기기가 돌릴 수 있는 모델의 정렬된 목록을 준다</td>
+<td>✅</td>
+<td>기본 정렬은 복합 점수. Too Tight는 맨 뒤. <code>fit -n 5</code>가 표를 출력했다. 이 호스트에서는 백엔드 불일치 4,540행을 숨겼다</td>
+</tr>
+<tr>
+<td>그 정렬이 최고 효율이다</td>
+<td>⚠️</td>
+<td>최대화하는 것은 용도별 가중합이다. 채팅 기본은 품질 0.40, 속도 0.35, 핏 0.15, 문맥 0.10. 핏 점수는 70% 사용률까지 100이다. “효율” 한 축이 아니다</td>
+</tr>
+<tr>
+<td>비교가 정확하다</td>
+<td>⚠️</td>
+<td>기본 신뢰도는 <code>estimated</code>일 수 있다. info는 대략 ±30% 오차 밴드라고 출력했다. 메모리 표와 대역폭 표의 Q4_K_M은 0.58과 0.5이다. 문서의 활성 VRAM은 약 6.6GB, v1.1.20 info는 7.7GB</td>
+</tr>
+<tr>
+<td>무작정 받아 시스템이 멈추는 일을 끝낸다</td>
+<td>⚠️</td>
+<td>Too Tight를 보여주고 순서를 맨 뒤로 보낸다. 다운로드를 거절하지는 않는다. GPU 없는 MoE는 <code>min_ram_gb</code>라는 카탈로그 필드로 판정한다. AMD VRAM은 모를 수 있다</td>
+</tr>
+<tr>
+<td>버튼 한 번으로 로컬 실행을 바로 시작한다</td>
+<td>⚠️</td>
+<td><code>llmfit run</code>은 있다. 전제는 PATH의 llama.cpp와 이미 받은 GGUF다. TUI <code>d</code>는 다운로드다. 이 호스트는 llama.cpp가 없어 실행하지 못했다. <code>--help</code>의 “launch inference”와 전제 조건은 같은 바이너리에 같이 있다</td>
+</tr>
+<tr>
+<td>아랍어 본문이 이름 없이 가리키는 도구가 이 저장소다</td>
+<td>⚠️</td>
+<td>본문에 저장소 이름이 없다. 첫 댓글은 읽지 못했다. 첨부 영상의 원 글이 llmfit이라고 적는다. https://x.com/alextalksai/status/2119444759823446379</td>
+</tr>
+<tr>
+<td>README의 “Hundreds of models &amp; providers”</td>
+<td>⚠️</td>
+<td>슬로건은 README에 있다. <code>main</code>의 <code>hf_models.json</code>은 19,192행, <code>provider</code> 문자열 6,119종이다. 그 문자열은 게시자이다. v1.1.20 <code>list --json</code>은 18,044행이다</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 무료 MIT 도구가 CPU·RAM·GPU를 읽고, 가중치를 받기 전에 카탈로그로 순위를 매기는 것은 소스와 v1.1.20 실행으로 닫힙니다. 이 호스트에서 그 읽기와 5줄 표는 1초 안이었습니다. “최고 효율”과 “정확한 요구량”과 “버튼 한 번의 즉시 실행”은 가중합, 추정, llama.cpp와 로컬 파일이라는 전제가 빠져 있습니다. Mixtral을 GPU 없이 재면 활성 7.7GB가 아니라 카탈로그의 26.1GB로 Too Tight가 됩니다.</p>
+<h2 id="_10">참고 자료</h2>
+<ul>
+<li>저장소 — <a href="https://github.com/AlexsJones/llmfit">AlexsJones/llmfit</a> (<code>main</code> <code>7d929f2</code>, 스타 38,870, 포크 2,511, SPDX MIT, API 2026-11-10)</li>
+<li>라이선스 — <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/LICENSE">LICENSE</a> (Copyright 2026 Alex Jones)</li>
+<li>동작 설명 — <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/how-it-works.md">docs/how-it-works.md</a>, <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/cli.md">docs/cli.md</a>, <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/providers.md">docs/providers.md</a>, <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/docs/platform-support.md">docs/platform-support.md</a></li>
+<li>카탈로그 — <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/llmfit-core/data/hf_models.json"><code>llmfit-core/data/hf_models.json</code></a> (19,192행, blob <code>c91df9db</code>)</li>
+<li>식 — <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/llmfit-core/src/models.rs"><code>models.rs</code></a>의 <code>quant_bpp</code>, <code>estimate_memory_gb_with_kv</code>, <code>kv_cache_gb</code>, <code>moe_active_vram_gb_at</code>. <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/llmfit-core/src/fit.rs"><code>fit.rs</code></a>의 <code>DEFAULT_ESTIMATION_CTX</code>, <code>cpu_path</code>, <code>ScoringWeights</code>. <a href="https://github.com/AlexsJones/llmfit/blob/7d929f2b0c2d9e28b4a0726a29a1b247652ac9e9/llmfit-core/src/hardware.rs"><code>hardware.rs</code></a>의 <code>detect</code></li>
+<li>릴리스 — <a href="https://github.com/AlexsJones/llmfit/releases/tag/v1.1.20">v1.1.20</a> (2026-11-03). 이 글의 실행은 그 태그의 <code>x86_64-unknown-linux-gnu</code> 바이너리. <code>llmfit list --json</code> 18,044행</li>
+<li>크레이트 — <a href="https://crates.io/crates/llmfit">crates.io/crates/llmfit</a> (1.1.20, 다운로드 18,447, API 2026-11-10)</li>
+<li>런타임 — <a href="https://github.com/ollama/ollama">ollama/ollama</a> (스타 186,506, MIT), <a href="https://github.com/ggml-org/llama.cpp">ggml-org/llama.cpp</a> (스타 133,891, MIT). API 2026-11-10</li>
+<li>LM Studio — <a href="https://lmstudio.ai/pricing">lmstudio.ai/pricing</a> (2026-11-10: Free $0, Bionic+ $20/월, Pro $100/월, Element Labs, Inc.)</li>
+<li>API 단가 — <a href="https://www.anthropic.com/pricing">anthropic.com/pricing</a>, <a href="https://platform.claude.com/docs/en/about-claude/pricing">platform.claude.com 가격 문서</a> (2026-11-10)</li>
+<li>README가 적은 대안 — <a href="https://github.com/signerless/llm-checker">signerless/llm-checker</a> (<code>Pavelevich/llm-checker</code>가 301. 스타 3,056, 라이선스 필드 <code>NOASSERTION</code>, API 2026-11-10)</li>
+</ul>
+<h2 id="x">원문 X 링크</h2>
+<ul>
+<li>북마크 — <a href="https://x.com/EngMoElgaraihy/status/2119789009601708049">@EngMoElgaraihy</a> (id <code>2119789009601708049</code>, <a href="https://x.com/i/status/2119789009601708049">x.com/i/status/2119789009601708049</a>)</li>
+<li>첨부 영상의 원 글 — <a href="https://x.com/alextalksai/status/2119444759823446379">@alextalksai</a> (본문에 llmfit이라는 이름이 있음)</li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
