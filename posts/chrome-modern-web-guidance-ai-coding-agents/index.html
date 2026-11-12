@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>212개 기능이 아니다: Modern Web Guidance 1.0이 에이전트에 넣는 것</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-12 · <span class="chip">#Chrome</span><span class="chip">#Baseline</span><span class="chip">#코딩 에이전트</span><span class="chip">#웹 플랫폼</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">212개 기능이 아니다: Modern Web Guidance 1.0이 에이전트에 넣는 것</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#_3">스킬이 켜지고, 검색은 로컬에서 끝난다</a></li>
+<li><a href="#_4">가이드가 다루는 것</a></li>
+<li><a href="#_5">옛 클릭 리스너와, 가이드가 보여주는 선언적 대화상자</a></li>
+<li><a href="#baseline">설치, Baseline, 스캔</a></li>
+<li><a href="#chrome-devtools-for-agents">Chrome DevTools for agents와 짝</a></li>
+</ul>
+</li>
+<li><a href="#_6">평가 결과</a></li>
+<li><a href="#_7">비즈니스 인사이트</a></li>
+<li><a href="#_8">팩트 체크</a></li>
+<li><a href="#_9">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/DeepTechTR/status/2120646729687265589">@DeepTechTR의 포스트</a>를 계기로 썼습니다. 같은 상태 주소는 <a href="https://x.com/i/status/2120646729687265589">x.com/i/status/2120646729687265589</a>입니다. 이 환경의 X API <code>get_posts_by_id</code>는 <code>billing-scope-missing</code>(<code>developer.billing.write</code> 없음)으로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2120646729687265589">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. <code>created_at</code>은 <code>Wed Nov 11 22:35:54 +0000 2026</code>, <strong>2026-11-12 07:35 KST</strong>입니다. <code>screen_name</code>은 <code>DeepTechTR</code>, 표시 이름도 DeepTechTR, 사용자 id는 <code>1858176282032496640</code>, 팔로워 31,193, <code>verification.type</code>은 <code>individual</code>, <code>lang</code>은 <code>tr</code>입니다. 같은 응답의 스냅샷은 답글 0, 리포스트 16, 좋아요 207, 북마크 223, 인용 0, 조회 11,511입니다. 커뮤니티 노트는 <code>null</code>입니다. 본문은 터키어로, AI가 프론트엔드를 쓸 때 2019년 수준에 머물고 훈련 데이터가 옛 코드로 차 있으며, Chrome 팀이 <code>modern-web-guidance</code>로 212개 현대 웹 기능을 넣고, Claude Code·Codex·Copilot·Antigravity에서 성공률이 56%에서 88%로 올랐으며, 설치는 <code>npx modern-web-guidance</code> 한 줄이라고 적습니다. 그 문장은 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+<p>아래 대조는 2026-11-12 20:15 KST 전후에 연 1차 자료입니다. <a href="https://developer.chrome.com/blog/modern-web-guidance-v1">Philip Walton, Chrome for Developers, 2026-11-10</a>, <a href="https://developer.chrome.com/docs/modern-web-guidance">문서 개요</a>, <a href="https://developer.chrome.com/docs/modern-web-guidance/get-started">Get started</a>, 배포 저장소 <a href="https://github.com/GoogleChrome/modern-web-guidance">GoogleChrome/modern-web-guidance</a> <code>main</code> README와 <a href="https://github.com/GoogleChrome/modern-web-guidance/releases/tag/v1.0.0">v1.0.0 릴리스</a>(<code>published_at</code> <code>2026-11-10T03:24:59Z</code>), 소스 저장소 <a href="https://github.com/GoogleChrome/modern-web-guidance-src">GoogleChrome/modern-web-guidance-src</a> README, 태그 <code>v1.0.0</code>의 <a href="https://github.com/GoogleChrome/modern-web-guidance/blob/v1.0.0/skills/modern-web-guidance/guides/ui-behaviors/declarative-dialog-popover-control.md"><code>declarative-dialog-popover-control</code> 가이드</a>, <a href="https://www.npmjs.com/package/modern-web-guidance">npm <code>modern-web-guidance@1.0.0</code></a>, <a href="https://web.dev/baseline">Baseline</a>, <a href="https://googlechrome.github.io/modern-web-guidance-src/">평가 대시보드</a>, <a href="https://developer.chrome.com/docs/devtools/agents">Chrome DevTools for agents</a>입니다. 가이드 전문을 에이전트에 넣어 재실행하지 않았고, 평가 하네스를 다시 돌리지 않았습니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>코딩 에이전트는 이미 동작하는 페이지를 만듭니다. Chrome 블로그의 문장은, 최신 프론티어 모델이 대체로 돌아가는 결과를 내도 웹 개발 전문가가 보면 더 빠르거나, 더 접근 가능하거나, 더 안전한 쪽으로 고칠 자리가 거의 항상 남는다는 것입니다. README는 그 이유를 훈련 데이터에 옛 코드가 많다는 데 둡니다. 플랫폼에 이미 있는 HTML·CSS로 끝날 일을, 모델이 JavaScript로 다시 짜는 패턴입니다.</p>
+<p>Modern Web Guidance는 그 간격을 메우려고 만든 <strong>에이전트 스킬과 CLI</strong>입니다. 가이드와 Baseline·브라우저 호환 데이터를 에이전트 컨텍스트에 넣습니다. 안정판 1.0의 날짜는 <strong>2026-11-10</strong>입니다. 블로그는 프리뷰를 “at Google I/O in May”라고만 적고, 그 5월의 연도는 적지 않습니다. npm 패키지 생성 시각은 <code>2026-04-30T23:06:37.931Z</code>이고, 레지스트리에 올라온 첫 버전 <code>0.0.101</code>의 시각은 <code>2026-05-12T01:21:02.990Z</code>입니다. 패키지 기록상 그 5월은 1.0과 같은 해입니다.</p>
+<p>1.0의 범위는 트윗의 한 줄보다 넓습니다. 릴리스 노트 첫 문장은 사용 사례 가이드 <strong>203개</strong>가 웹 플랫폼 기능 <strong>250개</strong>를 다룬다고 적고, 관리 주체를 Google Chrome, Microsoft Edge, Mozilla Firefox, MDN과 웹 커뮤니티로 적습니다. 블로그는 Firefox와 Edge가 Chrome에 합류하는 크로스 브라우저 작업이 된다고 적습니다. MDN은 그 문장에는 없고, README와 v1.0.0 릴리스 노트에 있습니다.</p>
+<p>확인할 질문은 다음입니다.</p>
+<ul>
+<li>설치 명령이 <code>npx modern-web-guidance</code>인지, <code>npx modern-web-guidance@latest install</code>인지.</li>
+<li>212가 기능 수인지, 평가 태스크 수인지.</li>
+<li>56%에서 88%가 어느 에이전트·어느 날짜의 쌍인지.</li>
+<li>가이드가 실제로 무엇을 권하고, Baseline을 어디에 두는지.</li>
+</ul>
+<h2 id="_2">기술 설명</h2>
+<h3 id="_3">스킬이 켜지고, 검색은 로컬에서 끝난다</h3>
+<p>README “How It Works”의 순서는 세 단계입니다.</p>
+<ol>
+<li><strong>Activation.</strong> 웹 플랫폼이 관련된 작업이면 에이전트가 <code>modern-web-guidance</code> 스킬을 켭니다. 스킬은 웹 플랫폼 질문에 CLI를 쓰라고 지시합니다.</li>
+<li><strong>Local Semantic Search.</strong> 에이전트가 <code>modern-web-guidance search "&lt;query&gt;"</code>를 실행합니다. 매칭은 오프라인, 의존성 없는 임베딩 모델과 <strong>BM25</strong>입니다. 이 검색 단계의 네트워크 호출과 API 키는 없습니다.</li>
+<li><strong>Guide Fetch.</strong> <code>modern-web-guidance retrieve &lt;id&gt;</code>가 그 가이드의 코드 패턴, 함정, 폴백을 컨텍스트에 넣습니다.</li>
+</ol>
+<p>v1.0.0 릴리스 노트는 검색이 TensorFlow.js에서 빠져 나왔고, npm 다운로드가 <strong>23.5MB에서 8.8MB</strong>로 줄었다고 적습니다. 2026-11-12에 읽은 레지스트리 <code>dist</code>에는 <code>size</code> 필드가 없고 <code>unpackedSize</code>는 <strong>16,503,129</strong>바이트, <code>fileCount</code>는 280입니다. 8.8MB는 릴리스 노트의 “npm download”이고, 16,503,129바이트는 풀어 둔 패키지 크기입니다. 두 수를 같은 측정으로 두지 않습니다.</p>
+<p>패키지를 받은 뒤의 <code>search</code>와 <code>retrieve</code>는 로컬입니다. <code>npx …@latest</code>로 패키지를 새로 받는 단계는 네트워크가 있습니다. README 팁의 문장은, 내용이 오래되지 않게 <code>npx</code>를 쓰고 CLI 자체는 오프라인이라는 것입니다.</p>
+<p>Get started 문서가 예시로 붙인 검색 결과에는 가이드마다 <code>tokenCount</code>가 있습니다. 질의 <code>"animate a dialog modal backdrop"</code>의 상위 결과에 <code>light-dismiss-a-dialog</code> <strong>1085</strong>, <code>animate-to-from-top-layer</code> <strong>1541</strong>, <code>declarative-dialog-popover-control</code> <strong>2684</strong>, <code>html</code> <strong>5484</strong>, <code>accessibility</code> <strong>7129</strong>가 있습니다. 203개 가이드를 한 번에 넣지 않고, 고른 가이드의 토큰만 올라갑니다. 스킬 팩 설명 자체는 별도 크기입니다. README는 <code>modern-web-guidance</code> 팩을 약 <strong>205</strong>토큰, <code>chrome-extensions</code> 팩을 약 <strong>175</strong>토큰으로 적습니다. 그 수는 가이드 본문이 아닙니다.</p>
+<p>v1.0.0은 검색이 약할 때의 재작성도 스킬에 넣었습니다. 릴리스 노트는 에이전트가 <code>"confirm destructive action"</code> 같은 의도 문장을 <code>"confirmation modal dialog"</code> 같은 UI 프리미티브로 바꾸고, 약한 <code>search</code>를 한 번 다시 쓴 뒤 <code>list</code>로 내려간다고 적습니다.</p>
+<h3 id="_4">가이드가 다루는 것</h3>
+<p>README는 기능을 세 묶음으로 셉니다. <strong>CSS &amp; Layout 140</strong>, <strong>HTML &amp; DOM 36</strong>, <strong>JavaScript &amp; APIs 74</strong>. 140+36+74 = <strong>250</strong>이고, 같은 README의 제목도 “250 modern web features”입니다. 그 아래 사용 사례 목록의 가이드 id를 2026-11-12에 세면 <strong>203개, 중복 없음</strong>입니다. 제목의 “203 real-world developer use cases”와 같습니다.</p>
+<p>분야 이름은 문서와 README가 같이 적습니다. 이 글이 예시로 짚는 것만 적습니다.</p>
+<table>
+<thead>
+<tr>
+<th>에이전트가 자주 손대는 자리</th>
+<th>가이드가 가리키는 플랫폼 기능</th>
+<th>1차 자료의 위치</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>툴팁·메뉴를 <code>absolute</code>와 좌표 JS로 붙임</td>
+<td>CSS Anchor Positioning, Popover</td>
+<td>README Forms &amp; UI, 가이드 <code>position-aware-tooltips</code></td>
+</tr>
+<tr>
+<td>모달을 div와 클릭 리스너로 여닫음</td>
+<td><code>&lt;dialog&gt;</code>, Invoker Commands (<code>commandfor</code> / <code>command</code>)</td>
+<td>가이드 <code>declarative-dialog-popover-control</code></td>
+</tr>
+<tr>
+<td>페이지 전환을 JS로 크로스페이드</td>
+<td>View Transitions</td>
+<td>README User Experience</td>
+</tr>
+<tr>
+<td>뷰포트 너비에만 미디어 쿼리</td>
+<td>컨테이너 쿼리</td>
+<td>가이드 <code>size-aware-styling</code>, Get started의 CSS 절</td>
+</tr>
+<tr>
+<td>긴 작업을 <code>setTimeout</code>으로 쪼갬</td>
+<td><code>scheduler.yield</code></td>
+<td>README Performance 절의 INP·스케줄링</td>
+</tr>
+<tr>
+<td>입력 칸 너비를 JS로 재측정</td>
+<td><code>field-sizing: content</code></td>
+<td>Get started Forms, 가이드 <code>form-fields-automatically-fit-contents</code></td>
+</tr>
+<tr>
+<td>빈 칸에도 즉시 오류 스타일</td>
+<td><code>:user-invalid</code></td>
+<td>Get started Forms, 가이드 <code>validate-input-after-interaction</code></td>
+</tr>
+<tr>
+<td>비밀번호만 있는 로그인</td>
+<td>패스키, WebAuthn</td>
+<td>README 보안 가이드 <code>passkey-registration</code> 외 6개. v1.0 노트는 그중 7개 가이드가 Signal API에 서버가 준 <code>rpId</code>를 넘기라고 고쳤다고 적습니다</td>
+</tr>
+</tbody>
+</table>
+<p>접근성, CSP, Sanitizer, 추측 규칙(speculation rules), 온디바이스 번역·요약·언어 감지, WebMCP도 같은 목록에 있습니다. HTML-in-Canvas는 HTML &amp; DOM 36개 안의 기능 이름입니다. 그 API의 출시 사실은 <a href="https://betelg15.github.io/posts/chrome-157-html-in-canvas/">앞 글</a>이 다룹니다. 이 글은 그 스펙을 다시 풀지 않습니다.</p>
+<p>가이드는 “모델이 이미 아는 최저 공통분모”를 평가로 덜어 낸다고 README가 적습니다. 폴백은 무조건 큰 폴리필이 아닙니다. README는 더해지기만 하는 향상(추측 프리로드처럼 옛 브라우저가 무시해도 되는 것)과, 대화상자처럼 동작이 필요한 경우를 나누고, 후자는 50줄 미만의 맞춤 폴백이나 조건부로 읽는 폴리필을 우선한다고 적습니다.</p>
+<h3 id="_5">옛 클릭 리스너와, 가이드가 보여주는 선언적 대화상자</h3>
+<p>아래 첫 예는 이 글의 <strong>설명용 스케치</strong>입니다. 가이드 원문이 아닙니다. README가 말하는 “플랫폼에 답이 있는데 JavaScript로 다시 짜는” 형태를, 모달 하나에 압축한 것입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">div</span> <span class="na">id</span><span class="o">=</span><span class="s">"modal"</span> <span class="na">role</span><span class="o">=</span><span class="s">"dialog"</span> <span class="na">aria-modal</span><span class="o">=</span><span class="s">"true"</span> <span class="na">hidden</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Are you sure?<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">button</span> <span class="na">type</span><span class="o">=</span><span class="s">"button"</span> <span class="na">id</span><span class="o">=</span><span class="s">"cancel"</span><span class="p">&gt;</span>Cancel<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">button</span> <span class="na">type</span><span class="o">=</span><span class="s">"button"</span> <span class="na">id</span><span class="o">=</span><span class="s">"open"</span><span class="p">&gt;</span>Open<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">modal</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">"modal"</span><span class="p">);</span>
+<span class="w">  </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">"open"</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s2">"click"</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">modal</span><span class="p">.</span><span class="nx">hidden</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<span class="w">    </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">"cancel"</span><span class="p">).</span><span class="nx">focus</span><span class="p">();</span>
+<span class="w">  </span><span class="p">});</span>
+<span class="w">  </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">"cancel"</span><span class="p">).</span><span class="nx">addEventListener</span><span class="p">(</span><span class="s2">"click"</span><span class="p">,</span><span class="w"> </span><span class="p">()</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="nx">modal</span><span class="p">.</span><span class="nx">hidden</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">;</span>
+<span class="w">  </span><span class="p">});</span>
+<span class="p">&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</code></pre></div>
+
+<p>포커스 트랩, Esc, 배경 클릭, <code>inert</code>, 접근성 트리에서 나머지 페이지를 빼는 일은 이 스케치에 없습니다. 그 공백을 라이브러리나 더 긴 스크립트로 채우는 쪽이, 블로그가 말하는 “돌아가는 코드와 전문가가 고치는 코드”의 차이입니다.</p>
+<p>v1.0.0 가이드 <code>declarative-dialog-popover-control</code>은 그 여닫기를 버튼 속성으로 옮깁니다. 아래는 그 파일의 팝오버·모달 예를 줄인 것이고, 가이드의 “MANDATORY” 주석은 뺐습니다. 전문은 저장소에 있습니다. 가이드 문서는 CC BY 4.0입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="p">&lt;</span><span class="nt">button</span> <span class="na">commandfor</span><span class="o">=</span><span class="s">"my-popover"</span> <span class="na">command</span><span class="o">=</span><span class="s">"toggle-popover"</span><span class="p">&gt;</span>
+  Toggle Popover
+<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">div</span> <span class="na">id</span><span class="o">=</span><span class="s">"my-popover"</span> <span class="na">popover</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Popover content goes here.<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">div</span><span class="p">&gt;</span>
+
+<span class="p">&lt;</span><span class="nt">button</span> <span class="na">commandfor</span><span class="o">=</span><span class="s">"confirm-dialog"</span> <span class="na">command</span><span class="o">=</span><span class="s">"show-modal"</span><span class="p">&gt;</span>
+  Open Confirmation
+<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">dialog</span> <span class="na">id</span><span class="o">=</span><span class="s">"confirm-dialog"</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">p</span><span class="p">&gt;</span>Are you sure you want to proceed?<span class="p">&lt;/</span><span class="nt">p</span><span class="p">&gt;</span>
+  <span class="p">&lt;</span><span class="nt">button</span> <span class="na">commandfor</span><span class="o">=</span><span class="s">"confirm-dialog"</span> <span class="na">command</span><span class="o">=</span><span class="s">"close"</span><span class="p">&gt;</span>Cancel<span class="p">&lt;/</span><span class="nt">button</span><span class="p">&gt;</span>
+<span class="p">&lt;/</span><span class="nt">dialog</span><span class="p">&gt;</span>
+</code></pre></div>
+
+<p>같은 가이드가 적은 Baseline은 이렇습니다. Invoker Commands는 <strong>Newly available</strong>, Baseline이 된 날은 <strong>2025-12-12</strong>, 지원 버전은 Chrome 135(2025-04), Edge 135(2025-04), Firefox 144(2025-10), Safari 26.2(2025-12)입니다. Popover는 <strong>Newly available</strong>, <strong>2025-01-27</strong>, Chrome 116(2023-08), Edge 116(2023-08), Firefox 125(2024-04), Safari 17(2023-09), iOS Safari 18.3(2025-01)입니다. 이 버전 표는 그 가이드가 집어넣은 호환 데이터입니다. 이 글이 MDN을 다시 열어 버전을 재지 않았습니다.</p>
+<p>같은 파일이 요구하는 폴백은 기능 탐지 뒤에 <strong>조건부</strong> <code>import</code>입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="s2">"commandForElement"</span><span class="w"> </span><span class="ow">in</span><span class="w"> </span><span class="nx">HTMLButtonElement</span><span class="p">.</span><span class="nx">prototype</span><span class="p">))</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="k">import</span><span class="p">(</span><span class="s2">"invokers-polyfill"</span><span class="p">);</span>
+<span class="p">}</span>
+</code></pre></div>
+
+<p>가이드는 <code>popovertarget</code>과 <code>commandfor</code>를 같은 버튼·같은 팝오버에 같이 쓰지 말라고 적습니다. 두 번 토글됩니다. 팝오버 폴리필은 <code>HTMLElement.prototype</code>의 <code>popover</code>를 <code>Object.hasOwn</code>으로 보고, 없을 때만 <code>@oddbird/popover-polyfill</code>을 읽으라고 적습니다. 폴리필은 <code>:popover-open</code> 의사 클래스를 만들지 못하고 <code>.\:popover-open</code> 클래스를 붙이므로, 선택자는 <code>:is(:popover-open, .\:popover-open)</code>처럼 묶으라고 합니다. 옛 브라우저는 모르는 의사 클래스가 있는 규칙 전체를 버립니다.</p>
+<p><code>showModal()</code>을 클릭 리스너에서 부르는 코드는 이미 <code>&lt;dialog&gt;</code>를 씁니다. 그 가이드가 바꾸는 것은 리스너입니다. “2019년 jQuery를 <code>&lt;dialog&gt;</code>로 바꾼다”와 “리스너 없이 <code>commandfor</code>로 연다”는 다른 단계입니다. 1.0의 목록에는 두 단계가 모두 있습니다.</p>
+<h3 id="baseline">설치, Baseline, 스캔</h3>
+<p>문서가 권하는 설치는 프로젝트 디렉터리에서 다음입니다.</p>
+<div class="highlight"><pre><span></span><code>npx<span class="w"> </span>modern-web-guidance@latest<span class="w"> </span>install
+</code></pre></div>
+
+<p>이미 깔려 있으면 <code>npx modern-web-guidance@latest update</code>입니다. 에이전트 스킬 CLI로는 <code>npx skills add GoogleChrome/modern-web-guidance</code>입니다. Get started는 이 밖에도 Claude Code, Codex, Copilot CLI, Gemini CLI, Antigravity, Goose, Grok, Kimi Code, WebStorm, <code>gh skill install</code>을 적습니다. 블로그의 마켓플레이스 목록에는 Cursor도 있습니다.</p>
+<p>설치 없이 가이드만 볼 때는 README의 세 명령입니다.</p>
+<div class="highlight"><pre><span></span><code>npx<span class="w"> </span>modern-web-guidance@latest<span class="w"> </span>search<span class="w"> </span><span class="s2">"animate a dialog modal backdrop"</span>
+npx<span class="w"> </span>modern-web-guidance@latest<span class="w"> </span>retrieve<span class="w"> </span><span class="s2">"animate-to-from-top-layer"</span>
+npx<span class="w"> </span>modern-web-guidance@latest<span class="w"> </span>legacy-scan<span class="w"> </span>.
+</code></pre></div>
+
+<p><code>legacy-scan</code>은 v1.0에 들어온 정적 분석입니다. 릴리스 노트는 옛 패턴을 찾고, 각 발견을 대체 가이드에 연결하며, <strong>결정적 규칙이 있는 가이드의 대략 20%</strong>를 덮는다고 적습니다. 스킬의 대응 절차는 scan, verify, report, modernize 네 단계입니다. 블로그가 에이전트에 보여주는 문장은 <code>/modern-web-guidance Modernize the code in this directory</code>입니다. 노트는 범위를 일부러 좁혀 결과가 예측 가능하게 시작했다고 적고, 나중에는 패턴 매칭을 넘어 에이전트가 코드를 직접 읽는 감사로 넓히겠다고 적습니다.</p>
+<p>Baseline 목표는 <code>AGENTS.md</code> 또는 <code>CLAUDE.md</code>에 적습니다. Get started의 예는 <code>This project's Baseline target is Baseline 2024.</code>입니다. <strong>목표를 적지 않으면 기본값은 Baseline Widely available</strong>입니다. <a href="https://web.dev/baseline">web.dev/baseline</a>의 정의는 세 칸입니다. Limited availability는 아직 상호운용되지 않음, Newly available은 핵심 브라우저가 모두 지원하기 시작한 뒤 30개월 미만, Widely available은 그 시점부터 30개월 이상입니다. 핵심 브라우저 집합은 Chrome(데스크톱·Android), Edge, Firefox(데스크톱·Android), Safari(macOS·iOS)입니다. Baseline을 만든 곳은 Chrome 팀이고, 지금은 WebDX Community Group이 정의합니다. Widely가 아닌 기능의 가이드는 폴백 절차를 같이 줍니다. 폴리필이 필요하면 조건부로만 읽으라고 문서가 적습니다.</p>
+<p>실험 기능은 기본으로 <code>retrieve</code>가 막혀 있습니다. 검색에는 나와도, 오리진 트라이얼은 <code>npx modern-web-guidance@latest set-allow-origin-trials</code>, 단일 엔진이거나 아직 흔들리는 기능(volatile, 최근 3개월 또는 안정화 중)은 <code>npx modern-web-guidance@latest set-allow-volatile-features</code>로 <code>.mwgrc</code>에 옵트인해야 열립니다. 확장 프로그램을 만들 때는 <code>npx modern-web-guidance@latest install --choose</code>로 <code>chrome-extensions</code> 팩을 고릅니다.</p>
+<p>텔레메트리는 기본으로 켜져 있습니다. README는 설치 횟수, 호출한 에이전트 이름, 가이드 id, 에이전트가 만든 검색 질의를 익명으로 모으고, 사용자 프롬프트 원문은 모으지 않는다고 적습니다. 끄려면 <code>DISABLE_TELEMETRY=1</code>입니다. 코드 라이선스는 Apache-2.0, <code>guides/</code> 문서는 CC BY 4.0입니다. 문서 일부는 MDN, W3C, WHATWG, IETF에서 왔다고 README가 적습니다.</p>
+<h3 id="chrome-devtools-for-agents">Chrome DevTools for agents와 짝</h3>
+<p>블로그는 작성(Modern Web Guidance)과 실행 확인(Chrome DevTools for agents)을 나눕니다. DevTools for agents는 다른 패키지입니다. 문서의 진입은 MCP 서버 <code>chrome-devtools-mcp</code>, CLI, 스킬이고, 주소는 <a href="https://developer.chrome.com/docs/devtools/agents">developer.chrome.com/docs/devtools/agents</a>입니다. 블로그가 짝으로 드는 예는 세 가지입니다. 저사양 CPU를 시뮬레이트한 트레이스로 메인 스레드 차단이 50ms를 넘지 않게 맞추기, 애니메이션 녹화와 <code>prefers-reduced-motion</code> 확인, SPA 뷰 캐시의 메모리 증가 확인입니다. 50ms는 그 글이 INP에 연결해 적은 기준입니다. 이 글은 DevTools 쪽 설치를 재현하지 않았습니다.</p>
+<h2 id="_6">평가 결과</h2>
+<p>평가는 제작자가 돌립니다. 소스 README의 파이프라인은 전문가 가이드와 데모, 실제 웹앱 위의 태스크와 Playwright 채점, 정답 구현은 통과 100%·손대지 않은 베이스 앱은 통과 0%가 될 때까지의 보정, 그다음 가이드를 켠 실행과 끄지 않은 실행의 비교입니다. 프롬프트는 API 이름을 일부러 적지 않습니다. 대시보드 페이지가 정적 HTML에 적어 둔 정의는, 통과율이 실행된 검사 중 통과한 검사의 비율이고, 채점 전에 죽거나 시간 초과한 실행은 짝과 함께 빼며, 리프트는 퍼센트포인트라는 것입니다. 접근성 자동 검사는 키보드, 포커스와 <code>inert</code>, <code>prefers-reduced-motion</code>과 대비, ARIA, 폼 레이블의 일부이고, <strong>WCAG 전체 감사가 아니라고</strong> 같은 페이지가 적습니다.</p>
+<p>2026-11-12에 <a href="https://googlechrome.github.io/modern-web-guidance-src/">평가 대시보드</a>를 가져왔을 때 표 자리는 “Loading…”, 실행 목록은 “No test runs found yet”이었습니다. 숫자는 클라이언트 렌더 뒤에 있습니다. 아래 표는 그 렌더 결과가 아니라, 같은 날 읽은 <strong>배포 저장소 README의 “Recent eval results snapshot”</strong>입니다. 소스 README의 같은 절과 숫자가 같았습니다. 연도는 표에 없고, 릴리스 일정과 맞춰 2026년으로 읽습니다.</p>
+<table>
+<thead>
+<tr>
+<th>날짜</th>
+<th>에이전트 + 모델</th>
+<th style="text-align: right;">태스크 / 어서션</th>
+<th>비가이드 → 가이드 (리프트)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nov 8</td>
+<td>antigravity_cli (gemini-4-argon)</td>
+<td style="text-align: right;">214 / 1673</td>
+<td>58% → 94% (+36pp)</td>
+</tr>
+<tr>
+<td>Nov 8</td>
+<td>codex_cli (gpt-6.1-sol)</td>
+<td style="text-align: right;">215 / 1795</td>
+<td>54% → 82% (+28pp)</td>
+</tr>
+<tr>
+<td>Nov 8</td>
+<td>claude_code (opus-5-5)</td>
+<td style="text-align: right;">215 / 1801</td>
+<td>57% → 88% (+31pp)</td>
+</tr>
+<tr>
+<td>Nov 6</td>
+<td>codex_cli (gpt-6.1-sol)</td>
+<td style="text-align: right;">212 / 1773</td>
+<td>53% → 86% (+33pp)</td>
+</tr>
+<tr>
+<td>Nov 6</td>
+<td>claude_code (opus-5-5)</td>
+<td style="text-align: right;">212 / 1773</td>
+<td>56% → 90% (+34pp)</td>
+</tr>
+<tr>
+<td>Nov 6</td>
+<td>antigravity_cli (gemini-4-argon)</td>
+<td style="text-align: right;">212 / 1722</td>
+<td>60% → 96% (+36pp)</td>
+</tr>
+<tr>
+<td>Nov 4</td>
+<td>codex_cli (gpt-6.1-sol)</td>
+<td style="text-align: right;">209 / 1743</td>
+<td>52% → 85% (+33pp)</td>
+</tr>
+<tr>
+<td>Nov 4</td>
+<td>claude_code (opus-5-5)</td>
+<td style="text-align: right;">209 / 1743</td>
+<td>57% → 90% (+33pp)</td>
+</tr>
+<tr>
+<td>Nov 4</td>
+<td>antigravity_cli (gemini-4-argon)</td>
+<td style="text-align: right;">207 / 1722</td>
+<td>60% → 96% (+36pp)</td>
+</tr>
+<tr>
+<td>Nov 2</td>
+<td>codex_cli (gpt-6.1-sol)</td>
+<td style="text-align: right;">205 / 1729</td>
+<td>55% → 82% (+27pp)</td>
+</tr>
+</tbody>
+</table>
+<p>README 스냅샷의 Nov 2 행은 Codex 한 줄에서 끊겨 있습니다. v0.0.197 릴리스 노트(페이지 표시 “02 Nov 14:56”)의 같은 주제 표는 세 줄입니다. codex_cli (gpt-6.1-sol) <strong>205 / 1729, 55% → 82%, +27pp</strong>. claude_code (claude-opus-5-5) <strong>205 / 1729, 58% → 90%, +32pp</strong>. antigravity_cli (gemini-4-argon) <strong>205 / 1705, 61% → 96%, +35pp</strong>. 태스크 수는 같고 어서션 수는 Antigravity만 1705입니다.</p>
+<p>Get started는 “early results”의 평균으로 현대 관행 준수가 <strong>37퍼센트포인트</strong> 올랐다고 적고, 프로젝트·모델·프롬프트·에이전트에 따라 달라진다고 적습니다. 그 37을 만든 날짜와 가중치는 그 페이지에 없습니다. 위 Nov 8 세 행의 리프트를 이 글이 단순 평균하면 (36+28+31)/3 = <strong>31.7pp</strong>입니다. 이 평균은 이 글의 계산이고, 태스크 수가 214와 215로 다르므로 공식 집계가 아닙니다. 37pp와 11월 8일 표를 같은 수로 두지 않습니다.</p>
+<p>읽을 때 남는 제한은 다섯 가지입니다. 하네스·태스크·채점기·정답 구현이 모두 이 프로젝트의 것입니다. 통과율은 프로덕션 버그율이나 사용자 과제 성공률이 아닙니다. 태스크 수가 날짜와 에이전트마다 달라 212를 기능 수로 읽을 수 없습니다. “With MWG”가 100%가 아닌 이유를 대시보드 문장은, 프롬프트가 MWG를 언급하지 않아 에이전트가 가이드를 스스로 찾아야 하기 때문이라고 적습니다. 채점기가 가이드와 다른 정당한 구현을 떨어뜨리면 저장소에서 어서션을 넓혀 다시 채점한다고도 적습니다. 그 문장대로라면 과거 점수는 채점기 수정과 함께 움직일 수 있습니다.</p>
+<h2 id="_7">비즈니스 인사이트</h2>
+<p>숫자 옆에는 출처를 붙입니다. <strong>분석/의견</strong>이라고 적은 문장만 이 글의 판단입니다. 아래 도입 사례의 퍼센트는 Chrome 블로그가 2026-11-10에 옮긴 고객 진술입니다. 이 글이 저장소나 작업 시간을 감사하지 않았습니다.</p>
+<p><strong>브라우저 벤더가 에이전트의 출력 분포를 건드린다.</strong> 1.0의 관리 주체는 Chrome, Edge, Firefox, MDN입니다. 설치면은 각 에이전트 제품의 플러그인 마켓플레이스입니다. 블로그가 이름을 적은 곳은 Claude Code, Codex, Cursor, Antigravity, Copilot, WebStorm, Kimi Code, Grok Build입니다. 모델 가중치를 브라우저 팀이 바꾸지 않아도, 스킬이 컨텍스트에 들어가는 순간 생성 코드의 기본값이 바뀝니다.</p>
+<p><strong>Baseline이 그 기본값의 계약이다.</strong> 목표를 적지 않으면 Widely available입니다. Newly인 Invoker Commands(가이드가 적은 Baseline 날 2025-12-12)를 쓰는 저장소는, 목표를 올리거나 가이드가 시키는 조건부 폴리필을 같이 받는 쪽에 섭니다. volatile과 오리진 트라이얼은 옵트인입니다. 최신 Chrome 전용 API를 모든 저장소에 넣는 구조가 아닙니다.</p>
+<p><strong>분석/의견.</strong> 프론트엔드 팀과 에이전시에서 줄어들 수 있는 비용은 “모달 라이브러리를 또 하나 고르는 시간”이고, 늘어나는 비용은 Baseline 목표를 문서로 고정하고, 스킬이 고른 폴백이 그 목표와 맞는지 리뷰하는 시간입니다. <code>legacy-scan</code>이 덮는 범위는 릴리스 노트 기준으로 가이드의 대략 20%입니다. 나머지는 에이전트가 <code>search</code>를 호출해야 합니다. 스킬을 깔아 두어도 호출하지 않은 턴에는 효과가 없습니다. 대시보드가 100%가 아닌 이유로 적은 것과 같은 구멍입니다.</p>
+<p><strong>토큰은 가이드 단위로 듭니다.</strong> Get started 예시의 <code>tokenCount</code>는 한 가이드가 1,085에서 7,129토큰입니다. 203개를 매 턴 넣지 않습니다. 스킬 설명 약 205토큰은 그 본문과 별도입니다. <strong>분석/의견.</strong> 호출당 비용은 가이드 몇 개의 입력 토큰과, 검색이 빗나가 다시 <code>search</code>하는 턴입니다. 라이선스 비용은 코드 기준 Apache-2.0이라 좌석 요금이 아닙니다. 남는 운영 비용은 텔레메트리 정책(<code>DISABLE_TELEMETRY=1</code>로 끌 수 있음), 플러그인 자동 업데이트, 그리고 벤더 평가를 사내 품질 지표로 오인하지 않는 것입니다.</p>
+<p>도입 사례는 블로그가 적은 그대로입니다.</p>
+<ul>
+<li><strong>Pensionbazaar / Policybazaar.</strong> 인도 핀테크 Paisabazaar가 연 은퇴 설계 서비스 Pensionbazaar가 Modern Web Guidance와 Chrome DevTools for agents를 같이 써서, 턴어라운드를 약 나흘에서 몇 시간으로 90% 넘게 줄이고 새 화면의 UI 버그를 90% 넘게 줄였다고 블로그가 적습니다. 같은 글은 보험 플랫폼 Policybazaar의 등록 고객을 9,700만 명 이상으로 적고, DevTools for agents로 트래픽이 큰 랜딩 약 30곳의 성능 감사를 자동화해 수작업 감사를 92% 줄였다고 적습니다. 인용은 Engineering Manager Aman Soni입니다. 블로그는 브라우저 호환 목표를 지키며 현대 표준으로 유도해 리뷰가 짧아졌다는 그의 문장을 옮깁니다.</li>
+<li><strong>WeTV.</strong> 텐센트의 해외 동영상 서비스가 CI에 에이전트를 넣어, DevTools for agents로 성능 회귀를 진단하고 Modern Web Guidance로 고친다고 블로그가 적습니다. 실패한 성능 검사의 90%를 자동으로 진단·해결하고, 디버깅과 해결 시간을 87% 줄였다고 적습니다. 네 시간에서 30분이고, 사람 평가가 그 30분에 포함된다고 적습니다. 인용은 Head of Engineering Yangjie Zheng입니다.</li>
+<li><strong>note inc.</strong> 일본의 크리에이터 플랫폼으로, 월간 활성 사용자 9,000만 명 이상이라고 블로그가 적습니다. 프로덕션 코드베이스에서 180회 평가의 현대 웹 검사 통과율이 61%에서 94%로 올랐고, 스크롤 애니메이션·툴팁·아코디언에서 커스텀 JavaScript 대신 HTML·CSS로 유도한 결과라고 적습니다. 병합된 PR 431개에서 LCP 이미지 우선순위가 제대로 붙은 비율이 28% 올랐다고 적습니다. 인용은 VP of Technology Takehiko Itabashi입니다.</li>
+<li><strong>MetaMask.</strong> 다운로드 1억 회 이상, 약 190개국이라고 블로그가 적습니다. 오픈소스 브라우저 확장의 모든 PR에 세 줄 프롬프트로 리뷰 봇을 돌렸고, 처음 다섯 주에 PR 약 480개를 보고 64개에 댓글을 달았으며, 엔지니어가 43건을 고쳤다고 적습니다. 대부분은 린터가 잡지 못하는 접근성·HTML 시맨틱·폼이고, 댓글에서 수정까지 중앙값은 15분이라고 적습니다. 인용은 UX Engineer Francis Nepomuceno입니다. 그가 이름을 든 API는 Interest invokers와 Popover입니다.</li>
+</ul>
+<p><strong>분석/의견.</strong> 이 네 곳의 비율은 영업 자료로 쓰기에는 정의가 제각각입니다. note의 61%→94%는 사내 180회 평가의 통과율이고, README의 56%→90% 같은 공개 하네스 행과 분모가 다릅니다. MetaMask의 43/64는 봇이 댓글을 단 PR 가운데 고친 수이지, 전체 PR 480개의 결함률이 아닙니다. WeTV의 87%는 네 시간과 30분의 차이로 설명되어 있어 그 두 시각이 같은 종류의 일인지는 블로그 문장 안에서만 확인됩니다. 재현 절차와 원 로그는 블로그에 없습니다.</p>
+<p><strong>분석/의견.</strong> 도구 회사 입장에서 이 저장소는 모델 기능이 아니라 배포 채널입니다. 마켓플레이스에 공식 플러그인이 있는 에이전트는 “웹 코드를 시키면 Baseline을 읽는다”를 기본에 가깝게 만들 수 있고, 없는 에이전트는 사용자가 <code>npx</code>를 쳐야 합니다. 2026-11-12 20:16 KST 전후 GitHub API의 <code>stargazers_count</code>는 배포 저장소 <strong>5,771</strong>(포크 192, <code>pushed_at</code> <code>2026-11-10T03:22:38Z</code>), 소스 저장소 <strong>2,164</strong>(포크 156, <code>pushed_at</code> <code>2026-11-12T09:47:45Z</code>)입니다. 같은 시각 npm 페이지의 Weekly downloads는 <strong>128,161</strong>입니다. 이 수는 고유 팀 수가 아닙니다. CI와 <code>npx @latest</code>가 같은 주를 여러 번 셀 수 있습니다. 채택의 바닥은 “한 줄로 깔린다”이고, 천장은 “사내 디자인 시스템이 가이드와 다를 때 어느 쪽을 따르나”입니다. note는 블로그 인용에서 디자인 시스템과 같이 쓴다고 말합니다. 가이드가 컴포넌트 라이브러리를 대체한다는 문장은 그 인용에 없습니다.</p>
+<h2 id="_8">팩트 체크</h2>
+<p>✅ 1차 자료와 맞음 / ⚠️ 핵심은 맞거나 범위가 다르거나, 확인한 자료가 그 문장까지 가지 않음 / ❌ 1차 자료와 어긋남</p>
+<p>원본은 <a href="https://x.com/i/status/2120646729687265589">@DeepTechTR, 2026-11-12 07:35 KST</a>입니다. 터키어 본문의 주장을 이 표의 행으로 나눴습니다.</p>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Google이 AI 프론트엔드가 2019년에 머물렀다고 공식 인정했다</td>
+<td>❌</td>
+<td>블로그는 전문가 리뷰에서 속도·접근성·보안을 더 고칠 자리가 남는다고 적습니다. README는 훈련 데이터의 옛 코드 때문에 에이전트가 오래된 패턴으로 기운다고 적습니다. “공식 인정”과 “2019”는 그 문장에 없습니다.</td>
+</tr>
+<tr>
+<td>원인 중 하나가 훈련 데이터 속의 레거시 코드다</td>
+<td>✅</td>
+<td>README Why: “Coding agents often default to older patterns because LLM training data contains vast amounts of legacy code.”</td>
+</tr>
+<tr>
+<td>Chrome 팀이 modern-web-guidance를 냈다</td>
+<td>⚠️</td>
+<td>블로그는 Chrome이 I/O 프리뷰와 1.0을 발표한다고 적습니다. v1.0.0 릴리스와 README의 관리 주체는 Chrome, Edge, Firefox, MDN과 커뮤니티입니다. Chrome만의 산출물로 두면 1.0 문장과 어긋납니다.</td>
+</tr>
+<tr>
+<td>212개 현대 웹 기능을 모델에 넣는다</td>
+<td>❌</td>
+<td>v1.0.0 릴리스와 README는 기능 <strong>250</strong>(140+36+74), 사용 사례 가이드 <strong>203</strong>입니다. 212는 README 스냅샷에서 2026-11-06 세 에이전트의 <strong>태스크 수</strong>입니다.</td>
+</tr>
+<tr>
+<td>Claude Code, Codex, Copilot, Antigravity에서 동작한다</td>
+<td>✅</td>
+<td>Get started와 블로그가 이 네 이름을 설치 경로에 적습니다. 같은 문서에는 Gemini CLI, Cursor, Goose, Grok, Kimi, WebStorm, <code>npx skills</code>도 있습니다. 네 개로 끝이 아닙니다.</td>
+</tr>
+<tr>
+<td>성공률이 56%에서 88%로 올랐다</td>
+<td>❌</td>
+<td>그 쌍은 표에 없습니다. 11월 6일 Claude는 <strong>56% → 90%</strong>(212 태스크, +34pp). 11월 8일 Claude의 가이드 통과율 <strong>88%</strong>는 비가이드 <strong>57%</strong>와 짝입니다(215 태스크, +31pp). 56과 88은 다른 날짜의 칸입니다.</td>
+</tr>
+<tr>
+<td>설치는 <code>npx modern-web-guidance</code> 한 줄이다</td>
+<td>❌</td>
+<td>문서·README·블로그의 설치 명령은 <code>npx modern-web-guidance@latest install</code>입니다. 갱신은 <code>update</code>입니다.</td>
+</tr>
+<tr>
+<td>v1.0이 2026-11-10에 안정판으로 나왔다</td>
+<td>✅</td>
+<td>블로그 Published: November 10, 2026. 릴리스 <code>published_at</code> <code>2026-11-10T03:24:59Z</code>. npm <code>1.0.0</code> 페이지의 Updated <code>2026-11-10T03:32:13.895Z</code>.</td>
+</tr>
+<tr>
+<td>1.0이 크로스 브라우저 노력이 되었다</td>
+<td>✅</td>
+<td>블로그: Firefox와 Edge가 Chrome에 합류. 릴리스 노트: Chrome, Edge, Firefox, MDN이 함께 관리.</td>
+</tr>
+<tr>
+<td>검색이 오프라인 임베딩과 BM25다</td>
+<td>✅</td>
+<td>README How It Works. v1.0.0 노트는 TensorFlow.js를 빼고도 오프라인이라고 적습니다. <code>npx @latest</code>로 패키지를 받는 단계는 별개입니다.</td>
+</tr>
+<tr>
+<td>평균 개선이 37퍼센트포인트다</td>
+<td>⚠️</td>
+<td>Get started가 “early results” 평균 37pp라고 적습니다. 날짜와 표본은 그 페이지에 없습니다. README의 11월 8일 세 행을 이 글이 단순 평균하면 31.7pp입니다.</td>
+</tr>
+<tr>
+<td>평가가 에이전트마다 가이드를 켜고 끈 비교다</td>
+<td>✅</td>
+<td>README 파이프라인과 대시보드의 “Controlled A/B tasks”. 점수는 벤더가 공개한 것이고, 이 글이 재실행한 값이 아닙니다.</td>
+</tr>
+<tr>
+<td>접근성 자동 검사가 WCAG 전체를 대신한다</td>
+<td>❌</td>
+<td>대시보드 문장: 자동 검사는 요구의 일부이며 WCAG 전체나 보조기술 테스트를 대체하지 않습니다.</td>
+</tr>
+<tr>
+<td>기존 저장소를 전부 자동으로 현대화한다</td>
+<td>⚠️</td>
+<td><code>legacy-scan</code>은 v1.0에 있습니다. 릴리스 노트는 결정적 규칙이 있는 가이드의 대략 20%라고 범위를 적습니다.</td>
+</tr>
+<tr>
+<td>Baseline 목표를 안 적어도 최신 기능을 기본으로 쓴다</td>
+<td>❌</td>
+<td>Get started: 목표가 없으면 기본값은 <strong>Widely available</strong>입니다. volatile·오리진 트라이얼 <code>retrieve</code>는 <code>.mwgrc</code> 옵트인이 있어야 열립니다.</td>
+</tr>
+<tr>
+<td>note의 61%→94%가 공개 하네스의 56%→88%와 같은 실험이다</td>
+<td>❌</td>
+<td>note 숫자는 Chrome 블로그의 사내 180회 평가입니다. 56과 88은 README 공개 스냅샷의 서로 다른 행입니다. 분모가 다릅니다.</td>
+</tr>
+<tr>
+<td>npm 주간 다운로드 128,161이 고유 사용자 수다</td>
+<td>❌</td>
+<td>그 수는 2026-11-12 npm 페이지의 Weekly downloads입니다. 고유 팀 수라는 필드는 페이지에 없습니다.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>총평:</strong> 1.0이 실재하고, 스킬과 CLI가 Baseline이 붙은 가이드를 에이전트에 넣으며, 공개 평가에서 가이드를 켜면 통과율이 오른다는 핵심은 1차 자료와 맞습니다. 트윗의 212와 56%→88%는 그 표의 칸을 한 문장으로 붙인 수입니다. 기능은 250개, 가이드는 203개, 11월 6일 Claude의 쌍은 56%→90%, 88%가 적힌 Claude 행은 11월 8일의 57%→88%입니다.</p>
+<h2 id="_9">참고 자료</h2>
+<ul>
+<li>Philip Walton, <em>Modern Web Guidance 1.0</em>, Chrome for Developers (2026-11-10) — <a href="https://developer.chrome.com/blog/modern-web-guidance-v1">blog</a></li>
+<li>Chrome docs — <a href="https://developer.chrome.com/docs/modern-web-guidance">Modern Web Guidance</a> · <a href="https://developer.chrome.com/docs/modern-web-guidance/get-started">Get started</a></li>
+<li>배포 저장소 README — <a href="https://github.com/GoogleChrome/modern-web-guidance">GoogleChrome/modern-web-guidance</a> (기능 250, 가이드 203, How It Works, 평가 스냅샷)</li>
+<li>v1.0.0 릴리스 — <a href="https://github.com/GoogleChrome/modern-web-guidance/releases/tag/v1.0.0">releases/tag/v1.0.0</a> (<code>published_at</code> 2026-11-10T03:24:59Z)</li>
+<li>소스 README — <a href="https://github.com/GoogleChrome/modern-web-guidance-src">GoogleChrome/modern-web-guidance-src</a> (평가 파이프라인, 같은 스냅샷)</li>
+<li>가이드 <code>declarative-dialog-popover-control</code> — <a href="https://github.com/GoogleChrome/modern-web-guidance/blob/v1.0.0/skills/modern-web-guidance/guides/ui-behaviors/declarative-dialog-popover-control.md">v1.0.0 blob</a> (CC BY 4.0)</li>
+<li>npm — <a href="https://www.npmjs.com/package/modern-web-guidance">modern-web-guidance@1.0.0</a> · 레지스트리 <code>unpackedSize</code> 16,503,129</li>
+<li>Baseline — <a href="https://web.dev/baseline">web.dev/baseline</a></li>
+<li>평가 방법 페이지 — <a href="https://googlechrome.github.io/modern-web-guidance-src/">googlechrome.github.io/modern-web-guidance-src</a> (2026-11-12 정적 수집본의 표는 Loading)</li>
+<li>Chrome DevTools for agents — <a href="https://developer.chrome.com/docs/devtools/agents">docs</a></li>
+<li>이 블로그의 HTML-in-Canvas 글 — <a href="https://betelg15.github.io/posts/chrome-157-html-in-canvas/">posts/chrome-157-html-in-canvas</a></li>
+<li>원본 X 포스트 — <a href="https://x.com/i/status/2120646729687265589">@DeepTechTR, 2026-11-12 07:35 KST</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
