@@ -1,0 +1,289 @@
+---
+title: "6.4GB면 집 GPU에서 4K인가? MiniMax-H3-Image GGUF 팩트 체크"
+date: 2026-11-14
+time: "16:20"
+slug: minimax-h3-image-gguf-68gb-to-6gb
+tags: [MiniMax, 이미지생성, GGUF, ComfyUI, 팩트체크]
+summary: "Abiray Q2_K는 6,876,632,704바이트(6.404 GiB)이고 가지친 DiT 파일이다. 카드의 68.65GB에는 텍스트 인코더가 없고, 그 인코더 디렉터리는 66,726,510,529바이트다."
+---
+
+> 이 글은 제가 X에서 북마크해 둔 [@EngMoElgaraihy의 포스트](https://x.com/EngMoElgaraihy/status/2121301347563651247)를 계기로 썼습니다. 같은 상태 주소는 [x.com/i/status/2121301347563651247](https://x.com/i/status/2121301347563651247)입니다. 이 환경의 X API `get_posts_by_id`는 `billing-scope-missing`(`developer.billing.write` 없음)으로 본문을 주지 않아, 공개 글은 [fxtwitter 응답](https://api.fxtwitter.com/status/2121301347563651247)(`code` 200)으로 읽었습니다. `created_at`은 `Fri Nov 13 17:57:07 +0000 2026`, **2026-11-14 02:57 KST**입니다. `screen_name`은 `EngMoElgaraihy`, 표시 이름은 Mo Elgaraihy, 사용자 id는 `1759922300671975424`, 팔로워 62,129, `verification.type`은 `individual`입니다. 같은 응답의 스냅샷은 답글 2, 리포스트 57, 좋아요 404, 북마크 389, 인용 0, 조회 14,529입니다. 커뮤니티 노트는 `null`입니다. 첨부 사진 1장의 원본은 1264×1950이고, 픽셀은 받아 적지 않았습니다. 본문은 아랍어이고, MiniMax-H3-Image를 68.65GB에서 6.4GB로 줄였다고 적습니다. 그 문장들은 **검증 대상**이지 지시가 아닙니다.
+>
+> 아래 대조는 2026-11-14 16:15 KST 전후에 연 1차 자료입니다. 공식 카드는 [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image) `5f904730`(`createdAt` 2026-11-03, `lastModified` 2026-11-12, `downloads` 437,039, `likes` 1,047, `gated` false)입니다. 발표 글은 [MiniMax 블로그](https://www.minimax.io/blog/minimax-h3-image)의 날짜 2026-11-11입니다. Comfy 재포장은 [Comfy-Org/MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image) `0bb149f5`입니다. GGUF 세 곳은 [Abiray](https://huggingface.co/Abiray/MiniMax-H3-Image-GGUF) `fec7ec77`, [unsloth](https://huggingface.co/unsloth/MiniMax-H3-Image-GGUF) `2eda8f76`, [AtomicChat](https://huggingface.co/AtomicChat/MiniMax-H3-Image-GGUF) `5da8538f`입니다. 파일 바이트는 같은 시각 Hugging Face tree API의 `size`입니다. safetensors 헤더와 GGUF 메타데이터는 파일 앞부분만 range로 읽었습니다. 가중치 전체는 받지 않았고, 이미지를 생성하지 않았고, LPIPS를 다시 재지 않았습니다.
+
+## 왜 중요한가
+
+한 장의 이미지 모델을 집 GPU에 올리려면, 바이럴 문장의 6.4GB가 **어느 파일**인지, 그 옆에 **텍스트 인코더와 VAE**가 더 있는지, 그 라이선스가 **어느 나라**를 빼는지가 먼저입니다.
+
+MiniMax는 2026-11-11 블로그에서 H3-Image 가중치를 열었다고 적습니다. 카드의 Diffusion Transformer(DiT)는 33.1B 파라미터의 단일 스트림이고, 샘플링은 6단계, classifier-free guidance는 없습니다. 카드의 모델 표는 이 체크포인트를 BF16 68.65GB로 적습니다. 커뮤니티는 Comfy-Org가 재포장한 체크포인트를 GGUF로 다시 양자화했습니다.
+
+확인할 질문은 다음입니다.
+
+- 68.65GB와 6.4GB가 같은 종류의 파일인가.
+- 6.4GB를 만드는 양자화가 Q2_K인지, 그 수가 디스크인지 VRAM인지.
+- 33.1B가 가지친 뒤에도 33.1B인가.
+- 6단계, 4096, 참조 이미지 16장이 카드에 있는가.
+- 그 가중치를 제품에 넣을 때 라이선스가 남기는 조건.
+
+## 기술 설명
+
+### 단일 스트림 DiT, 그리고 카드가 적지 않은 head 폭
+
+이미지 생성의 DiT는 노이즈 잠재 변수를 패치로 자르고, 그 토큰 열을 트랜스포머로 갱신한 뒤 VAE가 픽셀로 되돌립니다. Flux 계열에서 흔한 MMDiT는 텍스트 스트림과 이미지 스트림을 나누어 두었다가 합칩니다. MiniMax-H3-Image 카드는 그 반대쪽을 적습니다. 텍스트 프롬프트와 참조 이미지가 한 시퀀스로 패킹되고, **단일 스트림** 트랜스포머가 목표 잠재 변수를 예측합니다.
+
+[transformer/config.json](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image/blob/5f90473023975e6271b0ed1dd84c4e88e4bbc6d3/transformer/config.json)과 카드 문장을 나란히 두면 이렇습니다.
+
+| 항목 | 카드 | config.json과 가중치 헤더 |
+|---|---|---|
+| 층 | 50 | `num_layers` 50. 블록 이름 `blocks.0`–`blocks.49` |
+| 폭 | hidden 5376 | `hidden_size` 5376. 잔차 스트림의 폭 |
+| 헤드 | 56 | `num_attention_heads` 56, `attention_head_dim` 128. 56×128 = 7168 |
+| FFN | 14336 | `ffn_hidden_size` 14336. `mlp.fc1`은 `[28672, 5376]`이라 게이트가 한 번 더 있다 |
+| 텍스트 | Qwen3-VL, 50번째 층 hidden | 텍스트 config는 `num_hidden_layers` 64, `hidden_size` 5120. 카드는 그 64층 중 50번째 층의 상태를 DiT가 읽는다고 적는다 |
+| VAE | 16배 다운샘플, 잠재 24채널, 디코더 ViT 24층 | `latent_channels` 24, `vit_decoder_2d` true, `num_layers` 24 |
+| 패치 | 2×2, 토큰당 32×32픽셀 | `patch_size` `[1, 2, 2]`. 16×2 = 32 |
+| 오디오 | 오디오 층을 뺐다 | `audio_enabled` false. `audio_latents_dim` 32는 config에 남아 있다 |
+| 정밀도 | 가중치 BF16, 임베딩·타임스텝·출력은 FP32 | 아래 헤더 절 |
+
+QKV 가중치 `blocks.0.attn.qkv_proj.weight`는 `[21504, 5376]`입니다. 21504 = 3×7168이므로 Q, K, V가 각각 56×128로 나가고, 출력 투영 `out_proj.weight` `[5376, 7168]`이 잔차 폭 5376으로 돌아옵니다. 카드의 "56헤드, hidden 5376"은 맞고, 헤드 차원 128은 카드 문장에 없습니다. config에 있습니다.
+
+`pdd_config.json`의 `num_inference_steps`는 6이고, 시그마는 7개입니다. 1.0, 0.9675236940383911, 0.8875485062599182, 0.75, 0.5327739119529724, 0.23200887441635132, 0.0. 카드의 서빙 표는 `num_inference_steps`와 `guidance_scale`에 6과 1 이외의 값을 주면 HTTP 400이라고 적습니다. `negative_prompt`는 거절됩니다. 파일 이름은 `pdd_fused_heads`입니다. Abiray 카드는 PDD를 Piecewise Decoupled Diffusion이라고 풀어 씁니다. 공식 README에서 그 풀어 쓰기를 찾지는 못했습니다.
+
+토큰 정제기 `token_refiner_num_layers`는 2입니다. 카드의 아키텍처 문장에는 없고 config와 GGUF 텐서 이름에 있습니다.
+
+### 68.65GB는 텍스트 인코더를 뺀 합이다
+
+카드의 다운로드 표와, tree API가 돌려준 바이트입니다.
+
+| 구성 | 카드 | 이 글이 더한 바이트 |
+|---|---:|---:|
+| `transformer/` DiT | 66.28 GB | 디렉터리 66,279,126,415 (샤드 12개, 설정·인덱스 포함) |
+| `vae/` FP32 | 2.34 GB | `diffusion_pytorch_model.safetensors` 2,336,964,672 |
+| `pdd_fused_heads.safetensors` | 12 MB | 12,388,808 |
+| 위 세 파일 계열의 합 | 모델 표 68.65 GB | 68,628,479,895 (68.628 GB) |
+| 토크나이저·프로세서 | 23 MB | 모델 표의 68.65에 이 반올림이 들어가면 68.65에 닿는다 |
+| 텍스트 인코더 | 66.7 GB, 표는 "이 저장소에 없음" | 현재 트리의 `text_encoder/` 합 66,726,510,529. `model_index.json`은 여전히 `MiniMaxAI/MiniMax-H3`의 `text_encoder/`를 가리킨다 |
+| 저장소 `usedStorage` | 카드는 diffusers 포맷을 합쳐 약 204 GB | 203,981,781,880 |
+
+68,628,479,895바이트는 transformer 디렉터리, VAE safetensors, PDD 헤드를 더한 값입니다. 카드의 68.65GB는 그 합을 구성 요소별로 반올림하고 23MB 토크나이저 줄을 더하면 나오는 자릿수입니다. **텍스트 인코더 66.7GB는 68.65GB 안에 없습니다.** 카드가 적은 SGLang·vLLM용 원본 체크포인트와 텍스트 인코더는 약 135GB라는 문장(66.28+2.34+66.7)과 같은 덧셈입니다.
+
+`hf download MiniMaxAI/MiniMax-H3-Image`는 카드의 명령이고, 필터가 없습니다. 지금 그 저장소의 `usedStorage`는 203,981,781,880바이트입니다. diffusers로 변환된 transformer·VAE 사본과 `text_encoder/` 사본이 들어 있습니다. 카드의 빠른 시작은 이어서 `MiniMax-H3`의 텍스트 인코더를 한 번 더 받습니다.
+
+```bash
+hf download MiniMaxAI/MiniMax-H3-Image
+hf download MiniMaxAI/MiniMax-H3 --include "text_encoder/*"
+```
+
+한 GPU에서 공식 가중치를 서빙하는 명령도 카드에 있습니다. 이 글은 실행하지 않았습니다.
+
+```bash
+vllm serve MiniMaxAI/MiniMax-H3-Image --omni --host 0.0.0.0 --port 8000
+```
+
+```bash
+sglang serve --model-path MiniMaxAI/MiniMax-H3-Image --host 0.0.0.0 --port 30000 --warmup-mode off
+```
+
+해상도 표의 1:1은 4096×4096입니다. 4096×4096 = 16,777,216픽셀이고, 카드는 이것을 약 16MP라고 부릅니다. 21:9는 6272×2688 = 16,859,136픽셀입니다. 카드는 업스케일러 없이 이 크기를 직접 낸다고 적고, 작업 범위는 약 4MP에서 20MP, 기본 `min_generation_area`는 4,194,304(2048×2048)입니다. 그보다 작은 `size`는 같은 종횡비의 큰 캔버스에서 만든 뒤 LANCZOS로 줄인다고 적습니다. [Comfy 문서](https://docs.comfy.org/tutorials/image/minimax/minimax-h3-image)의 텍스트-이미지 템플릿은 일부러 4MP 정사각에서 열리고, 네이티브보다 낮게 잡은 이유가 저VRAM 기계의 메모리 부족이라고 적습니다. 해상도를 올리는 일은 그 문서에서 GPU 여유가 있을 때의 선택입니다.
+
+### 줄어든 첫 단계는 양자화가 아니라 AdaLN 행렬의 폭이다
+
+Comfy-Org README는 "Repackaged model files for ComfyUI"라고만 적습니다. 프루닝 알고리즘 문장은 거기에 없습니다. 파일 이름만 `pruned`입니다. 행렬 모양은 헤더에 있습니다.
+
+공식 샤드 `transformer/model-00001-of-00012.safetensors`의 `blocks.0.adaln_proj.linear.weight`는 BF16 `[96768, 2688]`입니다. `time_embed_dim`이 2688이고 `adaln_out_features`가 96768인 config와 같습니다. Comfy-Org `minimax_h3_image_pruned_bf16.safetensors`(40,234,657,162바이트)의 같은 텐서는 F16 `[96768, 8]`이고, 블록 0부터 49까지 50개입니다. `final_layer.adaln_proj.linear.weight`는 `[10752, 8]`입니다. 새로 있는 `adaln_t_table`은 FP32 `[1025, 8]`입니다.
+
+2688차원 시간 임베딩에 바로 곱하던 행렬이, 길이 1025짜리 표에서 꺼낸 8개의 계수와 폭 8인 기저로 바뀐 형태입니다. AtomicChat 카드가 "AdaLN 가지를 작은 표로 접었다"고 적은 문장과 헤더가 같은 방향입니다.
+
+| | 원소 수 |
+|---|---:|
+| 블록당 원래 AdaLN 가중치 96768×2688 | 260,112,384 |
+| 블록당 재포장 96768×8 | 774,144 |
+| 50블록에서 빠진 원소 | 12,966,912,000 |
+| final AdaLN 10752×2688에서 10752×8로 줄며 빠진 원소 | 28,815,360 |
+| 추가된 표 1025×8 | 8,200 |
+| 재포장 파일의 원소 (U8 설정 1,850 포함) | 20,113,672,082 |
+| U8 1,850을 뺀 원소. 세 GGUF 저장소의 `gguf.total`과 같다 | 20,113,670,232 |
+
+U8 1,850은 블록당 37바이트인 `comfy_attention.config` 50개입니다. 세 GGUF 카드의 파라미터 필드는 이 1,850을 뺀 20,113,670,232입니다. AtomicChat이 적은 20.1B와 같습니다.
+
+재포장 파일의 원소에서 폭 8 행렬과 표를 빼고, 원래 폭 2688 행렬을 다시 더하면 33,109,389,392입니다. 카드의 **33.1B**와 소수점 한 자리에서 만납니다. 이 덧셈은 샤드 1에서 넓은 행렬을 확인하고, 재포장 헤더에서 50개 블록이 모두 폭 8인 것을 확인한 뒤의 계산입니다. 공식 샤드 12개를 모두 열어 파라미터를 다시 세지는 않았습니다.
+
+바이트는 이렇게 갈립니다. 1 GB = 10^9바이트, 1 GiB = 2^30바이트입니다.
+
+```python
+files = {
+    "transformer dir": 66_279_126_415,
+    "vae safetensors": 2_336_964_672,
+    "pdd heads": 12_388_808,
+    "comfy pruned bf16": 40_234_657_162,
+    "abiray Q2_K": 6_876_632_704,
+    "abiray Q4_K_M": 11_573_106_304,
+}
+GiB = 1024 ** 3
+for name, n in files.items():
+    print(f"{name:22} {n/1e9:8.3f} GB   {n/GiB:8.3f} GiB")
+```
+
+```text
+transformer dir         66.279 GB     61.727 GiB
+vae safetensors          2.337 GB      2.176 GiB
+pdd heads                0.012 GB      0.012 GiB
+comfy pruned bf16       40.235 GB     37.471 GiB
+abiray Q2_K              6.877 GB      6.404 GiB
+abiray Q4_K_M           11.573 GB     10.778 GiB
+```
+
+트윗의 6.4와 10.78은 아래쪽 두 줄의 **GiB**와 같습니다. Abiray README는 같은 파일을 6.88 GB, 11.60 GB로 적습니다. 11.60은 11.573을 올린 값입니다.
+
+### 두 번째 단계가 GGUF K-quant다
+
+K-quant는 llama.cpp 계열의 블록 양자화입니다. 슈퍼블록 안에서 가중치 대부분은 이름의 비트 수로 두고, 스케일은 그보다 높은 정밀도로 둡니다. 파일 이름의 `Q4_K_M`과 `Q4_K_S`는 그 레시피의 이름입니다. 이 글은 Q4 파일의 텐서별 타입을 다시 풀지 않았습니다.
+
+Abiray `MiniMax-H3-Image-Pruned-Q2_K.gguf`의 앞부분 메타데이터는 이렇게 읽혔습니다.
+
+- `general.architecture` = `wan`
+- `general.file_type` = 10. ggml에서 이 값은 mostly Q2_K입니다.
+- 텐서 528개 중 타입 10(Q2_K)이 208개, 타입 0(F32)이 320개
+- `config` 키에 `pdd_steps` 6과 공식 `pdd_config.json`과 같은 시그마 7개
+
+208은 50블록의 QKV, 출력, FFN 두 행렬(200)에 토큰 정제기 2층의 같은 네 행렬(8)을 더한 수입니다. 큰 행렬만 Q2_K이고, 노름, 바이어스, AdaLN, 패치 투영, 최종 출력, `condition_proj`는 F32로 남아 있습니다. `condition_proj.weight`의 F32 원소는 27,525,120이고 5376×5120입니다. 텍스트 폭 5120을 DiT 폭 5376으로 잇는 행렬입니다.
+
+공식 카드가 FP32로 둔다고 적은 것은 임베딩, 타임스텝, 출력 층입니다. 재포장 safetensors에서 dtype이 F32인 텐서는 6개입니다. `adaln_t_table`, `video_patch_proj`의 가중치와 바이어스, `final_layer.video_out`의 가중치와 바이어스, `rope.inv_freq`. AdaLN 기저는 그 파일에서 F16입니다. GGUF는 그 기저까지 F32로 담았습니다.
+
+민감한 층을 높은 정밀도로 남기는 이유는 이 모델의 단계 수와 연결됩니다. 샘플이 6번이고 그 이외의 단계 수는 공식 서버가 400으로 거절합니다. 오차가 수십 스텝에 걸쳐 평균되지 않습니다. 패치 투영은 잠복 변수가 들어오는 문이고, `video_out`은 6개의 PDD 헤드가 나가는 문입니다. AdaLN은 블록 전체의 스케일이므로, 여기의 오차는 그 블록의 모든 채널에 곱해집니다. AtomicChat은 여기에 로더 제약을 더 적습니다. ComfyUI-GGUF가 양자화된 1차원 텐서를 읽지 못해서 노름과 바이어스를 BF16으로 둔다고 합니다.
+
+세 저장소의 Q2 헤더는 로더가 다릅니다.
+
+| 파일 | 바이트 | GiB | architecture | `config`(시그마) |
+|---|---:|---:|---|---|
+| Abiray `MiniMax-H3-Image-Pruned-Q2_K.gguf` | 6,876,632,704 | 6.404 | `wan` | 있음. 지금 `main` 헤더 |
+| unsloth `minimax_h3_image_pruned-Q2_K.gguf` | 7,748,879,072 | 7.217 | `hyvid` | 없음. 메타데이터 키 3개 |
+| AtomicChat `MiniMax-H3-Image-AD-Q2_K.gguf` | 7,567,053,024 | 7.047 | `wan` | 있음 |
+
+AtomicChat 카드(`lastModified` 2026-11-11 13:59 UTC)는 Abiray 파일에 `config`가 없어 ComfyUI가 `pdd_sigmas`에서 멈춘다고 적습니다. Abiray 저장소의 `lastModified`는 같은 날 14:28 UTC이고, 이 글이 읽은 Q2_K 헤더에는 `config`가 있습니다. 그 29분 사이에 메타데이터가 바뀌었는지는 이전 리비전을 받지 않아 확인하지 못했습니다. 현재 파일 기준으로 Abiray README의 "config가 들어 있다"는 문장과 헤더는 같습니다. unsloth README는 로드 대상을 upstream [stable-diffusion.cpp #2324](https://github.com/leejet/stable-diffusion.cpp/pull/2324)와 unsloth 포크로 적고, ComfyUI-GGUF를 적지 않습니다.
+
+Abiray의 Q4_K_S와 Q4_K_M은 둘 다 11,573,106,304바이트입니다. LFS oid는 `29b51dbb…`와 `e5453793…`로 다릅니다. 길이가 같고 내용이 같은 파일은 아닙니다.
+
+### 품질 숫자는 두 프로토콜이다
+
+LPIPS는 두 그림의 지각적 거리입니다. 낮을수록 가깝습니다. 아래 두 표는 서로 다른 해상도와 다른 BF16 기준이라 한 열로 섞지 않습니다. 수는 각 카드가 적은 값입니다.
+
+AtomicChat은 ComfyUI `4d64a8b`와 ComfyUI-GGUF `6ea2651`, H100 80GB에서 2048×2048, 캡션 40개, 시드 42, 6스텝, cfg 1, euler, simple로 재었다고 적습니다. 텍스트 인코더는 Comfy-Org int8, VAE는 fp16으로 고정하고 DiT 파일만 바꿉니다. BF16끼리 시드만 바꾸면 LPIPS 0.627이고, 그 값을 100%로 두는 열이 `vs. new seed`입니다.
+
+| 파일 | 디스크 | 출력 오차 | LPIPS [95% CI] | 시드 변경 대비 |
+|---|---:|---|---|---:|
+| Comfy-Org pruned BF16 | 40.23 GB | 0 | 0 | 0% |
+| AtomicChat Q8_0 | 21.45 GB | 0.020 | 0.090 [0.072, 0.111] | 14% |
+| AD-Q4_K | 11.57 GB | 0.076 | 0.254 [0.224, 0.285] | 41% |
+| AD-Q2_K | 7.57 GB | 0.170 | 0.379 [0.349, 0.409] | 60% |
+| Abiray Q4_K_M | 11.57 GB | 0.097 | 0.247 [0.223, 0.273] | |
+| Abiray Q2_K | 6.88 GB | | 0.546 [0.527, 0.567] | |
+
+Abiray Q2_K의 0.546은 시드를 바꿨을 때의 0.627에 가깝습니다. 같은 카드는 편집, 다른 해상도, 속도, 미학 점수는 재지 않았다고 적습니다. Abiray README의 "Q4_K_M은 거의 무손실", "Q5는 BF16과 구분되지 않는다"는 그 저장소의 문장이고, 위 LPIPS와 같은 실험이 아닙니다.
+
+unsloth는 같은 stable-diffusion.cpp CUDA 빌드의 BF16과 비교했고, 1024×1024에서 프롬프트 8개 × 시드 2개라고 적습니다. 피크 VRAM은 A100 40GB에서 DiT 샘플링과 VAE 디코드이고, 텍스트 인코더는 그 전에 따로 돈다고 적습니다.
+
+| 파일 | 카드의 크기 | LPIPS 1024 | 피크 VRAM, 1024 |
+|---|---:|---:|---:|
+| Q2_K | 7.75 GB | 0.438 | 9.4 GiB |
+| UD-Q2_K_XL | 8.68 GB | 0.347 | 10.2 GiB |
+| Q4_K_S | 11.54 GB | 0.225 | 12.9 GiB |
+| Q4_K_M | 12.72 GB | 0.195 | 14.0 GiB |
+| UD-Q4_K_XL | 13.61 GB | 0.172 | 14.8 GiB |
+| Q8_0 | 22.03 GB | 0.083 | 23.0 GiB |
+
+트리의 Q2_K 바이트 7,748,879,072는 7.749 GB라 카드의 7.75 GB와 같습니다. 이 표의 9.4 GiB는 1024에서의 DiT+VAE이고, 4096이 아니며, Qwen3-VL 텍스트 인코더가 같이 올라가 있는 값도 아닙니다. 같은 README는 L4 24GB에서 끝시간 대부분이 그 텍스트 인코더라고 적습니다. Q4_K_M 텍스트 인코더만 바꿔도 1024 그림이 LPIPS 0.17 움직인다고 적습니다.
+
+### 받는 파일과 두는 폴더
+
+DiT GGUF만으로는 그림이 나오지 않습니다. VAE는 24채널짜리 MiniMax-H3-Image VAE여야 하고, 카드들은 SD/Flux의 4채널 VAE와 H3 비디오 VAE를 쓰지 말라고 적습니다. 텍스트 인코더는 MiniMax-H3의 Qwen3-VL입니다. Comfy-Org 파일 이름에는 `qwen3vl_32b`가 들어 있습니다. 공식 아키텍처 문장은 "32B"를 적지 않고 "MiniMax-H3의 Qwen3-VL 텍스트 인코더 전체"라고 적습니다. 이 글은 그 샤드의 dtype을 풀어 파라미터를 다시 세지 않았습니다.
+
+Comfy-Org 트리의 바이트와, 문서가 적은 크기입니다.
+
+| 파일 | 바이트 | 10^9로 나눈 GB | 2^30으로 나눈 GiB | 문서에 적힌 크기 |
+|---|---:|---:|---:|---|
+| `minimax_h3_image_pruned_bf16.safetensors` | 40,234,657,162 | 40.235 | 37.471 | 40.2 GB (Hub 트리) |
+| `minimax_h3_image_pruned_int8_convrot.safetensors` | 20,979,314,802 | 20.979 | 19.539 | Comfy 문서 21 GB |
+| `minimax_h3_image_pruned_w4a8.safetensors` | 12,549,794,530 | 12.550 | 11.688 | 12.5 GB |
+| `qwen3vl_32b_minimax_h3_int8_convrot.safetensors` | 27,141,342,152 | 27.141 | 25.277 | Comfy 문서 **25.28 GB** |
+| `qwen3vl_32b_minimax_h3_nvfp4_awq.safetensors` | 15,687,142,551 | 15.687 | 14.610 | |
+| `qwen3.5_9b_w4a8_gptq.safetensors` | 7,343,591,088 | 7.344 | 6.839 | Comfy 문서 7.34 GB |
+| `minimax_h3_image_vae_fp16.safetensors` | 1,168,505,312 | 1.169 | 1.088 | Comfy 문서 1.17 GB |
+
+텍스트 인코더의 25.28는 27,141,342,152 / 2^30 = 25.277과 같습니다. 같은 문서의 21 GB, 7.34 GB, 1.17 GB는 10^9에 가깝습니다. **한 페이지 안에서도 GB와 GiB가 섞여 있습니다.** 트윗의 6.4와 10.78은 이 GiB 표기와 같은 종류입니다.
+
+Abiray와 AtomicChat이 적은 ComfyUI 배치는 다음 파일 이름입니다. 노드는 **Unet Loader (GGUF)**, 텍스트는 **Load CLIP**의 타입 `minimax`, VAE는 **Load VAE**입니다. 샘플러는 euler, 스케줄러 simple, 스텝 6, CFG 1입니다. Abiray는 ComfyUI v0.45.0+와 [city96/ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF)를 적습니다. 이 글은 그 그래프를 실행하지 않았습니다.
+
+```bash
+hf download Abiray/MiniMax-H3-Image-GGUF --include "MiniMax-H3-Image-Pruned-Q4_K_M.gguf"
+hf download Comfy-Org/MiniMax-H3-Image --include "vae/minimax_h3_image_vae_fp16.safetensors"
+hf download Comfy-Org/MiniMax-H3-Image --include "text_encoders/qwen3vl_32b_minimax_h3_int8_convrot.safetensors"
+```
+
+`--include`는 공식 카드가 텍스트 인코더와 예제에 쓴 형식이고, 파일 이름은 각 트리에 있습니다.
+
+stable-diffusion.cpp 명령은 AtomicChat README에 있는 형태입니다. 인코더 GGUF는 [unsloth/MiniMax-H3-GGUF](https://huggingface.co/unsloth/MiniMax-H3-GGUF)의 `qwen3vl_32b_minimax_h3-Q4_K_M.gguf`를 가리키고, 그 README는 이 파일을 18.2 GB로 적습니다. 이 글은 그 파일의 바이트를 따로 받지 않았습니다.
+
+```bash
+sd-cli --diffusion-model MiniMax-H3-Image-AD-Q4_K.gguf \
+  --llm qwen3vl_32b_minimax_h3-Q4_K_M.gguf \
+  --vae minimax_h3_image_vae_fp16.safetensors \
+  -p "$(cat caption.txt)" -W 2048 -H 2048 --steps 6 --cfg-scale 1 \
+  --sigmas minimax-h3-image --diffusion-fa -o out.png
+```
+
+Mac용 MLX 저장소는 따로 있습니다. [cguldogan/MiniMax-H3-Image-MLX-4bit](https://huggingface.co/cguldogan/MiniMax-H3-Image-MLX-4bit)의 `usedStorage`는 31,415,491,634바이트, 8bit는 53,238,980,876바이트, [VisualInference bf16](https://huggingface.co/VisualInference/MiniMax-H3-Image-MLX-bf16)은 94,160,637,170바이트입니다. 셋 다 `gated: auto`라 raw README는 401이었습니다. 디스크만 보면 6.4GB 파일이 아닙니다.
+
+## 비즈니스 인사이트
+
+숫자 옆에는 출처를 붙입니다. **(분석)** 이라고 적은 문장만 이 글의 판단입니다. 라이선스 문단은 조항의 옮김이고 법률 자문이 아닙니다.
+
+**라이선스의 당사자와 지도가 제품 범위다.** [LICENSE](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image/blob/5f90473023975e6271b0ed1dd84c4e88e4bbc6d3/LICENSE) 정의에서 MiniMax는 Nanonoble Pte. Ltd.입니다. Applicable Territory는 전 세계에서 Excluded Territories를 뺀 곳이고, Excluded Territories는 유럽연합, 영국, 대한민국, 미국입니다. II절은 그 영토 안에서만 사용·복제·배포·파생·수정을 허락합니다. V.4는 그 바깥에서의 사용, 복제, 수정, 배포, 전시를 이 계약이 허락하지 않는다고 적습니다. 제외 지역의 배포는 연락하면 별도 라이선스를 검토한다고 적습니다.
+
+IV절은 두 가지에 사전 서면 허락을 요구합니다. 본인과 계열사의 연환산 매출이 100만 달러를 넘거나, 제3자에게 Hosted Service를 제공하는 경우입니다. 신청 주소는 `https://platform.minimax.io/console/license`입니다. 상업 제품의 UI에는 "MiniMax-H3-Image"를 눈에 띄게 표시해야 합니다. III절은 제품에 "Powered by MiniMax-H3-Image" 고지를 두라고 적습니다. V.3은 출력으로 **다른** AI 모델을 개선하는 것을 금지합니다. MiniMax-H3-Image와 그 Model Derivative는 그 문장에서 빠집니다. GGUF와 MLX 변환은 라이선스가 정의하는 Model Derivative 쪽에 있습니다.
+
+**(분석)** 이 글을 한국어로 읽는 팀에게 바로 닫히는 문장은 기술 사양이 아니라 V.4입니다. 대한민국은 커뮤니티 라이선스의 허락 밖에 있습니다. 집 GPU에 6.4 GiB 파일이 올라가는지와, 그 파일을 제품·사내 도구·호스팅 API에 써도 되는지는 다른 질문입니다. 가중치가 `gated: false`로 받아진다는 사실만으로 그 질문이 끝나지 않습니다.
+
+**로컬의 비용은 DiT 파일 한 장이 아니다.** 공식 블로그는 Standard가 주류 대안의 1.5–2배, Highspeed가 3–4배 빠르고, 가격은 비교 대상의 50–70%이며, 출시 주 4K 이상은 정가의 50%라고 적습니다. 비교 대상의 이름과 달러 가격은 그 글에 없습니다. 4K를 10초 안에 낸다는 문장도 그 블로그의 문장이고, 이 글은 재지 않았습니다.
+
+로컬에서 바이트로 확인되는 추가분은 텍스트 인코더입니다. Comfy-Org int8 인코더는 27,141,342,152바이트입니다. unsloth는 L4 24GB에서 `UD-Q4_K_XL`의 DiT 스텝이 1.12–1.18초이고, Q4_K_M 인코더까지 포함한 이미지 한 장이 약 105–111초라고 적습니다. 같은 표의 `--max-vram 12`는 스텝당 3.91초입니다. 4096 행은 그 속도 표에 없습니다.
+
+**(분석)** 이득이 파일 크기와 맞는 쪽은, 라이선스 영토 안에서 이미 Qwen3-VL급 인코더를 갖고 있고, 1024–2048에서 6스텝 이미지를 ComfyUI나 sd.cpp로 돌리려는 사람입니다. Q8이나 UD-Q4가 그 구간에 가깝고, Abiray Q2_K는 AtomicChat 측정에서 시드를 바꾼 BF16에 가까운 LPIPS입니다. 손해가 문장으로 남는 쪽은 6.4GB를 파이프라인 전체로 읽고 8GB GPU에서 4096을 기대한 사람, 그리고 커뮤니티 라이선스만으로 한국·미국·EU·영국에서 제품이나 호스팅 API를 열려고 한 조직입니다. 매출 100만 달러 또는 호스팅은 영토 안에서도 IV절을 만납니다.
+
+**(분석)** 닫힌 이미지 API가 아직 파는 것은 지원 계약, 영토가 막히지 않은 약관, 그리고 프롬프트 확장기입니다. 카드는 짧은 프롬프트를 긴 영어 설명으로 바꾸는 H3-Image-Context-IR을 MiniMax API로 두고, 로컬 대안은 선택 사항인 MiniMax-H3-Image-PE(NVFP4, 카드 17.9 GB)라고 적습니다. 오픈 웨이트 이미지 모델과의 점수 비교표는 이 글이 만들지 않았습니다. 블로그의 "오픈 웨이트 중 가장 강한 지시 이행"과 "주류 대비 최대 5배"는 기준 모델의 이름이 없는 문장입니다.
+
+Comfy-Org 재포장의 API `downloads`는 1,257,301, 공식 저장소는 437,039였습니다. Hugging Face의 이 필드는 고유 사용자 수가 아닙니다. 받는 쪽의 무게중심이 66 GB 원본보다 Comfy 폴더 레이아웃 쪽에 있다는 정황으로는 읽을 수 있습니다.
+
+## 팩트 체크
+
+✅ 1차 자료와 맞음 / ⚠️ 수는 있으나 범위가 다르거나, 단위가 섞였거나, 재현 절차가 없음 / ❌ 1차 자료와 어긋나거나, 근거 숫자가 없음
+
+원본은 [@EngMoElgaraihy, 2026-11-14 02:57 KST](https://x.com/i/status/2121301347563651247)입니다. 품질과 VRAM은 각 카드가 적은 값이고, 이 글은 다시 재지 않았습니다.
+
+| 주장 | 판정 | 근거 |
+|---|---|---|
+| MiniMax-H3-Image는 33.1B 파라미터 단일 스트림 DiT다 | ✅ | 카드의 33.1B, 50층, hidden 5376, 헤드 56. config의 헤드 차원은 128이라 어텐션 폭은 7168이다. 재포장 헤더로 되돌린 원소 수는 33,109,389,392다. |
+| 체크포인트가 BF16 68.65GB다 | ✅ | 카드의 모델 표. transformer 디렉터리 + VAE safetensors + PDD 헤드 = 68,628,479,895바이트. 텍스트 인코더는 그 합 밖에 있고 디렉터리 합이 66,726,510,529바이트다. |
+| 오픈 소스 커뮤니티가 68.65GB를 6.4GB로 줄였다 | ⚠️ | 6.4는 Abiray Q2_K 6,876,632,704바이트 = 6.404 GiB다. 경로는 두 단계다. AdaLN 폭 2688→8인 Comfy-Org BF16이 40,234,657,162바이트이고, 그 파일의 Q2_K가 6.404 GiB다. 텍스트 인코더와 VAE는 그대로 따로 받는다. |
+| Q4는 10.78GB만 필요하고 Q2_K는 6.4GB다 | ⚠️ | 10.78 GiB는 Abiray Q4_K_M·Q4_K_S의 디스크(11,573,106,304바이트)다. README는 11.60 GB로 적고 Q4_K_M의 권장 VRAM은 16GB다. 10.78을 VRAM으로 재 표는 없다. |
+| Q2_K가 얇은 Mac과 8GB·12GB GPU에서 돈다 | ⚠️ | Abiray는 Q2_K에 8–10GB VRAM을 권장하고 측정 절차는 적지 않는다. unsloth Q2_K의 1024 피크는 A100에서 9.4 GiB(DiT+VAE)라 8GiB보다 크다. MLX 4bit `usedStorage`는 31,415,491,634바이트다. |
+| 4096×4096(16MP)과 21:9를 업스케일 없이 낸다 | ✅ | 카드와 Comfy 문서의 크기 표. 4096² = 16,777,216, 6272×2688 = 16,859,136. Comfy 템플릿의 기본 캔버스는 4MP이고, 저VRAM을 피하려고 네이티브보다 낮추었다고 적는다. GGUF 카드의 LPIPS·VRAM 표는 1024와 2048이다. |
+| 증류되었고 6스텝이며 CFG가 없다 | ✅ | `pdd_config.json`의 스텝 6과 시그마 7개. 카드는 다른 스텝·다른 guidance를 HTTP 400으로 적는다. |
+| 참조 이미지 16장과 캐릭터 일관성 | ⚠️ | 카드와 블로그는 참조 16장까지라고 적는다. 쇼케이스에 보이는 다중 참조 예는 10장이다. "캐릭터 일관성"은 트윗의 해석이고, 이 글은 16장을 넣어서 확인하지 않았다. |
+| ComfyUI GGUF와 Mac MLX 가중치가 있다 | ✅ | Abiray·AtomicChat은 `wan` + `config`로 ComfyUI-GGUF를 적는다. unsloth Q2 헤더는 `hyvid`이고 config가 없다. MLX 4bit·8bit·bf16 저장소가 있고 디스크는 31.4GB, 53.2GB, 94.2GB다. |
+| 출시 며칠 만에 양자화 27종, 다운로드 11만 이상 | ⚠️ | 공식 저장소 `createdAt`은 2026-11-03, 블로그 날짜는 2026-11-11, Abiray `createdAt`은 2026-11-10 16:07 UTC다. 이름이 GGUF인 검색 결과에서 이미지 DiT로 보이는 저장소의 `downloads` 합은 96,876이다. 27과 110,000을 그대로 주는 목록은 아니었다. 검색은 전체 센서스가 아니다. |
+| 가정용 기기의 99%는 원본을 못 돌린다 | ❌ | 트윗 안의 분모다. 카드, 블로그, Comfy 문서에 99%가 없다. |
+| 오픈 소스가 빅테크 독점을 깼다 | ⚠️ | 구호다. 가중치는 공개이고 `gated: false`다. 라이선스는 한국·미국·영국·EU를 빼고, 연 100만 달러 또는 호스팅에 서면 허락을 요구한다. README는 open-source라고 쓰고, 블로그는 open-weight라고 쓴다. |
+
+**총평:** 카드의 33.1B와 68.65GB, 6스텝, CFG 없음, 4096×4096, 참조 16장은 공식 카드와 config에 있다. 68.65GB는 텍스트 인코더를 뺀 이미지 체크포인트 쪽이고, 인코더 디렉터리는 66,726,510,529바이트다. 6.4GB는 그 전체가 아니라 Abiray Q2_K의 6.404 GiB다. 그 앞에 Comfy-Org 재포장 BF16 40,234,657,162바이트가 있고, 헤더상 AdaLN 입력 폭은 2688에서 8로 줄었다. 재포장 원소는 20,113,670,232다. Q4의 10.78은 같은 방식으로 읽은 Q4 파일의 GiB다. Abiray Q2_K의 LPIPS 0.546은 AtomicChat이 2048에서 잰 값이고, 같은 프로토콜에서 시드만 바꾼 BF16은 0.627이다. 라이선스는 대한민국을 허락 영토에서 뺀다.
+
+## 참고 자료
+
+- 공식 가중치 — [MiniMaxAI/MiniMax-H3-Image](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image) `5f90473023975e6271b0ed1dd84c4e88e4bbc6d3`. API 2026-11-14: `downloads` 437,039, `likes` 1,047, `usedStorage` 203,981,781,880, `createdAt` 2026-11-03, `lastModified` 2026-11-12
+- 발표 — [MiniMax H3-Image 블로그](https://www.minimax.io/blog/minimax-h3-image), 날짜 2026-11-11. 4K 10초, 주류 대비 속도·가격 문장은 이 글의 문장이다
+- 라이선스 — [MiniMax-H3-Image Community License](https://huggingface.co/MiniMaxAI/MiniMax-H3-Image/blob/main/LICENSE). I.5 제외 영토, IV 100만 달러·Hosted Service, V.3 다른 모델 개선 금지, V.4 영토 밖 사용
+- Comfy 재포장 — [Comfy-Org/MiniMax-H3-Image](https://huggingface.co/Comfy-Org/MiniMax-H3-Image) `0bb149f51e3156ed4b90dd45d5620346bfe1df8f`. API `downloads` 1,257,301. [Comfy 문서](https://docs.comfy.org/tutorials/image/minimax/minimax-h3-image)
+- GGUF — [Abiray/MiniMax-H3-Image-GGUF](https://huggingface.co/Abiray/MiniMax-H3-Image-GGUF) `fec7ec774db49d0c785bdc2174a488576b7396dd`, `downloads` 52,248. [unsloth/MiniMax-H3-Image-GGUF](https://huggingface.co/unsloth/MiniMax-H3-Image-GGUF) `2eda8f761a1625818e2933e7e726e337d197bc27`, `downloads` 6. [AtomicChat/MiniMax-H3-Image-GGUF](https://huggingface.co/AtomicChat/MiniMax-H3-Image-GGUF) `5da8538f0b9a7a8a0afd1ff6ed22ade4b0134094`, `downloads` 5,757
+- 로더 — [city96/ComfyUI-GGUF](https://github.com/city96/ComfyUI-GGUF). stable-diffusion.cpp의 MiniMax-H3-Image는 [leejet/stable-diffusion.cpp#2324](https://github.com/leejet/stable-diffusion.cpp/pull/2324)라고 AtomicChat·unsloth 카드가 적는다
+- MLX 디스크 — [4bit](https://huggingface.co/cguldogan/MiniMax-H3-Image-MLX-4bit) `usedStorage` 31,415,491,634. [8bit](https://huggingface.co/cguldogan/MiniMax-H3-Image-MLX-8bit) 53,238,980,876. [bf16](https://huggingface.co/VisualInference/MiniMax-H3-Image-MLX-bf16) 94,160,637,170. 셋 다 `gated: auto`
+- X — [EngMoElgaraihy 2121301347563651247](https://x.com/i/status/2121301347563651247). fxtwitter로 읽음. X API는 `billing-scope-missing`
