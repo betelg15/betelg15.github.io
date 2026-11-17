@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>프롬프트를 두 번 붙이면 정말 정확해질까? Google Research &#x27;Prompt Repetition&#x27; 논문 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-17 · <span class="chip">#LLM</span><span class="chip">#프롬프트엔지니어링</span><span class="chip">#어텐션</span><span class="chip">#Google Research</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">프롬프트를 두 번 붙이면 정말 정확해질까? Google Research &#x27;Prompt Repetition&#x27; 논문 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#_3">왜 반복이 도움이 되나: 인과 어텐션의 비대칭</a></li>
+<li><a href="#_4">논문이 실제로 잰 것</a></li>
+<li><a href="#_5">변형과 대조군</a></li>
+<li><a href="#_6">지연과 출력 길이</a></li>
+<li><a href="#ab">코드: 반복 래퍼와 A/B 테스트</a></li>
+<li><a href="#_7">한계와 주의점</a></li>
+</ul>
+</li>
+<li><a href="#_8">비즈니스 인사이트</a><ul>
+<li><a href="#_9">누가 이득을 보나 (분석)</a></li>
+<li><a href="#0">비용: "$0"은 아니다</a></li>
+<li><a href="#_10">경쟁 구도 (의견)</a></li>
+<li><a href="#_11">도입 체크리스트 (의견)</a></li>
+</ul>
+</li>
+<li><a href="#_12">팩트 체크</a></li>
+<li><a href="#_13">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/EngMoElgaraihy/status/2122182283847180329">@EngMoElgaraihy의 포스트</a>를 계기로 썼습니다. 공개 글은 <a href="https://api.fxtwitter.com/status/2122182283847180329">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었고, <code>created_at</code>은 <code>Mon Nov 16 04:17:39 +0000 2026</code>, 즉 <strong>2026-11-16 13:17 KST</strong>입니다. 본문은 아랍어이고, "구글이 모델이나 도구를 바꾸지 않고도 AI를 훨씬 정확하게 만드는 간단한 요령을 공개했다: 프롬프트 전체를 연달아 두 번 복사하라"는 내용입니다. 그 문장들은 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+<p>포스트는 출처 논문을 링크하지 않습니다. 내용(7개 벤치마크, 7개 모델, 21%→97%)이 일치하는 1차 자료는 Google Research의 Yaniv Leviathan, Matan Kalman, Yossi Matias가 쓴 <a href="https://arxiv.org/abs/2512.14982"><strong>Prompt Repetition Improves Non-Reasoning LLMs</strong> (arXiv:2512.14982)</a>입니다. arXiv 기준 v1만 있고, 제출일은 <strong>2025-12-17</strong>입니다. 아래 숫자는 모두 이 논문 v1 본문과 부록에서 옮겼습니다. 저는 논문의 실험을 다시 돌리지 않았습니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>프롬프트 엔지니어링 요령은 대부분 "출력을 늘려서" 성능을 삽니다. "Think step by step" 같은 기법은 정확도를 올리지만, 생성 토큰이 늘어 지연과 비용이 같이 늘어납니다. 논문도 관련 연구 절에서 이 점을 짚습니다.</p>
+<p>이 논문이 주장하는 것은 방향이 반대입니다. <strong>입력만</strong> 두 배로 늘리고, 출력 길이와 형식은 그대로 두는데 정확도가 오른다는 겁니다. 입력 처리(prefill)는 병렬로 계산되기 때문에, 출력 토큰을 늘리는 기법보다 지연이 덜 늘어난다는 설명입니다.</p>
+<p>개발자 입장에서 매력적인 이유는 세 가지입니다.</p>
+<ul>
+<li><strong>드롭인</strong>: 출력 형식이 바뀌지 않으니, 파서나 후처리 코드를 건드리지 않고 기존 시스템에 끼울 수 있다고 논문은 적습니다.</li>
+<li><strong>모델 무관</strong>: Gemini, GPT, Claude, DeepSeek 계열 7개 모델 모두에서 개선이 있었다고 합니다.</li>
+<li><strong>0패</strong>: 통계적으로 유의한 차이를 기준으로, 추론을 끈 조건에서 진 조합이 하나도 없었습니다.</li>
+</ul>
+<p>반대로 확인해야 할 질문도 분명합니다.</p>
+<ul>
+<li>"추론을 끈" 조건이 정확히 무엇이고, 요즘 기본이 된 추론 모델에도 통하는가.</li>
+<li>"추가 비용 0"이 맞는가. 입력 토큰이 두 배인데.</li>
+<li>21%→97%는 어떤 과제의 숫자인가.</li>
+</ul>
+<h2 id="_2">기술 설명</h2>
+<h3 id="_3">왜 반복이 도움이 되나: 인과 어텐션의 비대칭</h3>
+<p>대부분의 LLM은 인과(causal) 언어 모델로 학습됩니다. 각 토큰은 <strong>자기보다 앞에 있는 토큰만</strong> 볼 수 있고, 뒤의 토큰은 볼 수 없습니다. 논문 1절이 출발점으로 삼는 것이 이 비대칭입니다. 그래서 같은 내용이라도 토큰 순서에 따라 성능이 달라집니다.</p>
+<p>논문의 예는 객관식 문제입니다.</p>
+<ul>
+<li><strong>question-first</strong>: <code>질문 → 보기</code> 순서. 보기를 읽을 때 이미 질문을 알고 있습니다.</li>
+<li><strong>options-first</strong>: <code>보기 → 질문</code> 순서. 보기 토큰을 처리하는 시점에는 질문이 아직 컨텍스트에 없습니다.</li>
+</ul>
+<p>프롬프트를 <code>&lt;QUERY&gt;</code>에서 <code>&lt;QUERY&gt;&lt;QUERY&gt;</code>로 바꾸면, 두 번째 사본의 모든 토큰은 첫 번째 사본 <strong>전체</strong>에 어텐션할 수 있습니다. 논문은 이것을 "각 프롬프트 토큰이 다른 모든 프롬프트 토큰에 어텐션할 수 있게 된다"고 표현합니다. 엄밀히 말하면 첫 사본의 토큰은 여전히 뒤를 못 보지만, 두 번째 사본은 "질문을 이미 본 상태에서 보기를 다시 읽는" 효과를 냅니다.</p>
+<div class="highlight"><pre><span></span><code>baseline:   [보기 A B C D][질문]              ← 보기 토큰은 질문을 못 봄
+repetition: [보기 A B C D][질문][보기 A B C D][질문]
+                                  └─ 이 보기 토큰들은 앞의 질문을 볼 수 있음
+</code></pre></div>
+
+<p>논문은 추가 동기로, RL로 학습된 추론 모델이 사용자 요청(의 일부)을 되풀이해 말하는 경향을 관찰했다고 적습니다. 프롬프트 반복은 그 되풀이를 <strong>생성 단계가 아니라 병렬 prefill 단계로 옮기는</strong> 셈이라는 해석입니다.</p>
+<h3 id="_4">논문이 실제로 잰 것</h3>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>내용 (논문 2절, 부록)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>모델 (7)</td>
+<td>Gemini 2.0 Flash, Gemini 2.0 Flash Lite, GPT-4o-mini, GPT-4o, Claude 3 Haiku, Claude 3.7 Sonnet, DeepSeek V3</td>
+</tr>
+<tr>
+<td>실행 방식</td>
+<td>각 사 공식 API, <strong>2025년 2~3월</strong></td>
+</tr>
+<tr>
+<td>벤치마크 (7)</td>
+<td>ARC(Challenge), OpenBookQA, GSM8K, MMLU-Pro, MATH, 그리고 자체 과제 NameIndex, MiddleMatch</td>
+</tr>
+<tr>
+<td>객관식 배치</td>
+<td>ARC·OpenBookQA·MMLU-Pro는 question-first와 options-first 둘 다</td>
+</tr>
+<tr>
+<td>승패 기준</td>
+<td>McNemar 검정 p &lt; 0.1이면 승</td>
+</tr>
+</tbody>
+</table>
+<p>핵심 결과는 다음과 같습니다.</p>
+<ul>
+<li><strong>추론을 끈 조건(모델에게 추론하지 말라고 요청)</strong>: 70개 벤치마크×모델 조합 중 <strong>47승 0패</strong>. 모든 모델에서 개선.</li>
+<li>question-first 객관식에서는 개선이 작고, options-first에서는 크다. 위의 인과 어텐션 설명과 맞는 방향입니다.</li>
+<li>자체 과제 NameIndex·MiddleMatch에서는 모든 모델이 크게 개선. 예: <strong>Gemini 2.0 Flash-Lite의 NameIndex 정확도 21.33% → 97.33%</strong>.</li>
+<li><strong>step-by-step 추론을 요청한 조건</strong>: 28개 조합 중 <strong>5승 1패 22무</strong>, "중립에서 약간 긍정". 추론 과정이 이미 프롬프트를 되풀이하는 경우가 많기 때문이라고 논문은 해석합니다.</li>
+</ul>
+<p>NameIndex는 이름 50개 목록을 주고 25번째 이름을 묻는 과제이고, MiddleMatch는 반복이 섞인 40개 목록에서 두 항목 "사이"에 있는 항목을 묻는 과제입니다. 논문은 이 두 과제를 "프롬프트 반복의 유용성을 보여 주도록 특별히 설계했다"고 명시합니다.</p>
+<h3 id="_5">변형과 대조군</h3>
+<p>부록 A.4의 템플릿은 다음과 같습니다.</p>
+<table>
+<thead>
+<tr>
+<th>방법</th>
+<th>템플릿</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Baseline</td>
+<td><code>&lt;QUERY&gt;</code></td>
+</tr>
+<tr>
+<td>Prompt Repetition</td>
+<td><code>&lt;QUERY&gt;&lt;QUERY&gt;</code></td>
+</tr>
+<tr>
+<td>Verbose</td>
+<td><code>&lt;QUERY&gt; Let me repeat that: &lt;QUERY&gt;</code></td>
+</tr>
+<tr>
+<td>×3</td>
+<td><code>&lt;QUERY&gt; Let me repeat that: &lt;QUERY&gt; Let me repeat that one more time: &lt;QUERY&gt;</code></td>
+</tr>
+<tr>
+<td>Padding</td>
+<td><code>&lt;QUERY&gt; Ignore these periods (they are irrelevant) and answer the above question: ....</code> (반복과 같은 길이까지 마침표)</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>Verbose와 ×3은 대부분 과제에서 기본 반복과 비슷했고, ×3은 NameIndex·MiddleMatch에서 기본 반복보다 크게 나은 경우가 많았다고 합니다.</li>
+<li><strong>Padding</strong>은 입력 길이만 맞추고 내용은 반복하지 않는 대조군인데, 성능이 오르지 않았습니다. 이득이 "입력이 길어져서"가 아니라 "내용을 다시 봐서"라는 근거입니다.</li>
+</ul>
+<h3 id="_6">지연과 출력 길이</h3>
+<p>논문은 모델·방법·데이터셋별로 출력 길이의 평균·중앙값과 엔드투엔드 지연을 쟀습니다.</p>
+<ul>
+<li>반복과 그 변형은 <strong>출력 길이와 측정 지연을 늘리지 않았습니다.</strong></li>
+<li><strong>예외</strong>: Anthropic 모델(Claude Haiku, Sonnet)에서 아주 긴 요청(NameIndex, MiddleMatch, 또는 ×3 변형)일 때 지연이 늘었습니다. 논문은 prefill이 길어졌기 때문으로 추정합니다.</li>
+<li>지연은 공식 API로 쟀기 때문에 네트워크나 부하의 영향을 받을 수 있어 "가감해서 보라"고 저자들이 직접 적습니다.</li>
+<li>결론 절 각주: 긴 프롬프트에서는 지연에 영향이 있을 수 있고, <strong>아주 긴 프롬프트에서는 불가능할 수도 있다</strong>(컨텍스트 한도).</li>
+</ul>
+<h3 id="ab">코드: 반복 래퍼와 A/B 테스트</h3>
+<p>아래는 OpenAI Python SDK 예시입니다. 다른 SDK도 메시지 문자열만 바꾸면 같습니다. 모델 이름은 자리표시자입니다.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">openai</span><span class="w"> </span><span class="kn">import</span> <span class="n">OpenAI</span>
+
+<span class="n">client</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">()</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">build_prompt</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"baseline"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">str</span><span class="p">:</span>
+<span class="w">    </span><span class="sd">"""논문 부록 A.4의 템플릿을 그대로 옮긴 것."""</span>
+    <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">"baseline"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">query</span>
+    <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">"repeat"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="se">\n</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">"verbose"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="se">\n</span><span class="s2">Let me repeat that:</span><span class="se">\n</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="s2">"</span>
+    <span class="k">if</span> <span class="n">mode</span> <span class="o">==</span> <span class="s2">"x3"</span><span class="p">:</span>
+        <span class="k">return</span> <span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="se">\n</span><span class="s2">Let me repeat that:</span><span class="se">\n</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="se">\n</span><span class="s2">"</span>
+                <span class="sa">f</span><span class="s2">"Let me repeat that one more time:</span><span class="se">\n</span><span class="si">{</span><span class="n">query</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="n">mode</span><span class="p">)</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">ask</span><span class="p">(</span><span class="n">query</span><span class="p">:</span> <span class="nb">str</span><span class="p">,</span> <span class="n">mode</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"baseline"</span><span class="p">,</span> <span class="n">model</span><span class="p">:</span> <span class="nb">str</span> <span class="o">=</span> <span class="s2">"YOUR_MODEL"</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="nb">dict</span><span class="p">]:</span>
+    <span class="n">resp</span> <span class="o">=</span> <span class="n">client</span><span class="o">.</span><span class="n">chat</span><span class="o">.</span><span class="n">completions</span><span class="o">.</span><span class="n">create</span><span class="p">(</span>
+        <span class="n">model</span><span class="o">=</span><span class="n">model</span><span class="p">,</span>
+        <span class="n">messages</span><span class="o">=</span><span class="p">[{</span><span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span> <span class="s2">"content"</span><span class="p">:</span> <span class="n">build_prompt</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">mode</span><span class="p">)}],</span>
+        <span class="n">temperature</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span>
+    <span class="p">)</span>
+    <span class="n">u</span> <span class="o">=</span> <span class="n">resp</span><span class="o">.</span><span class="n">usage</span>
+    <span class="k">return</span> <span class="n">resp</span><span class="o">.</span><span class="n">choices</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">message</span><span class="o">.</span><span class="n">content</span><span class="p">,</span> <span class="p">{</span>
+        <span class="s2">"input_tokens"</span><span class="p">:</span> <span class="n">u</span><span class="o">.</span><span class="n">prompt_tokens</span><span class="p">,</span>
+        <span class="s2">"output_tokens"</span><span class="p">:</span> <span class="n">u</span><span class="o">.</span><span class="n">completion_tokens</span><span class="p">,</span>
+    <span class="p">}</span>
+</code></pre></div>
+
+<p>논문은 사본 사이에 구분자를 넣지 않은 <code>&lt;QUERY&gt;&lt;QUERY&gt;</code>를 기본으로 씁니다. 위 코드는 가독성을 위해 줄바꿈 하나를 넣었는데, 이것이 결과에 영향을 주는지는 논문이 따로 다루지 않으니 여러분의 A/B에서 함께 확인하면 됩니다.</p>
+<p>A/B는 <strong>같은 문항</strong>에 두 방식을 모두 돌리는 짝지은(paired) 설계가 맞습니다. 논문이 쓴 McNemar 검정은 "한쪽만 맞힌" 문항 수만 봅니다.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">scipy.stats</span><span class="w"> </span><span class="kn">import</span> <span class="n">binomtest</span>
+
+<span class="k">def</span><span class="w"> </span><span class="nf">ab_test</span><span class="p">(</span><span class="n">dataset</span><span class="p">,</span> <span class="n">is_correct</span><span class="p">,</span> <span class="n">model</span><span class="o">=</span><span class="s2">"YOUR_MODEL"</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">"""dataset: [(query, gold), ...], is_correct(answer, gold) -&gt; bool"""</span>
+    <span class="n">b</span> <span class="o">=</span> <span class="n">c</span> <span class="o">=</span> <span class="mi">0</span>            <span class="c1"># b: repeat만 정답, c: baseline만 정답</span>
+    <span class="n">tok</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"baseline"</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">"repeat"</span><span class="p">:</span> <span class="mi">0</span><span class="p">}</span>
+    <span class="k">for</span> <span class="n">query</span><span class="p">,</span> <span class="n">gold</span> <span class="ow">in</span> <span class="n">dataset</span><span class="p">:</span>
+        <span class="n">ok</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">mode</span> <span class="ow">in</span> <span class="p">(</span><span class="s2">"baseline"</span><span class="p">,</span> <span class="s2">"repeat"</span><span class="p">):</span>
+            <span class="n">ans</span><span class="p">,</span> <span class="n">usage</span> <span class="o">=</span> <span class="n">ask</span><span class="p">(</span><span class="n">query</span><span class="p">,</span> <span class="n">mode</span><span class="p">,</span> <span class="n">model</span><span class="p">)</span>
+            <span class="n">ok</span><span class="p">[</span><span class="n">mode</span><span class="p">]</span> <span class="o">=</span> <span class="n">is_correct</span><span class="p">(</span><span class="n">ans</span><span class="p">,</span> <span class="n">gold</span><span class="p">)</span>
+            <span class="n">tok</span><span class="p">[</span><span class="n">mode</span><span class="p">]</span> <span class="o">+=</span> <span class="n">usage</span><span class="p">[</span><span class="s2">"input_tokens"</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">ok</span><span class="p">[</span><span class="s2">"repeat"</span><span class="p">]</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">ok</span><span class="p">[</span><span class="s2">"baseline"</span><span class="p">]:</span>
+            <span class="n">b</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="n">ok</span><span class="p">[</span><span class="s2">"baseline"</span><span class="p">]</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">ok</span><span class="p">[</span><span class="s2">"repeat"</span><span class="p">]:</span>
+            <span class="n">c</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="c1"># exact McNemar = 불일치 쌍에 대한 이항 검정</span>
+    <span class="n">p</span> <span class="o">=</span> <span class="n">binomtest</span><span class="p">(</span><span class="n">b</span><span class="p">,</span> <span class="n">b</span> <span class="o">+</span> <span class="n">c</span><span class="p">,</span> <span class="mf">0.5</span><span class="p">)</span><span class="o">.</span><span class="n">pvalue</span> <span class="k">if</span> <span class="n">b</span> <span class="o">+</span> <span class="n">c</span> <span class="k">else</span> <span class="mf">1.0</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"repeat-only=</span><span class="si">{</span><span class="n">b</span><span class="si">}</span><span class="s2">, baseline-only=</span><span class="si">{</span><span class="n">c</span><span class="si">}</span><span class="s2">, p=</span><span class="si">{</span><span class="n">p</span><span class="si">:</span><span class="s2">.3f</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"input tokens: baseline=</span><span class="si">{</span><span class="n">tok</span><span class="p">[</span><span class="s1">'baseline'</span><span class="p">]</span><span class="si">}</span><span class="s2">, repeat=</span><span class="si">{</span><span class="n">tok</span><span class="p">[</span><span class="s1">'repeat'</span><span class="p">]</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
+</code></pre></div>
+
+<p>실전 팁(의견):</p>
+<ul>
+<li>시스템 프롬프트, 퓨샷 예시, 문서, 질문 중 <strong>무엇을</strong> 반복할지도 변수입니다. 논문은 "프롬프트 전체"를 반복했고, 일부만 반복하는 것은 향후 과제로 남겼습니다. 관련 연구로 질문만 반복했을 때 이득이 없었다는 <a href="https://arxiv.org/abs/2412.07923">Shaier (2024)</a>를 인용합니다.</li>
+<li>추론 모드(혹은 thinking 예산)가 켜진 모델이라면 효과가 작을 가능성이 높으니, 먼저 꺼진 경로(분류, 추출, 라우팅 같은 짧은 응답)에서 시험해 보는 편이 낫습니다.</li>
+<li>입력 토큰 사용량을 같이 기록하세요. 정확도 개선이 비용 증가를 정당화하는지가 결국 의사결정입니다.</li>
+</ul>
+<h3 id="_7">한계와 주의점</h3>
+<ul>
+<li><strong>모델이 낡았습니다.</strong> 실험은 2025년 2~3월의 API로 Gemini 2.0, GPT-4o, Claude 3.x, DeepSeek V3에 대해 했습니다. 지금 쓰는 모델에서 같은 크기의 효과가 난다는 보장은 없습니다.</li>
+<li><strong>"추론 없음"은 프롬프트로 정한 조건입니다.</strong> 그림 1은 "모델에게 추론하지 말라고 요청했을 때", 그림 4는 "step by step으로 생각하라고 요청했을 때"입니다. 내장 추론(o-시리즈, thinking 모드 등)을 켠 모델을 따로 시험한 것은 아닙니다.</li>
+<li><strong>극적인 숫자는 맞춤 과제에서 나왔습니다.</strong> 21%→97%는 반복의 효과를 보이도록 설계한 NameIndex 과제입니다. 표준 객관식 question-first에서는 개선이 작다고 저자들이 직접 적습니다.</li>
+<li><strong>승은 p &lt; 0.1 기준입니다.</strong> 흔히 쓰는 0.05보다 느슨합니다.</li>
+<li><strong>긴 문서</strong>: 논문의 과제는 대체로 짧습니다. 긴 문서 RAG 같은 설정은 직접 측정되지 않았고, 저자들은 긴 프롬프트에서 지연 영향과 컨텍스트 한도 문제를 언급합니다.</li>
+<li><strong>멀티턴, 멀티모달</strong>은 향후 과제로 남겨져 있습니다.</li>
+</ul>
+<h2 id="_8">비즈니스 인사이트</h2>
+<h3 id="_9">누가 이득을 보나 (분석)</h3>
+<ul>
+<li><strong>추론을 끄고 쓰는 저지연·대량 경로</strong>가 가장 직접적인 수혜자입니다. 분류, 태깅, 추출, 라우팅처럼 짧은 답을 많이 뽑는 파이프라인은 출력 토큰을 늘리는 CoT를 쓰기 어렵습니다. 출력 형식이 그대로라는 논문의 결과는 이런 경로에 "코드 한 줄로 시험해 볼 수 있는" 선택지를 줍니다.</li>
+<li><strong>작은 모델을 쓰는 팀</strong>: 논문의 가장 큰 개선 예가 Gemini 2.0 Flash-Lite였습니다. 의견이지만, 큰 모델로 올리는 대신 작은 모델에 반복을 붙여 보는 실험은 비용 면에서 해 볼 만합니다. 단, 이것이 모델 업그레이드를 대체한다는 근거는 논문에 없습니다.</li>
+<li><strong>추론 모델 중심 제품</strong>은 얻을 것이 적습니다. step-by-step 조건에서 28개 중 22개가 무승부였습니다.</li>
+</ul>
+<h3 id="0">비용: "$0"은 아니다</h3>
+<p>X 포스트는 "추가 비용 $0"이라고 하지만, API는 입력 토큰으로 과금합니다. 프롬프트를 두 번 보내면 <strong>입력 토큰이 대략 두 배</strong>가 되고, 그만큼 입력 비용이 늘어납니다(×3이면 세 배). 출력 토큰이 늘지 않는다는 것은 논문의 측정과 일치하지만, 그것이 총비용 불변을 뜻하지는 않습니다.</p>
+<p>프롬프트 캐싱이 이 부담을 일부 덜 수 있는지는 구조에 달렸습니다.</p>
+<ul>
+<li><a href="https://platform.openai.com/docs/guides/prompt-caching">OpenAI 문서</a>는 캐싱이 <strong>같은 접두사(prefix)</strong>를 공유하는 요청 사이에서 작동하고, 캐시된 입력 요금이 최대 95%까지 할인된다고 적습니다. 최소 캐시 길이는 GPT-5.6 이후 모델 기준 1,024토큰입니다.</li>
+<li><a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching">Anthropic 문서</a>는 캐시 읽기를 기본 입력 단가의 0.1배, 5분 TTL 캐시 쓰기를 1.25배, 1시간 TTL 쓰기를 2배로 적습니다.</li>
+</ul>
+<p>분석: 캐싱은 "요청 사이에서 같은 앞부분"을 재사용하는 장치이지, 한 요청 안의 두 번째 사본을 공짜로 만들어 주지 않습니다. 고정된 시스템 프롬프트나 문서를 반복 대상으로 삼고 그 반복된 블록이 요청마다 동일하다면 캐시 적중을 기대할 수 있지만, 질문이 매번 바뀌는 <code>&lt;QUERY&gt;&lt;QUERY&gt;</code> 구조에서는 바뀐 첫 토큰 이후가 캐시되지 않습니다. 논문의 향후 과제 (4) "두 번째 사본만 KV 캐시에 남기기"는 이 비용을 생성 단계에서 줄이는 방향이지만, 상용 API에서 쓸 수 있는 기능은 아닙니다.</p>
+<p>또 하나: OpenAI 문서는 캐시된 입력 토큰도 분당 토큰(TPM) 한도에 포함된다고 적습니다. 반복은 처리량 한도를 두 배로 빨리 소진시킬 수 있습니다.</p>
+<h3 id="_10">경쟁 구도 (의견)</h3>
+<p>이 요령은 특정 벤더의 기능이 아니라 인과 어텐션이라는 구조에서 나오므로, 모든 벤더 모델에 똑같이 적용할 수 있습니다. 그래서 경쟁 우위가 되기보다는, 벤더가 내부적으로 흡수할 가능성이 큰 종류의 기법이라고 봅니다. 논문의 향후 과제에도 "반복된 프롬프트로 파인튜닝", "반복 상태로 추론 모델 학습"이 있습니다. 모델이 이런 효과를 학습으로 흡수하면, 사용자 쪽 반복의 한계 효용은 줄어들 것입니다. 실제로 추론 모드에서는 이미 효과가 거의 없었습니다.</p>
+<h3 id="_11">도입 체크리스트 (의견)</h3>
+<ol>
+<li>추론이 꺼진 경로만 골라 A/B한다.</li>
+<li>짝지은 설계 + McNemar로 유의성을 본다.</li>
+<li>정확도 개선 1%p당 늘어나는 입력 비용, TPM 사용량, p95 지연을 같이 본다. 특히 긴 프롬프트와 Claude 계열에서 지연을 확인한다(논문의 예외).</li>
+<li>모델 버전이 바뀔 때마다 다시 잰다.</li>
+</ol>
+<h2 id="_12">팩트 체크</h2>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>"구글이 공개했다"</td>
+<td>⚠️</td>
+<td>저자 3명 모두 Google Research 소속이지만, 회사 공식 발표가 아니라 arXiv 프리프린트(2025-12-17, v1)입니다. 동료 심사 여부는 arXiv 페이지에 적혀 있지 않습니다. <a href="https://arxiv.org/abs/2512.14982">arXiv:2512.14982</a></td>
+</tr>
+<tr>
+<td>프롬프트 전체를 연달아 두 번 넣는다</td>
+<td>✅</td>
+<td>부록 A.4 템플릿이 <code>&lt;QUERY&gt;&lt;QUERY&gt;</code>입니다. <a href="https://arxiv.org/abs/2512.14982">논문</a></td>
+</tr>
+<tr>
+<td>모델·도구 변경 없이 정확도가 오른다</td>
+<td>✅ (조건부)</td>
+<td>추론을 끈 조건에서 70개 중 47승 0패. 단, 추론 요청 조건에서는 28개 중 5승 1패 22무입니다. X 포스트는 이 조건을 적지 않습니다. <a href="https://arxiv.org/abs/2512.14982">논문 그림 1·4, 부록 A.2</a></td>
+</tr>
+<tr>
+<td>"놀라울 정도로/엄청난 정확도 향상"</td>
+<td>⚠️</td>
+<td>표준 객관식 question-first에서는 개선이 작다고 저자들이 직접 적습니다. 큰 개선은 options-first와 자체 과제에서 납니다. <a href="https://arxiv.org/abs/2512.14982">논문 2절</a></td>
+</tr>
+<tr>
+<td>7개 벤치마크, 7개 모델</td>
+<td>✅</td>
+<td>ARC, OpenBookQA, GSM8K, MMLU-Pro, MATH, NameIndex, MiddleMatch / Gemini 2.0 Flash·Flash Lite, GPT-4o·4o-mini, Claude 3 Haiku·3.7 Sonnet, DeepSeek V3. <a href="https://arxiv.org/abs/2512.14982">논문 2절</a></td>
+</tr>
+<tr>
+<td>"복잡한 정보 추출 과제"에서 21% → 97%</td>
+<td>⚠️</td>
+<td>숫자는 맞습니다(Gemini 2.0 Flash-Lite, NameIndex 21.33% → 97.33%). 하지만 이 과제는 이름 50개 중 25번째를 묻는, 반복의 효과를 보이도록 <strong>특별히 설계한</strong> 자체 과제이고, 한 모델의 한 과제 결과입니다. <a href="https://arxiv.org/abs/2512.14982">논문 2절, 부록 A.3</a></td>
+</tr>
+<tr>
+<td>질문을 문서 끝에 두면 모델이 목표를 모른 채 문서를 읽는다</td>
+<td>✅ (원리) / ⚠️ (적용)</td>
+<td>인과 어텐션 설명은 논문과 일치합니다. 다만 논문은 긴 문서 설정을 직접 재지 않았고, 긴 프롬프트에서는 지연 영향이나 컨텍스트 한도 문제가 있을 수 있다고 적습니다. <a href="https://arxiv.org/abs/2512.14982">논문 1·4절</a></td>
+</tr>
+<tr>
+<td>추가 비용 $0</td>
+<td>❌</td>
+<td>입력 토큰이 대략 두 배가 되어 입력 비용이 늘어납니다. 논문이 "늘지 않는다"고 한 것은 <strong>출력</strong> 토큰과 지연입니다. 입력 과금 구조는 <a href="https://platform.openai.com/docs/guides/prompt-caching">OpenAI</a>, <a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching">Anthropic</a> 캐싱 문서 참고.</td>
+</tr>
+<tr>
+<td>눈에 띄는 응답 지연 증가 없음</td>
+<td>⚠️</td>
+<td>대부분 맞지만, Claude Haiku·Sonnet에서 아주 긴 요청일 때 지연이 늘었다는 예외가 논문에 있습니다. <a href="https://arxiv.org/abs/2512.14982">논문 2절 Efficiency</a></td>
+</tr>
+<tr>
+<td>출력 토큰 증가 없음</td>
+<td>✅</td>
+<td>모든 경우에서 출력 길이가 늘지 않았습니다. <a href="https://arxiv.org/abs/2512.14982">논문 2절, 그림 2·3</a></td>
+</tr>
+<tr>
+<td>재학습·파인튜닝 불필요</td>
+<td>✅</td>
+<td>공식 API에 프롬프트만 바꿔 보냈습니다. <a href="https://arxiv.org/abs/2512.14982">논문 2절</a></td>
+</tr>
+<tr>
+<td>단순히 입력이 길어져서 생기는 효과다</td>
+<td>❌ (반박됨)</td>
+<td>X 포스트의 주장은 아니지만 흔한 반론이라 확인했습니다. 같은 길이로 마침표를 채운 Padding은 성능을 올리지 않았습니다. <a href="https://arxiv.org/abs/2512.14982">논문 2절</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="_13">참고 자료</h2>
+<ul>
+<li>Leviathan, Kalman, Matias. <a href="https://arxiv.org/abs/2512.14982">Prompt Repetition Improves Non-Reasoning LLMs</a>, arXiv:2512.14982, 2025-12-17. <a href="https://arxiv.org/pdf/2512.14982v1">PDF</a></li>
+<li>Shaier. <a href="https://arxiv.org/abs/2412.07923">Asking Again and Again: Exploring LLM Robustness to Repeated Questions</a>, 2024 (질문만 반복 → 이득 없음, 논문이 인용)</li>
+<li>Springer et al. <a href="https://arxiv.org/abs/2402.15449">Repetition Improves Language Model Embeddings</a>, 2024 (입력 반복 → 임베딩 개선, 논문이 인용)</li>
+<li>Xu et al. <a href="https://arxiv.org/abs/2309.06275">Re-Reading Improves Reasoning in Large Language Models</a>, 2024 (다시 읽기 요청 → 추론 개선, 논문이 인용)</li>
+<li>Kojima et al. <a href="https://arxiv.org/abs/2205.11916">Large Language Models are Zero-Shot Reasoners</a> ("Let's think step by step")</li>
+<li><a href="https://platform.openai.com/docs/guides/prompt-caching">OpenAI Prompt caching 가이드</a></li>
+<li><a href="https://docs.anthropic.com/en/docs/build-with-claude/prompt-caching">Anthropic Prompt caching 문서</a></li>
+<li>원본 X 포스트: <a href="https://x.com/EngMoElgaraihy/status/2122182283847180329">@EngMoElgaraihy</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
