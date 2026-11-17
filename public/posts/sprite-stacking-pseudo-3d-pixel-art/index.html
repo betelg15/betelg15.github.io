@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>픽셀을 1px씩 쌓아 만드는 가짜 3D, 스프라이트 스태킹: &#x27;폴리곤 없는 32KB 비행 시뮬레이터&#x27; 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-17 · <span class="chip">#게임개발</span><span class="chip">#픽셀아트</span><span class="chip">#스프라이트스태킹</span><span class="chip">#Canvas</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">픽셀을 1px씩 쌓아 만드는 가짜 3D, 스프라이트 스태킹: &#x27;폴리곤 없는 32KB 비행 시뮬레이터&#x27; 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#ct">핵심 아이디어: CT 사진을 다시 쌓기</a></li>
+<li><a href="#_3">카메라 회전</a></li>
+<li><a href="#_4">깊이 정렬</a></li>
+<li><a href="#_5">비용: 그리기 호출은 층 수만큼</a></li>
+<li><a href="#_6">진짜 비용은 아트에 있다</a></li>
+<li><a href="#3d">다른 "가짜 3D"와 무엇이 다른가</a></li>
+<li><a href="#90">역사: "90년대 초"는 확인되지 않았다</a></li>
+</ul>
+</li>
+<li><a href="#70-canvas">손으로 확인해 보기: 70줄짜리 Canvas 예제</a></li>
+<li><a href="#32kb">'32KB 비행 시뮬레이터'를 열어 보면</a></li>
+<li><a href="#_7">비즈니스 인사이트</a><ul>
+<li><a href="#_8">시장: 공급 과잉 속의 '보이는 차별점'</a></li>
+<li><a href="#_9">비용 구조: 렌더링은 싸고 아트는 비싸다</a></li>
+<li><a href="#ai">AI 픽셀 아트 도구: 어디까지 와 있나</a></li>
+<li><a href="#_10">개발자에게 의미하는 것 (분석/의견)</a></li>
+</ul>
+</li>
+<li><a href="#_11">팩트 체크</a><ul>
+<li><a href="#x-meta_pavy-creativedash-asynkimo">X 포스트 (@meta_pavy, @creativedash, @asynkimo)</a></li>
+<li><a href="#_12">배경 지식</a></li>
+</ul>
+</li>
+<li><a href="#_13">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/meta_pavy/status/2122566766744555760">@meta_pavy의 포스트</a>를 계기로 썼습니다. 공개 글은 <a href="https://api.fxtwitter.com/status/2122566766744555760">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었고, 작성 시각은 <strong>2026-11-17 14:45 KST</strong>입니다. 내용은 "스프라이트 스태킹은 3D 가속 이전인 90년대 초에도 종종 쓰인 기법이고, 도트를 엄청나게 찍어야 해서 모델링보다 나을 게 없었는데, AI가 도트를 찍는다면?"이라는 해설입니다. 데모 영상은 <a href="https://x.com/asynkimo/status/2121716250820964431">@asynkimo의 포스트</a>("You can turn pixel art to any angle with sprite stacking", 2026-11-15 06:25 KST)에서 왔습니다.</p>
+<p>이 포스트가 인용한 같은 작성자의 <a href="https://x.com/meta_pavy/status/2122241297482408234">이전 포스트</a>(2026-11-16 17:12 KST)는 "3D도 폴리곤도 없이 스프라이트만 쌓은 <strong>32kb</strong> 비행 시뮬레이터"를 소개합니다. 원 출처는 <a href="https://x.com/creativedash/status/2122000830895386680">@creativedash의 포스트</a>(2026-11-16 01:16 KST)이고, 본문은 링크 하나와 "No 3D engine, no polygons, 32 KB of code." 한 줄입니다. 이 문장들은 모두 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>스프라이트 스태킹(sprite stacking)은 3D 엔진 없이 2D 이미지 그리기 명령만으로 물체를 360° 돌려 보이게 하는 기법입니다. 개발자가 이 기법을 알아 둘 이유는 세 가지입니다.</p>
+<ul>
+<li><strong>도구 요구가 낮습니다.</strong> 회전해서 이미지를 그릴 수 있는 API면 됩니다. HTML5 Canvas의 <code>drawImage</code>, GameMaker의 <code>draw_sprite_ext</code>, 아무 엔진의 2D 스프라이트면 충분합니다. 셰이더나 메시, 카메라 행렬이 없습니다.</li>
+<li><strong>픽셀 아트 질감이 그대로 남습니다.</strong> 3D 모델을 픽셀 아트처럼 보이게 하려면 저해상도 렌더링, 외곽선, 팔레트 고정 같은 후처리가 필요합니다. 스태킹은 화면에 나가는 픽셀이 원래 찍은 픽셀입니다(회전에 따른 재샘플링은 있습니다).</li>
+<li><strong>8방향 스프라이트의 대안입니다.</strong> 탑다운 게임은 보통 캐릭터를 4방향이나 8방향으로 따로 그립니다. 스태킹은 각도를 연속으로 돌릴 수 있습니다. 대신 그 값은 "층 수만큼의 그림"으로 치릅니다.</li>
+</ul>
+<p>이번 북마크가 던지는 질문은 마지막 줄입니다. 층마다 그림을 그려야 하는 노동을 AI나 복셀 도구가 대신하면 이 오래된 기법의 비용 구조가 바뀌는가. 그리고 그 예로 돈 "32KB 비행 시뮬레이터"는 정말 32KB인가.</p>
+<h2 id="_2">기술 설명</h2>
+<h3 id="ct">핵심 아이디어: CT 사진을 다시 쌓기</h3>
+<p>물체를 높이 방향으로 얇게 썬다고 생각하면 됩니다. 복셀 모델을 위에서 내려다본 수평 단면 하나하나가 작은 2D 스프라이트가 됩니다. 집이라면 맨 아래층은 바닥과 벽의 테두리, 중간층은 창문이 뚫린 벽, 위층은 점점 좁아지는 지붕입니다.</p>
+<p>그리는 규칙은 세 줄입니다.</p>
+<ol>
+<li><strong>아래층부터</strong> 그립니다(위층이 아래층을 덮어야 하므로).</li>
+<li>한 층 올라갈 때마다 화면에서 <strong>1px 위로</strong> 올려 그립니다.</li>
+<li>모든 층을 <strong>같은 중심, 같은 각도로</strong> 회전시킵니다.</li>
+</ol>
+<p>각도를 바꾸면 층들이 함께 돌고, 1px씩 어긋난 층들이 옆면처럼 보입니다. 물체가 도는 동안 눈은 이것을 입체로 읽습니다. 커뮤니티 튜토리얼인 <a href="https://chequered.ink/2-5d-in-gamemaker-using-sprite-stacking/">Chequered Ink의 GameMaker 글</a>은 이 규칙을 그대로 코드 세 줄로 적습니다.</p>
+<div class="highlight"><pre><span></span><code>for (var i=0; i&lt;image_number; i++) {
+  draw_sprite_ext(sprite_index, i, x, y-i, 1, 1, image_angle, image_blend, image_alpha);
+}
+</code></pre></div>
+
+<p><code>i</code>번째 프레임이 <code>i</code>번째 층이고, <code>y-i</code>가 1px씩 올리는 부분이며, <code>image_angle</code>이 모든 층에 같은 회전입니다.</p>
+<h3 id="_3">카메라 회전</h3>
+<p>카메라를 돌리는 것은 "모든 물체의 위치를 화면 중심으로 회전시키고, 각 물체의 스프라이트 각도에도 같은 각을 더하는 것"입니다. 위치를 돌리지 않고 스프라이트만 돌리면 물체가 제자리에서 팽이처럼 돌 뿐 세계가 돌지는 않습니다. 반대로 위치만 돌리면 물체가 늘 같은 면을 보여 줍니다. 둘을 같은 각도로 돌려야 합니다.</p>
+<p>카메라 높이(내려다보는 각도)도 흉내 낼 수 있습니다. 정사영 기준으로 카메라가 지평선에서 θ만큼 올라가 있으면, 수평인 단면은 세로로 sin θ배 납작해지고, 한 층의 높이는 화면에서 cos θ배가 됩니다. θ = 90°(바로 위)면 층 간격이 0이 되어 단면 하나만 보이고, θ가 작아질수록 층 사이가 벌어져 틈이 보입니다. GameMaker용 <a href="https://azuzota.itch.io/sprite-stacking-with-perspective">Azuzota의 스크립트</a>가 단면을 눌러 그리는 <code>PERSPECTIVE</code> 값을 두고, 낮은 각도에서는 층 사이 틈이 보이니 피하라고 적는 것이 이 기하입니다. 같은 스크립트의 <code>HD</code> 옵션은 층을 두 번씩 그려 틈과 모아레를 줄이고 대신 성능을 씁니다.</p>
+<h3 id="_4">깊이 정렬</h3>
+<p>물체가 여러 개면 순서가 중요합니다. 탑다운 화면에서는 <strong>화면 위쪽(먼 쪽)에 있는 물체부터</strong> 그리면 가까운 물체가 먼 물체를 덮습니다. 그래서 매 프레임 카메라 회전을 적용한 뒤의 화면 y로 물체를 정렬합니다. 카메라가 돌면 앞뒤가 바뀌므로 정렬은 회전 <strong>후</strong> 좌표로 해야 합니다.</p>
+<p>물체 단위 정렬은 물체끼리 겹쳐 서 있거나, 아주 크고 긴 물체(다리, 긴 벽)가 있을 때 틀립니다. 그때는 물체를 쪼개거나, 모든 물체의 층을 한데 모아 (화면 y, 층 높이) 순으로 그리는 식으로 더 잘게 정렬해야 합니다. 3D 엔진이 깊이 버퍼로 공짜로 푸는 문제를 여기서는 그리는 순서로 풀어야 합니다.</p>
+<h3 id="_5">비용: 그리기 호출은 층 수만큼</h3>
+<p>진짜 3D에서 물체 하나는 메시 하나입니다. 스태킹에서는 <strong>물체 수 × 층 수</strong>만큼 이미지를 그립니다. 아래 예제는 집 9채 × 14층 = 매 프레임 126번의 <code>drawImage</code>입니다. 물체가 차지하는 바닥 면적의 픽셀은 층 수만큼 겹쳐 칠해지므로 오버드로도 큽니다. <a href="https://indienova.com/u/lazyeo/blogread/31523">indienova의 GameMaker 글</a>도 물체마다 n층을 동시에 그리니 화면에 물체가 많으면 성능이 떨어지고, 소규모 게임에 맞는 방식이라고 적습니다.</p>
+<p>흔히 쓰는 완화책(일반적인 기법이고 이 글에서 성능을 재지는 않았습니다)은 다음과 같습니다.</p>
+<ul>
+<li>정지해 있는 물체는 각도별로 한 번 합성한 결과를 오프스크린 캔버스에 캐시하고, 카메라 각이 바뀔 때만 다시 그립니다.</li>
+<li>각도를 몇 단계(예: 5°)로 양자화해 캐시 적중을 늘립니다.</li>
+<li>엔진에서는 층을 한 텍스처 아틀라스에 넣어 배치 렌더링합니다. Rust의 Bevy로 만든 <a href="https://james.poole.ie/notes/stack">Wee Boats 개발 노트</a>는 배 하나를 부모 엔티티로, 층마다 자식 엔티티를 두고 매 틱 각도를 맞추는 ECS 구조로 좋은 성능을 냈다고 적습니다.</li>
+</ul>
+<h3 id="_6">진짜 비용은 아트에 있다</h3>
+<p>같은 Wee Boats 노트가 적는 어려움이 X 포스트의 "개노가다"와 같은 이야기입니다. 층을 Aseprite의 애니메이션 프레임처럼 하나씩 그리고, 어니언 스킨으로 앞뒤 층을 보며 맞춥니다. 그리면서 전체 모양을 상상하기 어려워 별도 뷰어로 미리 보고, 단면으로는 작은 디테일을 표현하기 어려워 맨 위층을 일반 2D 스프라이트로 바꾸고, 층을 가로지르는 애니메이션은 시도하지 않았다고 합니다.</p>
+<p>그래서 실무에서는 층을 직접 그리기보다 복셀 모델을 만든 뒤 슬라이스로 내보내는 경로를 많이 씁니다. indienova 글은 MagicaVoxel의 Slice 내보내기로 위아래 단면 시트를 얻는 방법을 소개합니다(층 순서가 뒤집혀 나올 수 있다는 주의와 함께).</p>
+<h3 id="3d">다른 "가짜 3D"와 무엇이 다른가</h3>
+<table>
+<thead>
+<tr>
+<th>기법</th>
+<th>데이터</th>
+<th>그리는 방식</th>
+<th>잘하는 것</th>
+<th>못하는 것</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>스프라이트 스태킹</td>
+<td>수평 단면 스프라이트 N장(사실상 복셀)</td>
+<td>층마다 2D 회전 blit, 1px씩 위로</td>
+<td>위에서 본 물체를 수직축으로 360° 회전, 픽셀 질감 유지</td>
+<td>롤·피치(옆으로 눕히기), 아래에서 보기, 큰 물체의 정확한 깊이</td>
+</tr>
+<tr>
+<td>복셀 렌더링</td>
+<td>3D 격자</td>
+<td>레이캐스팅이나 메시 변환 후 3D 렌더</td>
+<td>임의 시점, 정확한 가림</td>
+<td>구현·연산량이 큼</td>
+</tr>
+<tr>
+<td>레이캐스팅 (Wolfenstein 3D식)</td>
+<td>2D 격자 지도</td>
+<td>화면 열마다 광선 하나, 벽 높이를 거리로 결정</td>
+<td>1인칭 복도</td>
+<td>경사·다층 구조, 위아래 보기</td>
+</tr>
+<tr>
+<td>Mode 7 (SNES)</td>
+<td>배경 레이어 1장</td>
+<td>스캔라인마다 아핀 변환</td>
+<td>회전·확대되는 평평한 바닥</td>
+<td>바닥 위의 입체 물체(별도 스프라이트로 처리)</td>
+</tr>
+</tbody>
+</table>
+<p>몇 가지 확인한 사실을 덧붙입니다.</p>
+<ul>
+<li><strong>Mode 7</strong>은 SNES의 그래픽 모드 중 하나로, 배경 레이어 하나를 회전·확대할 수 있고 이를 스캔라인마다 바꿔 원근 효과를 냅니다(<a href="https://en.wikipedia.org/wiki/Mode_7">Wikipedia: Mode 7</a>, Nintendo의 1993년 SNES 개발 매뉴얼 인용). 1990년 SNES 런칭 타이틀 <a href="https://en.wikipedia.org/wiki/F-Zero_(video_game)">F-Zero</a>가 대표 예입니다. 평면 하나를 비틀어 보이는 것이므로 층을 쌓는 스태킹과는 다른 기법입니다.</li>
+<li><strong>레이캐스팅</strong>은 <a href="https://en.wikipedia.org/wiki/Wolfenstein_3D">Wolfenstein 3D</a>(1992, id Software)로 대표되는 1인칭 기법입니다.</li>
+<li><strong>복셀 쪽 이웃</strong>으로는 Ken Silverman의 <a href="https://en.wikipedia.org/wiki/Build_(game_engine)">Build 엔진</a>이 있습니다. <a href="https://en.wikipedia.org/wiki/Voxel">Wikipedia: Voxel</a>은 Shadow Warrior와 Blood가 일부 아이템과 소품을 스프라이트 대신 복셀로 렌더링했다고 적습니다. 이것은 복셀 렌더링이지 스프라이트 스태킹 그 자체는 아닙니다.</li>
+</ul>
+<p>스태킹이 롤을 못 하는 이유는 구조에서 나옵니다. 모든 층이 "수평 단면"이라는 가정 위에서만 1px 오프셋이 옆면처럼 보입니다. 비행기를 옆으로 기울이려면 기울어진 방향으로 다시 썬 단면이 필요합니다. 그래서 비행기처럼 롤이 필요한 물체는 별도 스프라이트나 다른 요령을 섞어야 합니다.</p>
+<h3 id="90">역사: "90년대 초"는 확인되지 않았다</h3>
+<p>이 기법을 <strong>대중화한</strong> 것은 비교적 최근입니다. <a href="https://www.wired.com/2016/10/nium-preview-fantastic-arcade/">WIRED 2016년 10월 기사</a>는 Downwell을 만든 Ojiro "Moppin" Fumoto가 Fantastic Arcade 2016을 위해 만든 <em>Nium</em>을 소개하며, Fumoto가 발표에서 게임 공간 대부분을 2D 스프라이트를 위아래로 쌓아 만들었다고 말했다고 적습니다. 이후 GameMaker 커뮤니티 튜토리얼들(위 Azuzota, Chequered Ink, indienova)이 하나같이 Nium을 출발점으로 듭니다.</p>
+<p>그 이전 사례는 근거가 약합니다. 커뮤니티에서는 1994년 메가드라이브 게임 Red Zone(Zyrinx)이 평평한 스프라이트를 겹쳐 벽과 구조물을 입체로 보이게 했다는 이야기가 나옵니다(<a href="https://tvtropes.org/pmwiki/pmwiki.php/VideoGame/RedZone">TV Tropes</a>, <a href="https://www.chronocrash.com/forum/resources/3d-sprite-stacking.186/">ChronoCrash 포럼</a>). 하지만 <a href="https://en.wikipedia.org/wiki/Red_Zone_(1994_video_game)">Wikipedia의 Red Zone 문서</a>는 전체 화면 회전, 3D 벡터, 실시간 줌, FMV를 꼽을 뿐 스프라이트 겹치기는 적지 않고, 개발사 쪽 1차 자료는 찾지 못했습니다. 포스트가 말한 "슈퍼패미컴 시절"의 구체적인 스태킹 게임도 찾지 못했습니다. SNES의 대표적인 가짜 3D는 위의 Mode 7입니다.</p>
+<h2 id="70-canvas">손으로 확인해 보기: 70줄짜리 Canvas 예제</h2>
+<p>아래 파일을 <code>index.html</code>로 저장해 브라우저로 열면 됩니다. 외부 이미지 없이 복셀 함수로 집 한 채의 14개 단면을 만들고, 9채를 배치해 카메라를 천천히 돌립니다. 좌우 화살표로 카메라를 돌릴 수 있습니다. 저는 headless Chrome으로 열어 화면이 그려지는 것을 확인했습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="cp">&lt;!doctype html&gt;</span>
+<span class="p">&lt;</span><span class="nt">meta</span> <span class="na">charset</span><span class="o">=</span><span class="s">"utf-8"</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">title</span><span class="p">&gt;</span>Sprite stacking demo<span class="p">&lt;/</span><span class="nt">title</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">canvas</span> <span class="na">id</span><span class="o">=</span><span class="s">"c"</span> <span class="na">width</span><span class="o">=</span><span class="s">"480"</span> <span class="na">height</span><span class="o">=</span><span class="s">"320"</span> <span class="na">style</span><span class="o">=</span><span class="s">"image-rendering:pixelated;width:960px;height:640px;background:#2b4a3a"</span><span class="p">&gt;&lt;/</span><span class="nt">canvas</span><span class="p">&gt;</span>
+<span class="p">&lt;</span><span class="nt">script</span><span class="p">&gt;</span>
+<span class="c1">// 1) 복셀 모델 -&gt; 수평 슬라이스(층별 16x16 스프라이트) 만들기</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">W</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">16</span><span class="p">,</span><span class="w"> </span><span class="nx">D</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">16</span><span class="p">,</span><span class="w"> </span><span class="nx">H</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">14</span><span class="p">;</span><span class="w">              </span><span class="c1">// 가로, 세로(깊이), 층 수</span>
+<span class="kd">function</span><span class="w"> </span><span class="nx">voxelColor</span><span class="p">(</span><span class="nx">x</span><span class="p">,</span><span class="w"> </span><span class="nx">y</span><span class="p">,</span><span class="w"> </span><span class="nx">z</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">             </span><span class="c1">// 집 한 채: 벽 + 지붕 + 문</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">cx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">x</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">7.5</span><span class="p">,</span><span class="w"> </span><span class="nx">cy</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">y</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">7.5</span><span class="p">;</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">z</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">7</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w">                             </span><span class="c1">// 벽 (속은 비우고 외벽만)</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">wall</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cx</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">5</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cx</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">7</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cy</span><span class="p">)</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">5</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cy</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">7</span><span class="p">;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="o">!</span><span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cx</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">7</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cy</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">7</span><span class="p">)</span><span class="w"> </span><span class="o">||</span><span class="w"> </span><span class="o">!</span><span class="nx">wall</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">cy</span><span class="w"> </span><span class="o">&gt;</span><span class="w"> </span><span class="mf">5</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cx</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">1.5</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nx">z</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">4</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="s2">"#5a3a22"</span><span class="p">;</span><span class="w"> </span><span class="c1">// 문</span>
+<span class="w">    </span><span class="k">return</span><span class="w"> </span><span class="nx">z</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mf">2</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s2">"#e8d8b0"</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s2">"#d8c8a0"</span><span class="p">;</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">r</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">7</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="p">(</span><span class="nx">z</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">7</span><span class="p">);</span><span class="w">                   </span><span class="c1">// 층이 오를수록 좁아지는 지붕</span>
+<span class="w">  </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cx</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">7.5</span><span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">abs</span><span class="p">(</span><span class="nx">cy</span><span class="p">)</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">r</span><span class="p">)</span><span class="w"> </span><span class="k">return</span><span class="w"> </span><span class="nx">z</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mf">2</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="s2">"#b8443a"</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="s2">"#a83a32"</span><span class="p">;</span>
+<span class="w">  </span><span class="k">return</span><span class="w"> </span><span class="kc">null</span><span class="p">;</span>
+<span class="p">}</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">slices</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[];</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">z</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span><span class="w"> </span><span class="nx">z</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">H</span><span class="p">;</span><span class="w"> </span><span class="nx">z</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">s</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">createElement</span><span class="p">(</span><span class="s2">"canvas"</span><span class="p">);</span>
+<span class="w">  </span><span class="nx">s</span><span class="p">.</span><span class="nx">width</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">W</span><span class="p">;</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">height</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">D</span><span class="p">;</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">g</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">s</span><span class="p">.</span><span class="nx">getContext</span><span class="p">(</span><span class="s2">"2d"</span><span class="p">);</span>
+<span class="w">  </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">y</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span><span class="w"> </span><span class="nx">y</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">D</span><span class="p">;</span><span class="w"> </span><span class="nx">y</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">x</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span><span class="w"> </span><span class="nx">x</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">W</span><span class="p">;</span><span class="w"> </span><span class="nx">x</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="kd">const</span><span class="w"> </span><span class="nx">col</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">voxelColor</span><span class="p">(</span><span class="nx">x</span><span class="p">,</span><span class="w"> </span><span class="nx">y</span><span class="p">,</span><span class="w"> </span><span class="nx">z</span><span class="p">);</span>
+<span class="w">    </span><span class="k">if</span><span class="w"> </span><span class="p">(</span><span class="nx">col</span><span class="p">)</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">g</span><span class="p">.</span><span class="nx">fillStyle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">col</span><span class="p">;</span><span class="w"> </span><span class="nx">g</span><span class="p">.</span><span class="nx">fillRect</span><span class="p">(</span><span class="nx">x</span><span class="p">,</span><span class="w"> </span><span class="nx">y</span><span class="p">,</span><span class="w"> </span><span class="mf">1</span><span class="p">,</span><span class="w"> </span><span class="mf">1</span><span class="p">);</span><span class="w"> </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="nx">slices</span><span class="p">.</span><span class="nx">push</span><span class="p">(</span><span class="nx">s</span><span class="p">);</span>
+<span class="p">}</span>
+
+<span class="c1">// 2) 월드에 오브젝트 배치 (x, y는 바닥 평면 좌표, a는 오브젝트 자체 회전)</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">objects</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">[];</span>
+<span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="mf">9</span><span class="p">;</span><span class="w"> </span><span class="nx">i</span><span class="o">++</span><span class="p">)</span>
+<span class="w">  </span><span class="nx">objects</span><span class="p">.</span><span class="nx">push</span><span class="p">({</span><span class="w"> </span><span class="nx">x</span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="nx">i</span><span class="w"> </span><span class="o">%</span><span class="w"> </span><span class="mf">3</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">40</span><span class="p">,</span><span class="w"> </span><span class="nx">y</span><span class="o">:</span><span class="w"> </span><span class="p">(</span><span class="nb">Math</span><span class="p">.</span><span class="nx">floor</span><span class="p">(</span><span class="nx">i</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">3</span><span class="p">)</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="mf">1</span><span class="p">)</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">40</span><span class="p">,</span><span class="w"> </span><span class="nx">a</span><span class="o">:</span><span class="w"> </span><span class="nx">i</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="mf">0.7</span><span class="w"> </span><span class="p">});</span>
+
+<span class="kd">const</span><span class="w"> </span><span class="nx">ctx</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">document</span><span class="p">.</span><span class="nx">getElementById</span><span class="p">(</span><span class="s2">"c"</span><span class="p">).</span><span class="nx">getContext</span><span class="p">(</span><span class="s2">"2d"</span><span class="p">);</span>
+<span class="nx">ctx</span><span class="p">.</span><span class="nx">imageSmoothingEnabled</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">;</span>
+<span class="kd">let</span><span class="w"> </span><span class="nx">cam</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span><span class="w">                               </span><span class="c1">// 카메라 회전각</span>
+<span class="kd">const</span><span class="w"> </span><span class="nx">keys</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="p">{};</span>
+<span class="nx">addEventListener</span><span class="p">(</span><span class="s2">"keydown"</span><span class="p">,</span><span class="w"> </span><span class="nx">e</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">keys</span><span class="p">[</span><span class="nx">e</span><span class="p">.</span><span class="nx">key</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">true</span><span class="p">);</span>
+<span class="nx">addEventListener</span><span class="p">(</span><span class="s2">"keyup"</span><span class="p">,</span><span class="w"> </span><span class="nx">e</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">keys</span><span class="p">[</span><span class="nx">e</span><span class="p">.</span><span class="nx">key</span><span class="p">]</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="kc">false</span><span class="p">);</span>
+
+<span class="kd">function</span><span class="w"> </span><span class="nx">frame</span><span class="p">()</span><span class="w"> </span><span class="p">{</span>
+<span class="w">  </span><span class="nx">cam</span><span class="w"> </span><span class="o">+=</span><span class="w"> </span><span class="nx">keys</span><span class="p">.</span><span class="nx">ArrowLeft</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="o">-</span><span class="mf">0.03</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="nx">keys</span><span class="p">.</span><span class="nx">ArrowRight</span><span class="w"> </span><span class="o">?</span><span class="w"> </span><span class="mf">0.03</span><span class="w"> </span><span class="o">:</span><span class="w"> </span><span class="mf">0.005</span><span class="p">;</span>
+<span class="w">  </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">fillStyle</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="s2">"#2b4a3a"</span><span class="p">;</span>
+<span class="w">  </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">fillRect</span><span class="p">(</span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">0</span><span class="p">,</span><span class="w"> </span><span class="mf">480</span><span class="p">,</span><span class="w"> </span><span class="mf">320</span><span class="p">);</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">cos</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">cos</span><span class="p">(</span><span class="nx">cam</span><span class="p">),</span><span class="w"> </span><span class="nx">sin</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nb">Math</span><span class="p">.</span><span class="nx">sin</span><span class="p">(</span><span class="nx">cam</span><span class="p">);</span>
+
+<span class="w">  </span><span class="c1">// 3) 카메라 기준으로 회전한 화면 좌표 계산</span>
+<span class="w">  </span><span class="kd">const</span><span class="w"> </span><span class="nx">view</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="nx">objects</span><span class="p">.</span><span class="nx">map</span><span class="p">(</span><span class="nx">o</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="p">({</span>
+<span class="w">    </span><span class="nx">o</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">sx</span><span class="o">:</span><span class="w"> </span><span class="mf">240</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">o</span><span class="p">.</span><span class="nx">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">cos</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nx">o</span><span class="p">.</span><span class="nx">y</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">sin</span><span class="p">,</span>
+<span class="w">    </span><span class="nx">sy</span><span class="o">:</span><span class="w"> </span><span class="mf">180</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">o</span><span class="p">.</span><span class="nx">x</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">sin</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">o</span><span class="p">.</span><span class="nx">y</span><span class="w"> </span><span class="o">*</span><span class="w"> </span><span class="nx">cos</span><span class="p">,</span>
+<span class="w">  </span><span class="p">}));</span>
+<span class="w">  </span><span class="c1">// 4) 깊이 정렬: 화면 위쪽(먼 쪽)부터 그려야 가까운 물체가 위에 덮인다</span>
+<span class="w">  </span><span class="nx">view</span><span class="p">.</span><span class="nx">sort</span><span class="p">((</span><span class="nx">p</span><span class="p">,</span><span class="w"> </span><span class="nx">q</span><span class="p">)</span><span class="w"> </span><span class="p">=&gt;</span><span class="w"> </span><span class="nx">p</span><span class="p">.</span><span class="nx">sy</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nx">q</span><span class="p">.</span><span class="nx">sy</span><span class="p">);</span>
+
+<span class="w">  </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">const</span><span class="w"> </span><span class="p">{</span><span class="w"> </span><span class="nx">o</span><span class="p">,</span><span class="w"> </span><span class="nx">sx</span><span class="p">,</span><span class="w"> </span><span class="nx">sy</span><span class="w"> </span><span class="p">}</span><span class="w"> </span><span class="k">of</span><span class="w"> </span><span class="nx">view</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">    </span><span class="c1">// 5) 아래 층부터, 한 층에 1px씩 위로 올려서, 모든 층을 같은 각도로 회전해 그린다</span>
+<span class="w">    </span><span class="k">for</span><span class="w"> </span><span class="p">(</span><span class="kd">let</span><span class="w"> </span><span class="nx">z</span><span class="w"> </span><span class="o">=</span><span class="w"> </span><span class="mf">0</span><span class="p">;</span><span class="w"> </span><span class="nx">z</span><span class="w"> </span><span class="o">&lt;</span><span class="w"> </span><span class="nx">H</span><span class="p">;</span><span class="w"> </span><span class="nx">z</span><span class="o">++</span><span class="p">)</span><span class="w"> </span><span class="p">{</span>
+<span class="w">      </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">save</span><span class="p">();</span>
+<span class="w">      </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">translate</span><span class="p">(</span><span class="nx">sx</span><span class="p">,</span><span class="w"> </span><span class="nx">sy</span><span class="w"> </span><span class="o">-</span><span class="w"> </span><span class="nx">z</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">rotate</span><span class="p">(</span><span class="nx">o</span><span class="p">.</span><span class="nx">a</span><span class="w"> </span><span class="o">+</span><span class="w"> </span><span class="nx">cam</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">drawImage</span><span class="p">(</span><span class="nx">slices</span><span class="p">[</span><span class="nx">z</span><span class="p">],</span><span class="w"> </span><span class="o">-</span><span class="nx">W</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2</span><span class="p">,</span><span class="w"> </span><span class="o">-</span><span class="nx">D</span><span class="w"> </span><span class="o">/</span><span class="w"> </span><span class="mf">2</span><span class="p">);</span>
+<span class="w">      </span><span class="nx">ctx</span><span class="p">.</span><span class="nx">restore</span><span class="p">();</span>
+<span class="w">    </span><span class="p">}</span>
+<span class="w">  </span><span class="p">}</span>
+<span class="w">  </span><span class="nx">requestAnimationFrame</span><span class="p">(</span><span class="nx">frame</span><span class="p">);</span>
+<span class="p">}</span>
+<span class="nx">frame</span><span class="p">();</span>
+<span class="p">&lt;/</span><span class="nt">script</span><span class="p">&gt;</span>
+</code></pre></div>
+
+<p>읽을 때 볼 곳은 세 군데입니다.</p>
+<ul>
+<li><code>ctx.translate(sx, sy - z)</code>: 층마다 1px씩 위로.</li>
+<li><code>ctx.rotate(o.a + cam)</code>: 모든 층에 같은 각도. 물체 자신의 방향 <code>o.a</code>에 카메라 각 <code>cam</code>을 더합니다.</li>
+<li><code>view.sort((p, q) =&gt; p.sy - q.sy)</code>: 회전 <strong>후</strong> 화면 y로 깊이 정렬.</li>
+</ul>
+<p>해 볼 만한 실험입니다.</p>
+<ul>
+<li><code>ctx.translate(sx, sy - z)</code>를 <code>sy - z * 2</code>로 바꾸면 층 사이 틈이 생깁니다. 캔버스를 2배로 키워 그릴 때 층을 두 번씩 그려야 하는 이유입니다.</li>
+<li>정렬 줄을 지우고 카메라를 돌리면, 뒤의 집이 앞의 집 위에 그려지는 순간이 보입니다.</li>
+<li><code>voxelColor</code>를 바꿔 나무나 탑을 만들어 보세요. 층을 손으로 그리는 대신 함수로 정의하는 것이 "복셀 → 슬라이스" 파이프라인의 축소판입니다.</li>
+</ul>
+<h2 id="32kb">'32KB 비행 시뮬레이터'를 열어 보면</h2>
+<p>@creativedash가 건 링크 <code>https://remix.ui8.ai/fly</code>는 301로 <code>forge.ui8.ai/share/frag_1eb8944c-…</code>로 넘어갑니다. 이 페이지의 제목은 "fighter · Forge"이고, 설명은 "Pixel-art fighter jet built by sprite stacking, over stacked islands"입니다. Forge는 <a href="https://ui8.ai/forge">ui8.ai/forge</a>에서 "The visual layer for Claude Code, Codex and Cursor"라고 스스로를 소개하는 서비스입니다.</p>
+<p>로그인 없이 열리는 공유 메타데이터 API(<code>/api/v1/fragments/frag_1eb8944c-…/share</code>, 2026-11-17 22:18 KST 조회)에서 확인한 숫자는 다음과 같습니다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>값</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>태그</td>
+<td><code>pixel-art</code>, <code>sprite-stacking</code>, <code>canvas</code>, <code>animation</code>, <code>interactive</code>, <code>game</code></td>
+</tr>
+<tr>
+<td>만든 시각 / 마지막 공개</td>
+<td>2026-11-15 15:51 KST / 2026-11-17 02:59 KST (revision 44, 공개 revision 43)</td>
+</tr>
+<tr>
+<td>소스 크기 (<code>sourceByteSize</code>)</td>
+<td><strong>48,795바이트</strong></td>
+</tr>
+<tr>
+<td>에셋</td>
+<td>32개, 합계 2,659,352바이트: <code>jet-four-views.png</code>(689,268), <code>pilot-four-views.png</code>(862,083), mp3 효과음 30개</td>
+</tr>
+<tr>
+<td>전체 크기 (<code>byteSize</code>)</td>
+<td>3,183,871바이트</td>
+</tr>
+</tbody>
+</table>
+<p>정리하면 이렇습니다.</p>
+<ul>
+<li>"스프라이트 스태킹으로 만든 픽셀 아트 전투기"라는 설명과 태그는 제작자 쪽 메타데이터와 일치합니다.</li>
+<li><strong>현재 공개본</strong>의 코드는 32KB가 아니라 약 48KB(48,795바이트)이고, 이미지와 소리를 합치면 약 3.2MB입니다. 다만 트윗(2026-11-16 01:16 KST) 이후에도 수정이 이어졌으므로, 트윗 시점의 코드가 32KB였을 가능성은 배제할 수 없습니다. 그 시점 버전은 확인하지 못했습니다. 어느 쪽이든 한국어 포스트의 "32kb짜리 비행 시뮬레이터"처럼 <strong>전체가 32KB</strong>라고 읽으면 틀립니다.</li>
+<li>소스 본문은 로그인 없이 읽을 수 없어서 "폴리곤이 없다"는 코드로 확인하지 못했습니다. 설명에 "click rolls"(클릭하면 롤)가 있는데, 앞에서 본 것처럼 순수한 수평 단면 스태킹은 롤을 표현하지 못합니다. 에셋 이름이 <code>jet-four-views.png</code>(네 방향 그림)인 것을 보면 별도 스프라이트를 섞었을 수 있지만, 이것은 추정입니다.</li>
+<li>"AI가 끌어올렸다"는 부분은 Forge가 코딩 에이전트용 서비스라는 정황뿐이고, 이 데모의 픽셀을 AI가 그렸다는 제작자 진술은 찾지 못했습니다.</li>
+</ul>
+<h2 id="_7">비즈니스 인사이트</h2>
+<h3 id="_8">시장: 공급 과잉 속의 '보이는 차별점'</h3>
+<p><a href="https://steamdb.info/stats/releases/">SteamDB 연도별 출시 집계</a>는 2025년 Steam 출시작을 2만 개 남짓으로 셉니다. 이 수치는 조회 시점마다 바뀝니다(검색 인덱스의 최근 스냅샷은 21,181개, 2026년 8월 보도 스냅샷은 21,344개). <a href="https://www.pcgamer.com/gaming-industry/more-than-19-000-games-launched-on-steam-this-year-but-almost-half-have-fewer-than-10-reviews/">PC Gamer</a>가 인용한 2025년 12월 12일 스냅샷에서는 19,112개 중 9,327개가 리뷰 10개 미만, 2,229개는 리뷰 0개였습니다.</p>
+<p><strong>분석:</strong> 하루 수십 개씩 나오는 시장에서 소규모 팀이 쓸 수 있는 몇 안 되는 무기는 스크린샷과 짧은 영상에서 바로 보이는 시각적 개성입니다. 스프라이트 스태킹은 "픽셀 아트인데 돈다"는 점이 몇 초짜리 영상에서 바로 드러납니다. 이번 북마크들이 퍼진 방식도 그렇습니다. 원본 데모 영상 두 개가 퍼지고, 설명은 그 뒤에 붙었습니다.</p>
+<h3 id="_9">비용 구조: 렌더링은 싸고 아트는 비싸다</h3>
+<ul>
+<li><strong>도구값은 낮습니다.</strong> 층을 그리는 데 흔히 쓰는 Aseprite는 2026-11-17 Steam 미국 스토어 API(<code>appids=431730&amp;cc=us</code>) 기준 <code>$19.99</code>(할인 0%)입니다. MagicaVoxel 같은 복셀 편집기에서 슬라이스로 내보내는 경로도 있습니다.</li>
+<li><strong>비싼 것은 시간입니다.</strong> 16×16×14 모델 하나가 14장의 그림입니다. 물체 종류가 늘면 층 수 × 물체 종류만큼 늘어납니다. Wee Boats 노트가 적듯 애니메이션은 층을 가로질러야 해서 더 비쌉니다.</li>
+<li><strong>실행 비용은 대체로 작지만 공짜는 아닙니다.</strong> 물체 × 층만큼의 그리기 호출과 오버드로가 있어 물체 수가 많은 장면에서는 캐시나 배치가 필요합니다.</li>
+</ul>
+<h3 id="ai">AI 픽셀 아트 도구: 어디까지 와 있나</h3>
+<ul>
+<li><a href="https://www.pixellab.ai/">PixelLab</a> 홈페이지는 "Create unique pixel art assets for your game 10x faster with AI", "Loved by 3,000+ indie game developers"라고 적고, 기능으로 4·8방향 회전, 스켈레톤 기반 애니메이션, 타일셋, 인페인팅을 나열합니다. "10배", "3,000명 이상"은 업체 주장이며 이 글이 검증하지 않았습니다. 공식 가격 페이지는 이 글을 쓰는 동안 직접 열지 못해 가격은 적지 않습니다.</li>
+<li>이번 데모가 올라간 Forge는 Claude Code, Codex, Cursor 같은 코딩 에이전트의 결과물을 공유하고 리믹스하는 서비스로 자신을 소개합니다. 데모의 공유 메타데이터에도 <code>linkAccess: remix</code>가 있습니다.</li>
+<li>Steam은 2024년 1월부터 개발자가 Content Survey에서 AI 사용을 밝히도록 했습니다. 개발 중 AI로 만든 콘텐츠(Pre-Generated)는 불법·침해 콘텐츠가 아님을 확인해야 하고, 공개 내용의 상당 부분이 스토어 페이지에 표시됩니다(<a href="https://store.steampowered.com/news/group/4145017/view/3862463747997849618">Valve 공지</a>, <a href="https://www.theverge.com/2024/1/10/24032678/valve-steam-generative-ai-rules-disclosure-pre-generated-live-illegal-content-copyright">The Verge</a>).</li>
+</ul>
+<h3 id="_10">개발자에게 의미하는 것 (분석/의견)</h3>
+<ul>
+<li><strong>AI는 "층을 그리는 일"보다 "복셀을 만드는 일"에 붙는 편이 맞다고 봅니다.</strong> 스태킹에서 어려운 것은 층 하나하나의 그림이 아니라 층 사이의 <strong>일관성</strong>입니다. 14장을 따로 생성하면 층끼리 어긋날 위험이 큽니다. 3D 형태(복셀)를 하나 만들고 기계적으로 썰면 층 사이 일관성은 공짜로 따라옵니다. 예제의 <code>voxelColor</code> 함수가 그 축소판이고, 코딩 에이전트가 쓰기에도 이미지보다 이런 함수나 복셀 데이터가 다루기 쉽습니다.</li>
+<li><strong>8방향 스프라이트 생성 도구와는 경쟁이자 보완 관계입니다.</strong> PixelLab 같은 도구가 4·8방향 회전 이미지를 싸게 만들어 주면, "연속 회전"이 꼭 필요한 물체(차량, 배, 건물, 카메라가 도는 게임)에만 스태킹을 쓰고 나머지는 방향별 스프라이트로 가는 혼합이 현실적입니다.</li>
+<li><strong>영상의 숫자는 조달 판단의 근거가 아닙니다.</strong> 이번 "32KB"처럼 데모 영상의 한 줄 숫자는 버전과 범위(코드만인지 에셋 포함인지)가 빠져 있기 쉽습니다. 기법을 도입할 때는 직접 만든 최소 예제로 층 수 × 물체 수에서 프레임 시간을 재 보는 편이 빠릅니다.</li>
+<li><strong>AI로 만든 픽셀을 출시작에 쓰면 Steam 공개 의무가 따라옵니다.</strong> 마케팅 문구에 "AI로 만든"을 넣지 않더라도 스토어 페이지에는 표시될 수 있으니, 아트 파이프라인을 정할 때 같이 고려해야 합니다.</li>
+</ul>
+<h2 id="_11">팩트 체크</h2>
+<h3 id="x-meta_pavy-creativedash-asynkimo">X 포스트 (@meta_pavy, @creativedash, @asynkimo)</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>데모는 스프라이트 스태킹으로 만든 픽셀 아트 비행기다</td>
+<td>✅</td>
+<td>공유 페이지 설명 "Pixel-art fighter jet built by sprite stacking", 태그 <code>sprite-stacking</code>. <a href="https://remix.ui8.ai/fly">Forge 공유 페이지</a></td>
+</tr>
+<tr>
+<td>"32 KB of code" (@creativedash)</td>
+<td>⚠️</td>
+<td>현재 공개본(revision 43~44)의 <code>sourceByteSize</code>는 48,795바이트입니다. 트윗 이후 수정이 있어 트윗 시점 크기는 확인 불가. <a href="https://x.com/creativedash/status/2122000830895386680">원 포스트</a>, <a href="https://remix.ui8.ai/fly">Forge 공유 페이지</a></td>
+</tr>
+<tr>
+<td>"32kb짜리 비행시뮬레이터" (전체 크기로 읽을 때)</td>
+<td>❌</td>
+<td>에셋만 32개 2,659,352바이트(PNG 2개 약 1.55MB, mp3 30개), 전체 <code>byteSize</code> 3,183,871바이트. <a href="https://x.com/meta_pavy/status/2122241297482408234">인용된 포스트</a></td>
+</tr>
+<tr>
+<td>3D 엔진도 폴리곤도 없다</td>
+<td>⚠️</td>
+<td>설명·태그(<code>canvas</code>)와는 맞지만 소스를 읽지 못해 미확인. 설명의 "click rolls"는 순수 수평 단면 스태킹으로는 어려운 동작입니다. <a href="https://remix.ui8.ai/fly">Forge 공유 페이지</a></td>
+</tr>
+<tr>
+<td>AI로 끌어올린 결과물이다</td>
+<td>⚠️</td>
+<td>Forge가 코딩 에이전트용 서비스라는 정황뿐, 이 데모를 AI가 만들었다는 제작자 진술은 찾지 못했습니다. <a href="https://ui8.ai/forge">ui8.ai/forge</a></td>
+</tr>
+<tr>
+<td>스프라이트 스태킹은 90년대 초부터 종종 쓰인 기법이다</td>
+<td>⚠️</td>
+<td>1994년 Red Zone(메가드라이브) 사례가 커뮤니티 자료에만 있고 Wikipedia 문서·개발사 1차 자료로는 확인 못 함. 대중화는 2016년 Nium. <a href="https://www.wired.com/2016/10/nium-preview-fantastic-arcade/">WIRED 2016</a>, <a href="https://en.wikipedia.org/wiki/Red_Zone_(1994_video_game)">Wikipedia: Red Zone</a></td>
+</tr>
+<tr>
+<td>"슈퍼패미컴 시절에 도트로 쌓아올린 그 감성"</td>
+<td>⚠️</td>
+<td>SNES 스태킹 게임은 찾지 못했습니다. SNES의 대표 가짜 3D는 Mode 7(배경 1장 아핀 변환)로 다른 기법입니다. <a href="https://en.wikipedia.org/wiki/Mode_7">Wikipedia: Mode 7</a></td>
+</tr>
+<tr>
+<td>도트를 엄청나게 찍어야 하는 노동집약적 기법이다</td>
+<td>✅</td>
+<td>층마다 그림이 필요하고, 개발자 노트가 층별 작화·미리보기·애니메이션의 어려움을 적습니다. <a href="https://james.poole.ie/notes/stack">Wee Boats 노트</a></td>
+</tr>
+<tr>
+<td>스태킹으로 픽셀 아트를 "어떤 각도로든" 돌릴 수 있다 (@asynkimo)</td>
+<td>⚠️</td>
+<td>수직축 회전(요)은 연속으로 됩니다. 롤·피치나 아래에서 보기는 수평 단면 구조상 안 됩니다. 카메라 높이는 단면 압축으로 일부 흉내 낼 뿐입니다. <a href="https://azuzota.itch.io/sprite-stacking-with-perspective">Azuzota 스크립트 설명</a>, <a href="https://x.com/asynkimo/status/2121716250820964431">원 포스트</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="_12">배경 지식</h3>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nium(Moppin)이 스프라이트를 쌓아 깊이감을 냈다</td>
+<td>✅</td>
+<td>Fumoto가 게임 공간 대부분을 2D 스프라이트를 쌓아 만들었다고 발표. <a href="https://www.wired.com/2016/10/nium-preview-fantastic-arcade/">WIRED 2016-10</a></td>
+</tr>
+<tr>
+<td>층마다 1px씩 올리고 같은 각도로 회전해 그린다</td>
+<td>✅</td>
+<td><code>draw_sprite_ext(..., x, y-i, ..., image_angle, ...)</code>. <a href="https://chequered.ink/2-5d-in-gamemaker-using-sprite-stacking/">Chequered Ink</a></td>
+</tr>
+<tr>
+<td>Mode 7은 SNES에서 배경 레이어를 회전·확대하고 스캔라인마다 바꿀 수 있다</td>
+<td>✅</td>
+<td><a href="https://en.wikipedia.org/wiki/Mode_7">Wikipedia: Mode 7</a> (Nintendo SNES 개발 매뉴얼 인용)</td>
+</tr>
+<tr>
+<td>Shadow Warrior와 Blood는 Build 엔진에서 일부 소품을 복셀로 그렸다</td>
+<td>✅</td>
+<td><a href="https://en.wikipedia.org/wiki/Voxel">Wikipedia: Voxel</a></td>
+</tr>
+<tr>
+<td>물체가 많으면 성능 부담이 커진다</td>
+<td>✅ (원리)</td>
+<td>물체 × 층만큼 그리기 호출. <a href="https://indienova.com/u/lazyeo/blogread/31523">indienova</a>. 구체적 프레임 수치는 이 글에서 재지 않았습니다.</td>
+</tr>
+</tbody>
+</table>
+<h2 id="_13">참고 자료</h2>
+<ul>
+<li>원본 X 포스트: <a href="https://x.com/meta_pavy/status/2122566766744555760">@meta_pavy (해설)</a> · <a href="https://x.com/meta_pavy/status/2122241297482408234">@meta_pavy (32kb 비행 시뮬레이터)</a> · <a href="https://x.com/creativedash/status/2122000830895386680">@creativedash (원 데모)</a> · <a href="https://x.com/asynkimo/status/2121716250820964431">@asynkimo (회전 데모)</a></li>
+<li>데모: <a href="https://remix.ui8.ai/fly">remix.ui8.ai/fly → Forge "fighter"</a> · <a href="https://ui8.ai/forge">Forge 소개</a></li>
+<li><a href="https://www.wired.com/2016/10/nium-preview-fantastic-arcade/">WIRED, 8-Bit Nium Is a Striking Glimpse at an Irradiated Wilderness (2016-10)</a></li>
+<li><a href="https://chequered.ink/2-5d-in-gamemaker-using-sprite-stacking/">Chequered Ink, 2.5D in GameMaker using Sprite-Stacking</a></li>
+<li><a href="https://azuzota.itch.io/sprite-stacking-with-perspective">Azuzota, Improved Sprite Stacking (GameMaker 스크립트)</a></li>
+<li><a href="https://james.poole.ie/notes/stack">James Poole, How we are using Sprite Stacking for Wee Boats (2024-02-11)</a></li>
+<li><a href="https://indienova.com/u/lazyeo/blogread/31523">indienova, 伪3D之Sprite Stacking</a></li>
+<li>Wikipedia: <a href="https://en.wikipedia.org/wiki/Mode_7">Mode 7</a> · <a href="https://en.wikipedia.org/wiki/F-Zero_(video_game)">F-Zero</a> · <a href="https://en.wikipedia.org/wiki/Wolfenstein_3D">Wolfenstein 3D</a> · <a href="https://en.wikipedia.org/wiki/Build_(game_engine)">Build engine</a> · <a href="https://en.wikipedia.org/wiki/Voxel">Voxel</a> · <a href="https://en.wikipedia.org/wiki/Red_Zone_(1994_video_game)">Red Zone (1994)</a></li>
+<li>커뮤니티 자료: <a href="https://tvtropes.org/pmwiki/pmwiki.php/VideoGame/RedZone">TV Tropes: Red Zone</a> · <a href="https://www.chronocrash.com/forum/resources/3d-sprite-stacking.186/">ChronoCrash: 3D Sprite Stacking</a></li>
+<li>시장: <a href="https://steamdb.info/stats/releases/">SteamDB 연도별 출시 집계</a> · <a href="https://www.pcgamer.com/gaming-industry/more-than-19-000-games-launched-on-steam-this-year-but-almost-half-have-fewer-than-10-reviews/">PC Gamer (2025-12)</a> · <a href="https://store.steampowered.com/app/431730/Aseprite/">Aseprite Steam</a> · <a href="https://www.pixellab.ai/">PixelLab</a></li>
+<li>Steam AI 정책: <a href="https://store.steampowered.com/news/group/4145017/view/3862463747997849618">Valve 공지 (2024-01)</a> · <a href="https://www.theverge.com/2024/1/10/24032678/valve-steam-generative-ai-rules-disclosure-pre-generated-live-illegal-content-copyright">The Verge (2024-01-10)</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
