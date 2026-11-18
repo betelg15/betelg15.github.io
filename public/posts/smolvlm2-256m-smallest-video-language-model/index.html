@@ -1,0 +1,380 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>세계에서 제일 작은 비디오 언어 모델인가? SmolVLM2-256M 팩트 체크</title>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable.min.css">
+<link rel="stylesheet" href="../../assets/style.css">
+<link rel="stylesheet" href="../../assets/code.css">
+</head><body>
+<header class="site"><a class="brand" href="../../index.html">Betel의 개발 노트</a><span class="tag">읽고, 검증하고, 정리하는 개발 블로그</span></header>
+<main><article class="post">
+<p class="meta">2026-11-18 · <span class="chip">#SmolVLM</span><span class="chip">#Hugging Face</span><span class="chip">#VLM</span><span class="chip">#온디바이스</span><span class="chip">#팩트체크</span></p>
+<h1 class="title">세계에서 제일 작은 비디오 언어 모델인가? SmolVLM2-256M 팩트 체크</h1>
+<details class="toc"><summary>목차</summary><div class="toc">
+<ul>
+<li><a href="#_1">왜 중요한가</a></li>
+<li><a href="#_2">기술 설명</a><ul>
+<li><a href="#_3">세 크기, 그리고 파일에 적힌 개수</a></li>
+<li><a href="#_4">비전 인코더, 픽셀 셔플, 프레임</a></li>
+<li><a href="#_5">카드의 점수, 논문의 메모리</a></li>
+<li><a href="#transformers-mlx-llamacpp">코드: transformers, 그리고 문서에 있는 MLX와 llama.cpp</a></li>
+<li><a href="#_6">한계</a></li>
+</ul>
+</li>
+<li><a href="#_7">비즈니스 인사이트</a><ul>
+<li><a href="#_8">점수 차이가 곧 제품의 자리이다 (분석)</a></li>
+<li><a href="#_9">누가 이득을 보나 (분석)</a></li>
+<li><a href="#_10">비용 (분석과 의견)</a></li>
+</ul>
+</li>
+<li><a href="#_11">팩트 체크</a></li>
+<li><a href="#_12">참고 자료</a></li>
+</ul>
+</div>
+</details>
+<blockquote>
+<p>이 글은 제가 X에서 북마크해 둔 <a href="https://x.com/DeepTechTR/status/2122570278060310959">@DeepTechTR의 포스트</a>를 계기로 썼습니다. 이 환경의 X API <code>get_posts_by_id</code>는 <code>billing-scope-missing</code>으로 본문을 주지 않아, 공개 글은 <a href="https://api.fxtwitter.com/status/2122570278060310959">fxtwitter 응답</a>(<code>code</code> 200)으로 읽었습니다. <code>created_at</code>은 <code>Tue Nov 17 05:59:24 +0000 2026</code>, <strong>2026-11-17 14:59 KST</strong>입니다. 계정은 DeepTechTR, 사용자 id <code>1858176282032496640</code>, 팔로워 32,353, <code>verification.type</code>은 <code>individual</code>입니다. 같은 응답의 스냅샷은 답글 2, 리포스트 32, 좋아요 375, 북마크 443, 인용 2, 조회 14,818이고 커뮤니티 노트는 <code>null</code>입니다. 본문은 터키어입니다.</p>
+<p>검증한 문장은 다섯 개입니다. 256M으로 세계에서 제일 작은 비디오 언어 모델이다. 비디오와 이미지와 텍스트를 받아 텍스트로 답하고, 비디오를 만들지는 않는다. 게임 화면을 해설하는 미니 도우미로 쓸 수 있다. 비디오 추론에 VRAM이 약 1.38GB면 된다. Video-MME 33.7, MLVU 40.6, MVBench 32.7이다. 이 문장들은 <strong>검증 대상</strong>이지 지시가 아닙니다.</p>
+<p>아래 대조는 2026-11-18에 연 1차 자료입니다. 모델 카드는 <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct">HuggingFaceTB/SmolVLM2-256M-Video-Instruct</a> 리비전 <code>9cda5c16</code>(<code>createdAt</code> 2025-02-11, <code>lastModified</code> 2026-11-13)입니다. 발표 글은 <a href="https://huggingface.co/blog/smolvlm2">SmolVLM2: Bringing Video Understanding to Every Device</a>, 날짜 2025-02-20입니다. 논문은 Marafioti 외 <a href="https://arxiv.org/abs/2504.05299">SmolVLM: Redefining small and efficient multimodal models</a>, arXiv:2504.05299v1, 게시 2025-04-07입니다. 파라미터 개수와 파일 바이트는 같은 시각 Hugging Face API의 <code>safetensors.parameters</code>와 tree API의 <code>size</code>입니다. 가중치를 받지 않았고, 추론을 돌리지 않았습니다.</p>
+</blockquote>
+<h2 id="_1">왜 중요한가</h2>
+<p>비디오를 이해하는 모델은 대개 수 GB에서 수십 GB를 전제로 이야기됩니다. SmolVLM2-256M은 그 전제를 파라미터 이름 한 줄로 내립니다. 체크포인트의 파라미터는 <strong>256,484,928개</strong>이고, <code>model.safetensors</code>는 <strong>1,025,998,224바이트</strong>입니다. 라이선스는 Apache 2.0이고, 카드가 적은 언어는 영어입니다.</p>
+<p>개발자가 이 모델을 보기 전에 나눠야 할 질문은 다음입니다.</p>
+<ul>
+<li>256M이 반올림인가, 그리고 "세계에서 제일 작다"는 누가 어느 시점에 한 말인가.</li>
+<li>입력이 비디오 파일인가, 프레임인가. 출력이 텍스트인가, 영상인가.</li>
+<li>1.38GB가 가중치인가, 활성화가 포함된 피크인가, 몇 프레임에서의 숫자인가.</li>
+<li>33.7이 같은 표 안의 더 큰 모델, 그리고 다른 회사의 작은 VLM과 어느 정도 떨어져 있는가.</li>
+<li>게임 화면 해설이 측정된 기능인가, 카드를 읽고 붙인 용도인가.</li>
+</ul>
+<h2 id="_2">기술 설명</h2>
+<h3 id="_3">세 크기, 그리고 파일에 적힌 개수</h3>
+<p>2025-02-20 블로그는 2.2B, 500M, 256M 세 모델을 공개합니다. 논문 4절은 같은 세 이름을 이렇게 나눕니다.</p>
+<table>
+<thead>
+<tr>
+<th>이름</th>
+<th>논문이 적은 구성</th>
+<th style="text-align: right;">이 글이 읽은 safetensors 총계</th>
+<th>dtype</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>256M</td>
+<td>SigLIP-B/16 93M + SmolLM2-135M</td>
+<td style="text-align: right;">256,484,928</td>
+<td>F32</td>
+</tr>
+<tr>
+<td>500M</td>
+<td>같은 93M 인코더 + SmolLM2-360M</td>
+<td style="text-align: right;">507,482,304</td>
+<td>F32</td>
+</tr>
+<tr>
+<td>2.2B</td>
+<td>SigLIP-SO400M 400M + SmolLM2-1.7B</td>
+<td style="text-align: right;">2,246,784,880</td>
+<td>F32</td>
+</tr>
+</tbody>
+</table>
+<p>256,484,928은 2.565억입니다. 이름 "256M"과 맞고, Hugging Face 페이지가 배지로 보여주는 "0.3B"는 0.256을 소수 한 자리에서 올린 표시입니다. 93M과 135M은 논문의 반올림이라 둘을 더해 228M이 되고, 체크포인트와의 차이는 그 반올림과 픽셀 셔플 뒤의 투영 계층이 함께 만든 간격입니다. 논문은 그 투영 계층의 파라미터 수를 따로 적지 않습니다.</p>
+<p>256M 카드의 <code>base_model</code>은 <a href="https://huggingface.co/HuggingFaceTB/SmolVLM-256M-Instruct">HuggingFaceTB/SmolVLM-256M-Instruct</a>입니다. 블로그는 이 256M 비디오 모델을 "what if" 실험이라고 부르고, 몇 주 전 IBM이 베이스 256M으로 보여 준 작업에서 아이디어를 얻었다고 적습니다. 실용적인 기본값으로 적은 것은 2.2B이고, 아이폰 데모에 적은 크기는 500M입니다.</p>
+<p>세 체크포인트 모두 저장 dtype은 F32입니다. 256M 파일 1,025,998,224바이트에서 파라미터 256,484,928개의 F32 바이트 1,025,939,712를 빼면 헤더 58,512바이트가 남습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="n">counts</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s2">"SmolVLM2-256M"</span><span class="p">:</span> <span class="mi">256_484_928</span><span class="p">,</span>
+    <span class="s2">"SmolVLM2-500M"</span><span class="p">:</span> <span class="mi">507_482_304</span><span class="p">,</span>
+    <span class="s2">"SmolVLM2-2.2B"</span><span class="p">:</span> <span class="mi">2_246_784_880</span><span class="p">,</span>
+<span class="p">}</span>
+<span class="n">file_256</span> <span class="o">=</span> <span class="mi">1_025_998_224</span>
+<span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">counts</span><span class="o">.</span><span class="n">items</span><span class="p">():</span>
+    <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"</span><span class="si">{</span><span class="n">name</span><span class="si">:</span><span class="s2">16</span><span class="si">}</span><span class="s2"> </span><span class="si">{</span><span class="n">n</span><span class="o">/</span><span class="mf">1e6</span><span class="si">:</span><span class="s2">8.3f</span><span class="si">}</span><span class="s2"> M   F32 </span><span class="si">{</span><span class="n">n</span><span class="o">*</span><span class="mi">4</span><span class="o">/</span><span class="mf">1e9</span><span class="si">:</span><span class="s2">6.3f</span><span class="si">}</span><span class="s2"> GB"</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="s2">"256M header bytes"</span><span class="p">,</span> <span class="n">file_256</span> <span class="o">-</span> <span class="n">counts</span><span class="p">[</span><span class="s2">"SmolVLM2-256M"</span><span class="p">]</span> <span class="o">*</span> <span class="mi">4</span><span class="p">)</span>
+</code></pre></div>
+
+<div class="highlight"><pre><span></span><code>SmolVLM2-256M     256.485 M   F32  1.026 GB
+SmolVLM2-500M     507.482 M   F32  2.030 GB
+SmolVLM2-2.2B    2246.785 M   F32  8.987 GB
+256M header bytes 58512
+</code></pre></div>
+
+<h3 id="_4">비전 인코더, 픽셀 셔플, 프레임</h3>
+<p>논문 그림 2의 경로는 이렇습니다. 이미지는 서브이미지로 나누고, 비디오에서는 프레임을 뽑습니다. SigLIP가 시각 특징을 만들고, 픽셀 셔플이 그 특징의 공간을 채널 쪽으로 접은 뒤, MLP가 그 토큰을 SmolLM2의 입력 차원으로 보냅니다. 시각 토큰은 텍스트 임베딩과 이어 붙여 언어 모델에 들어가고, 나오는 것은 텍스트입니다.</p>
+<p>256M <code>config.json</code>이 그 경로에 숫자를 붙입니다.</p>
+<table>
+<thead>
+<tr>
+<th>항목</th>
+<th>값</th>
+<th>읽는 법</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>비전</td>
+<td><code>hidden_size</code> 768, <code>patch_size</code> 16, <code>image_size</code> 512, <code>use_base_siglip</code> true</td>
+<td>SigLIP 베이스. 한 변 512를 16으로 나누면 32칸, 패치 1,024개</td>
+</tr>
+<tr>
+<td>압축</td>
+<td><code>scale_factor</code> 4, <code>pixel_shuffle_factor</code> 4</td>
+<td>논문의 셔플 비율 r. 토큰 수는 r²=16으로 줄어 타일당 64개</td>
+</tr>
+<tr>
+<td>리샘플러</td>
+<td><code>use_resampler</code> false</td>
+<td>Perceiver 설정 블록은 파일에 남아 있으나 꺼져 있다</td>
+</tr>
+<tr>
+<td>텍스트</td>
+<td>hidden 576, 30층, 헤드 9, KV 헤드 3, FFN 1536, vocab 49,280</td>
+<td>SmolLM2-135M 쪽 디코더. GQA</td>
+</tr>
+<tr>
+<td>위치</td>
+<td><code>max_position_embeddings</code> 8192, <code>rope_theta</code> 100000</td>
+<td>체크포인트의 값. 논문 2.2절이 적은 실험은 RoPE base를 10k에서 273k로 올린 것이고, 이 파일의 100000과는 다른 수이다</td>
+</tr>
+<tr>
+<td>이미지 입력</td>
+<td><code>do_image_splitting</code> true, 긴 변 2048, 타일 긴 변 512</td>
+<td>논문의 분할. 고해상도 이미지와 축소본을 같이 넣는다</td>
+</tr>
+<tr>
+<td>비디오 입력</td>
+<td><code>fps</code> 1, <code>max_frames</code> 64, 긴 변 512</td>
+<td>현재 <code>preprocessor_config.json</code>의 <code>video_sampling</code></td>
+</tr>
+</tbody>
+</table>
+<p>픽셀 셔플은 초해상도에서 온 space-to-depth입니다. 논문은 Idefics3와 InternVL이 r=2를 쓰는 반면, 작은 VLM은 r=4가 이득이었다고 적습니다. 토큰이 줄면 어텐션 비용이 줄고, 대신 한 토큰이 더 넓은 영역을 덮어 OCR처럼 위치가 중요한 작업은 손해라고 같은 절이 적습니다.</p>
+<p>비디오 쪽 선택은 평균을 내지 않는 것입니다. 논문 그림 3의 오른쪽은 프레임을 2장, 4장, 8장씩 평균낼수록 OpenCompass-Video가 떨어진다고 보여주고, 그래서 평균을 최종 설계에서 뺐다고 합니다. 각 프레임은 인코더 해상도로 줄여 따로 넣습니다. 카드의 학습 데이터 문장은 SmolVLM2가 10개 데이터셋에서 온 330만 샘플을 썼다고 하고, 모달리티 비율은 이미지 34.4%, 텍스트 20.2%, 비디오 33.0%, 다중 이미지 12.3%입니다. 논문 4.1절의 비디오 파인튜닝 단계도 비디오 비율을 33%로 적습니다.</p>
+<p>프레임이 긴 변 512의 타일 한 장으로 끝나면, 프레임당 64토큰입니다. 상한 64프레임이면 시각 토큰은 4,096개이고, 컨텍스트 8,192 안에 텍스트를 더할 자리가 남습니다. 이 4,096은 설정값으로 곱한 계산이고, 프로세서가 프레임을 더 나누는 경우는 따로 재지 않았습니다. 논문은 평가에서 256M과 500M의 이미지 긴 변을 1,920으로 맞춘다고 적으므로, 카드의 입력 상한 2,048과 평가 해상도는 같은 수가 아닙니다.</p>
+<p>시각 구간은 텍스트 표식으로 감쌉니다. 논문은 이미지 앞에 "Here is an image…", 비디오 앞에 "Here are N frames sampled from a video…" 같은 문을 두고, 뒤에서 다시 지시문으로 돌아온다고 합니다. 이 표식이 비디오에서 이득이 컸다고 같은 절이 적습니다.</p>
+<h3 id="_5">카드의 점수, 논문의 메모리</h3>
+<p>256M 카드의 비디오 표는 이렇고, 논문 Table 1의 256M 열과 세 칸이 같습니다.</p>
+<table>
+<thead>
+<tr>
+<th>크기</th>
+<th style="text-align: right;">Video-MME</th>
+<th style="text-align: right;">MLVU</th>
+<th style="text-align: right;">MVBench</th>
+<th>카드가 적은 비디오 추론 GPU RAM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2.2B</td>
+<td style="text-align: right;">52.1</td>
+<td style="text-align: right;">55.2</td>
+<td style="text-align: right;">46.27</td>
+<td>5.2GB</td>
+</tr>
+<tr>
+<td>500M</td>
+<td style="text-align: right;">42.2</td>
+<td style="text-align: right;">47.3</td>
+<td style="text-align: right;">39.73</td>
+<td>1.8GB</td>
+</tr>
+<tr>
+<td>256M</td>
+<td style="text-align: right;">33.7</td>
+<td style="text-align: right;">40.6</td>
+<td style="text-align: right;">32.7</td>
+<td>1.38GB</td>
+</tr>
+</tbody>
+</table>
+<p>논문 표의 MVBench는 500M 39.7, 2.2B 46.3으로 카드보다 소수 한 자리가 짧습니다. 256M의 32.7은 양쪽이 같습니다. 논문은 같은 표에 InternVL2-2B를 Video-MME 45.0, MLVU 48.2, MVBench 60.2로 적습니다. 256M은 그 세 칸 모두 아래입니다. 2.2B는 Video-MME와 MLVU에서 그 비교 모델을 앞서고 MVBench에서는 뒤집니다. 카드와 논문 모두 Video-MME의 자막 유무를 이 표에 적지 않습니다.</p>
+<p>메모리는 출처가 둘입니다.</p>
+<ul>
+<li>논문 Table 1의 RAM, 배치 1: 256M <strong>0.8GB</strong>, 500M 1.2GB, 2.2B 4.9GB. 배치 64는 15.0GB, 16.0GB, 49.9GB. 4절 목록은 256M이 1GB 미만의 GRAM에서 돈다고 적고, 본문은 이 열을 단일 이미지 추론이라고 부릅니다. 초록의 "less than 1GB GPU memory"도 이 256M을 가리킵니다.</li>
+<li>비디오 카드의 1.38GB, 500M 카드의 1.8GB, 2.2B 카드의 5.2GB는 "video inference"라는 말만 있고, GPU, dtype, 프레임 수, 해상도, 배치가 없습니다. 256M 문장은 "Despite its compact size, requiring only 1.38GB of GPU RAM for video inference."에서 문장이 끝납니다.</li>
+</ul>
+<p>F32 가중치만 1.026GB입니다. 카드의 예제 코드는 <code>torch.bfloat16</code>으로 올리므로, 그 경로의 가중치 바이트는 파라미터 수의 2배인 약 0.513GB입니다. 1.38GB는 그 둘 중 어느 쪽과도 같지 않습니다. 1.38이라는 수가 어느 실행의 피크인지는 카드 밖으로 나가지 않습니다.</p>
+<p>논문 4.4절은 처리량도 적습니다. A100에서 256M은 배치 1의 초당 0.8예시에서 배치 64의 16.3예시로 늘고, L4에서는 배치 8에서 초당 2.7예시가 정점이었다고 합니다. 같은 절은 256M ONNX를 WebGPU로 14인치 MacBook Pro(M4 Max)에서 디코드 초당 최대 80토큰까지 돌렸다고 적습니다. 이 글은 그 측정을 다시 하지 않았습니다.</p>
+<h3 id="transformers-mlx-llamacpp">코드: transformers, 그리고 문서에 있는 MLX와 llama.cpp</h3>
+<p>아래는 256M 카드의 비디오 추론 예입니다. 카드는 <code>num2words</code>, <code>flash-attn</code>, 최신 <code>transformers</code>, 그리고 비디오용 <code>decord</code>를 요구합니다. 2025-02-20 블로그는 당시 설치 대상으로 <code>transformers</code>의 <code>v4.49.0-SmolVLM-2</code> 브랜치를 적었습니다. 지금 카드는 "latest transformers"라고 적습니다. 저는 이 코드를 실행하지 않았습니다.</p>
+<div class="highlight"><pre><span></span><code><span class="kn">from</span><span class="w"> </span><span class="nn">transformers</span><span class="w"> </span><span class="kn">import</span> <span class="n">AutoProcessor</span><span class="p">,</span> <span class="n">AutoModelForImageTextToText</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">torch</span>
+
+<span class="n">model_path</span> <span class="o">=</span> <span class="s2">"HuggingFaceTB/SmolVLM2-256M-Video-Instruct"</span>
+<span class="n">processor</span> <span class="o">=</span> <span class="n">AutoProcessor</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span><span class="n">model_path</span><span class="p">)</span>
+<span class="n">model</span> <span class="o">=</span> <span class="n">AutoModelForImageTextToText</span><span class="o">.</span><span class="n">from_pretrained</span><span class="p">(</span>
+    <span class="n">model_path</span><span class="p">,</span>
+    <span class="n">torch_dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">,</span>
+    <span class="n">_attn_implementation</span><span class="o">=</span><span class="s2">"flash_attention_2"</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="s2">"cuda"</span><span class="p">)</span>
+
+<span class="n">messages</span> <span class="o">=</span> <span class="p">[</span>
+    <span class="p">{</span>
+        <span class="s2">"role"</span><span class="p">:</span> <span class="s2">"user"</span><span class="p">,</span>
+        <span class="s2">"content"</span><span class="p">:</span> <span class="p">[</span>
+            <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"video"</span><span class="p">,</span> <span class="s2">"path"</span><span class="p">:</span> <span class="s2">"path_to_video.mp4"</span><span class="p">},</span>
+            <span class="p">{</span><span class="s2">"type"</span><span class="p">:</span> <span class="s2">"text"</span><span class="p">,</span> <span class="s2">"text"</span><span class="p">:</span> <span class="s2">"Describe this video in detail"</span><span class="p">},</span>
+        <span class="p">],</span>
+    <span class="p">},</span>
+<span class="p">]</span>
+
+<span class="n">inputs</span> <span class="o">=</span> <span class="n">processor</span><span class="o">.</span><span class="n">apply_chat_template</span><span class="p">(</span>
+    <span class="n">messages</span><span class="p">,</span>
+    <span class="n">add_generation_prompt</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">tokenize</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">return_dict</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">return_tensors</span><span class="o">=</span><span class="s2">"pt"</span><span class="p">,</span>
+<span class="p">)</span><span class="o">.</span><span class="n">to</span><span class="p">(</span><span class="n">model</span><span class="o">.</span><span class="n">device</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">torch</span><span class="o">.</span><span class="n">bfloat16</span><span class="p">)</span>
+
+<span class="n">generated_ids</span> <span class="o">=</span> <span class="n">model</span><span class="o">.</span><span class="n">generate</span><span class="p">(</span><span class="o">**</span><span class="n">inputs</span><span class="p">,</span> <span class="n">do_sample</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">max_new_tokens</span><span class="o">=</span><span class="mi">64</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">processor</span><span class="o">.</span><span class="n">batch_decode</span><span class="p">(</span><span class="n">generated_ids</span><span class="p">,</span> <span class="n">skip_special_tokens</span><span class="o">=</span><span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span>
+</code></pre></div>
+
+<p>이미지와 다중 이미지도 같은 <code>content</code> 리스트에 <code>{"type": "image", "url": ...}</code>를 넣어 카드가 보여 줍니다. 카드의 Uses 절은 텍스트와 미디어를 섞을 수 있고, 이미지 생성과 비디오 생성은 지원하지 않는다고 적습니다. <code>pipeline_tag</code>는 <code>image-text-to-text</code>입니다.</p>
+<p>MLX는 블로그가 공개일부터 된다고 적은 경로입니다. 블로그에 실제로 적힌 명령은 256M이 아니라 양자화하지 않은 500M입니다.</p>
+<div class="highlight"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>git+https://github.com/pcuenca/mlx-vlm.git@smolvlm
+
+python<span class="w"> </span>-m<span class="w"> </span>mlx_vlm.smolvlm_video_generate<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--model<span class="w"> </span>mlx-community/SmolVLM2-500M-Video-Instruct-mlx<span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--system<span class="w"> </span><span class="s2">"Focus only on describing the key dramatic action or notable event occurring in this video segment. Skip general context or scene-setting details unless they are crucial to understanding the main action."</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--prompt<span class="w"> </span><span class="s2">"What is happening in this video?"</span><span class="w"> </span><span class="se">\</span>
+<span class="w">  </span>--video<span class="w"> </span>/path/to/clip.mov
+</code></pre></div>
+
+<p>블로그는 시스템 프롬프트가 비디오 설명의 길이를 바꾼다고 적습니다. 설치 대상이 <code>smolvlm</code> 브랜치인 것은 2025-02-20 글의 내용이고, 그 글의 댓글은 당시 <code>transformers</code>도 그 시점의 브랜치가 필요했다고 적습니다. 2026-11의 mlx-vlm 메인이 이 모델을 그대로 받는지는 확인하지 않았습니다.</p>
+<p>llama.cpp 쪽 1차 자료는 두 곳입니다. <a href="https://github.com/ggml-org/llama.cpp/pull/13050">ggml-org/llama.cpp#13050</a>은 SmolVLM2-256M-Video-Instruct를 지원 목록에 넣으며 "input sequence of images"라고 적고, 시험 명령으로 <code>llama-mtmd-cli -hf ggml-org/SmolVLM2-256M-Video-Instruct-GGUF</code>를 적습니다. 2026-11에 연 <a href="https://huggingface.co/ggml-org/SmolVLM2-256M-Video-Instruct-GGUF">GGUF 카드</a>의 실행 예는 다음 한 줄이고, 비디오 파일 인자는 없습니다.</p>
+<div class="highlight"><pre><span></span><code>llama<span class="w"> </span>serve<span class="w"> </span>-hf<span class="w"> </span>ggml-org/SmolVLM2-256M-Video-Instruct-GGUF
+</code></pre></div>
+
+<p>GGUF 카드는 Apache 2.0, <code>base_model</code>은 위의 Hugging Face 체크포인트, 변환은 ggml-org의 자동 변환이라고 적습니다. transformers 경로만 <code>decord</code>로 mp4를 받는 예가 카드에 있습니다.</p>
+<p>파인튜닝 링크는 2.2B 카드가 <a href="https://github.com/huggingface/smollm/blob/main/vision/finetuning/Smol_VLM_FT.ipynb">smollm의 노트북</a>을 가리킵니다. 블로그는 500M을 Colab에서 전부 파인튜닝하는 편이 낫고, 2.2B에는 QLoRA를 시도해 볼 수 있다고 적습니다.</p>
+<h3 id="_6">한계</h3>
+<ul>
+<li>카드의 언어는 영어입니다. 한국어 화면의 글자를 읽어 한국어로 해설하는 용도는 카드가 적은 언어 밖에 있습니다.</li>
+<li>논문이 작은 모델에 r=4를 고른 이유는 토큰 절약이고, 같은 문단이 OCR과 위치 정밀도 손상을 적습니다. 작은 글씨가 많은 게임 HUD는 그 손해가 해당되는 자리입니다. 게임 HUD를 이 모델로 재지는 않았습니다.</li>
+<li>카드의 오용 목록에는 개인에 대한 평가, 자동화된 중대 결정, 사실처럼 보이는 부정확한 내용, 그리고 무단 감시가 있습니다.</li>
+<li>블로그가 256M에 붙인 말은 실험입니다. 아이폰 로컬 데모와 VLC 연동 문장은 500M과 가족 전체를 가리키고, 하이라이트 데모는 축구 경기를 시험했다고 적습니다.</li>
+</ul>
+<h2 id="_7">비즈니스 인사이트</h2>
+<h3 id="_8">점수 차이가 곧 제품의 자리이다 (분석)</h3>
+<p>같은 가족 안에서 Video-MME는 256M 33.7, 500M 42.2, 2.2B 52.1입니다. 블로그는 500M이 파라미터 4분의 1 미만으로 2.2B와 같은 비디오 이해를 얻는다고 적습니다. 이름의 500/2200은 0.23이고, 실제 개수 507,482,304 / 2,246,784,880도 0.226이라 "4분의 1 미만"은 맞습니다. 42.2와 52.1이 같다는 문장과는 표가 다릅니다. 의견으로는, 용량을 먼저 자르는 제품은 500M을 보고, 256M은 그 다음으로 더 자를 때의 실험 자리입니다. 블로그가 256M에 적은 기대도 특수 목적 파인튜닝입니다.</p>
+<p>논문 표의 InternVL2-2B(Video-MME 45.0, MLVU 48.2, MVBench 60.2)보다 256M이 낮은 것은, 이 모델의 주장이 정확도 1위가 아니라 메모리라는 뜻으로 읽는 편이 표와 맞습니다. 논문은 Qwen2-VL-2B의 평가 RAM을 13.7GB, InternVL2-2B를 10.5GB로 적고, 256M의 배치 1 RAM을 0.8GB로 적습니다. 이 RAM은 논문의 이미지 평가 설정입니다.</p>
+<p>다른 회사의 작은 모델과 나란히 놓으면 자리의 차이가 더 분명합니다. 아래 수는 서로 다른 프로토콜이라 순위표가 아닙니다.</p>
+<table>
+<thead>
+<tr>
+<th>모델</th>
+<th>1차 자료가 적은 크기</th>
+<th>입력</th>
+<th>비디오 점수</th>
+<th>라이선스</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SmolVLM2-256M</td>
+<td>safetensors 256,484,928</td>
+<td>비디오, 이미지, 텍스트 → 텍스트</td>
+<td>Video-MME 33.7, MLVU 40.6, MVBench 32.7. 자막 조건은 표에 없음</td>
+<td>Apache 2.0</td>
+</tr>
+<tr>
+<td><a href="https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct">Qwen2.5-VL-3B-Instruct</a></td>
+<td>카드는 3B, 7B, 72B. safetensors는 BF16 3,754,622,976</td>
+<td>이미지와 장시간 비디오를 포함한다고 카드가 적음</td>
+<td>기술 보고서 Table 8: Video-MME 자막 있음 67.6, 없음 61.5, MVBench 67.0, MLVU 68.2. 프레임 상한 768, 비디오 토큰 상한 24,576</td>
+<td>이 저장소의 <code>license_name</code>은 <code>qwen-research</code>. 본문 2조는 비상업 목적의 사용을 허락하고, 상업적 사용은 별도 라이선스를 요청하라고 적음</td>
+</tr>
+<tr>
+<td><a href="https://ai.google.dev/gemma/docs/core/model_card_3">Gemma 3</a></td>
+<td>270M, 1B, 4B, 12B, 27B</td>
+<td>모델 카드의 입력은 텍스트와 이미지. <a href="https://ai.google.dev/gemma/docs/get_started">시작 문서</a>는 270M과 1B를 텍스트만, 4B부터 텍스트와 이미지로 적음</td>
+<td>이 카드에서 비디오 벤치마크를 찾지 못함</td>
+<td>Gemma 이용 약관</td>
+</tr>
+<tr>
+<td><a href="https://ai.google.dev/gemma/docs/gemma-3n/model_card">Gemma 3n</a></td>
+<td>E2B, E4B. 표준 실행은 50억 초과를 읽고, PLE 캐시와 파라미터 생략으로 E2B의 유효 부하를 1.91B로 적음</td>
+<td>텍스트, 이미지, 비디오, 오디오 → 텍스트</td>
+<td>이 글에서 256M과 같은 세 벤치마크 칸을 찾지 못함</td>
+<td>Gemma 이용 약관</td>
+</tr>
+<tr>
+<td>Moondream 0.5B</td>
+<td>2024-12-05 발표는 0.5B</td>
+<td>그 글이 부르는 대상은 Vision-Language Model</td>
+<td>그 글에 Video-MME가 없음. 8비트 런타임 메모리 996MiB, 4비트 816MiB</td>
+<td>그 글은 Apache라고 적음</td>
+</tr>
+</tbody>
+</table>
+<p>Qwen2.5-VL-3B의 3,754,622,976은 256,484,928의 14.6배입니다. 자막 없는 Video-MME 61.5와 SmolVLM2의 33.7은 평가 조건이 같아 확인된 비교가 아닙니다. 자릿수가 다르다는 것까지가 두 문서를 나란히 읽어 말할 수 있는 범위입니다. Qwen 저장소의 연구 라이선스는 상업 배포 전에 따로 허가를 받는 구조이고, SmolVLM2 카드는 Apache 2.0입니다. 의견으로는, 점수가 아니라 배포 조건 때문에 256M을 집는 팀이 이 표에서 설명되는 팀에 가깝습니다.</p>
+<p>Gemma 3의 270M과 1B는 시작 문서 기준으로 텍스트 모델입니다. 이미지를 받는 가장 작은 Gemma 3는 4B입니다. Gemma 3n E2B는 비디오 입력을 카드에 적지만, 문서의 유효 파라미터 1.91B를 256,484,928로 나누면 7.4배이고 표준 실행은 50억을 넘긴다고 같은 문서가 적습니다. 2025-03-12 Gemma 3 블로그는 이미지, 텍스트, 짧은 비디오를 한 문장에 적고, 그 문장의 각주는 4B, 12B, 27B가 비전을 지원한다고 적습니다. 모델 카드의 입력 목록은 이미지입니다.</p>
+<p>Moondream의 2024-12-05 글은 0.5B를 "the world's smallest Vision-Language Model"이라고 부릅니다. 그 문장의 대상은 이미지 VLM이고, 0.5B는 256M보다 큽니다. 논문이 비교하는 Moondream2는 2~3B 대로, ChartQA 72.2, MMMU 29.3, VRAM 3.9GB입니다. 0.5B 발표와 논문의 Moondream2는 다른 세대입니다.</p>
+<p>더 작은 비디오-텍스트 모델이 없는 것은 아닙니다. MobileViCLIP 논문은 모바일용 비디오-텍스트 검색과 제로샷 분류 모델을 다루고, 생성해서 문장을 쓰는 언어 모델이라고 부르지 않습니다. 256M보다 작은 생성형 비디오 언어 모델을 이번 조사의 1차 자료에서 확인하지는 못했습니다. 그것이 2026-11 기준으로 존재하지 않는다는 증명은 아닙니다.</p>
+<h3 id="_9">누가 이득을 보나 (분석)</h3>
+<ul>
+<li><strong>자기 화면을 기기 안에서 짧게 설명해야 하는 팀.</strong> 가중치 파일이 1.026GB이고 라이선스가 Apache 2.0입니다. 클라우드에 프레임을 보내지 않는 구성이 성립합니다. 논문의 WebGPU 문장(M4 Max, 디코드 초당 최대 80토큰)은 그 구성이 브라우저까지 내려가 본 기록입니다.</li>
+<li><strong>도메인 파인튜닝을 할 팀.</strong> 256M 카드가 이 크기를 두는 이유로 적은 것이 제한된 자원에서의 특수 목적 파인튜닝입니다. 일반 비디오 점수는 가족 안에서 가장 낮습니다.</li>
+<li><strong>한국어 제품, 자막 없는 장시간 영상, 게임 HUD의 작은 글씨.</strong> 카드의 언어는 영어이고, 샘플링 상한은 1fps에 64프레임이며, r=4는 논문이 OCR에 불리하다고 적은 설정입니다. 이 세 조건이 제품의 본업이면 표의 이득이 작습니다.</li>
+</ul>
+<p>게임 화면 해설은 세 번째가 아니라 두 번째에 가깝습니다. 자기 게임의 화면을 이미지로 넣어 영어로 설명하는 프로토타입은 카드가 허용하는 입력과 출력 안에 있습니다. 그것을 미니 도우미 기능으로 측정한 자료는 카드, 블로그, 논문에 없습니다.</p>
+<h3 id="_10">비용 (분석과 의견)</h3>
+<p>클라우드 API 단가는 이 모델에 없습니다. 비용은 상주 메모리와 놓치는 정확도입니다.</p>
+<p>분석: 배치 1의 0.8GB는 논문의 단일 이미지 열입니다. 카드의 1.38GB는 조건이 없는 비디오 문장입니다. 배치를 64로 올리면 논문의 256M도 15.0GB입니다. "작은 모델이라 항상 1GB 근처"는 배치 1에서만 논문과 만납니다. 항상 켜 두는 카메라나 화면 캡처는 프레임을 쌓는 순간 카드가 적지 않은 쪽으로 메모리가 움직입니다. 상한 64프레임, 프레임당 64토큰이라는 위의 계산은 그 상한이 4,096시각 토큰이라는 뜻이지, 그 길이의 VRAM을 제가 재었다는 뜻은 아닙니다.</p>
+<p>의견: 256M을 고르는 이유는 33.7로 61.5짜리 모델을 대체하기 위해서가 아닙니다. 상업 라이선스가 막혀 있거나, 프레임이 기기 밖에 나가면 안 되거나, 틀린 설명 한 줄을 나중에 큰 모델이 다시 보는 초안이면 자리가 있습니다. 그 초안을 사실로 사용자에게 보여 주는 제품은 카드가 적은 오용(사실처럼 보이는 부정확한 내용)과 겹칩니다.</p>
+<h2 id="_11">팩트 체크</h2>
+<table>
+<thead>
+<tr>
+<th>주장</th>
+<th>판정</th>
+<th>근거</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>세계에서 제일 작은 비디오 언어 모델이고, 파라미터는 256M이다</td>
+<td>⚠️</td>
+<td>개수는 맞습니다. safetensors F32 합이 256,484,928입니다. "세계 최소"는 2025-02-20 블로그가 500M과 256M을 묶어 "the smallest video language models ever released"라고 적은 저자의 문장입니다. 카드는 그 최상급을 쓰지 않고, 페이지 배지는 0.3B로 올립니다. 블로그는 256M을 실험으로 부릅니다. 더 작은 생성형 비디오 언어 모델은 이번 1차 자료에서 확인하지 못했고, 그것은 전수 조사가 아닙니다. <a href="https://huggingface.co/blog/smolvlm2">블로그</a>, <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct">카드</a></td>
+</tr>
+<tr>
+<td>비디오, 이미지, 텍스트를 받아 텍스트로 답한다. 비디오를 만들지 않고 본다</td>
+<td>✅</td>
+<td>카드 Uses: 비디오, 한 장 이상의 이미지, 텍스트 질의를 받아 캡션, 시각 질의응답, 스토리텔링을 하고, 이미지와 비디오 생성은 지원하지 않습니다. 논문 그림 2의 출력도 텍스트입니다. <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct">카드</a>, <a href="https://arxiv.org/abs/2504.05299">논문</a></td>
+</tr>
+<tr>
+<td>게임 화면을 해설하는 미니 도우미로 쓸 수 있다</td>
+<td>⚠️</td>
+<td>카드, 블로그, 논문에 게임 화면 평가나 게임 데모가 없습니다. 블로그의 데모는 500M 아이폰 앱, 진행 중인 VLC 연동, 축구 하이라이트입니다. 화면을 이미지로 넣어 영어로 설명하는 것은 허용된 입출력 안의 용도이고, 측정된 기능은 아닙니다. 카드의 언어는 영어이고, 오용 목록에 무단 감시가 있습니다. <a href="https://huggingface.co/blog/smolvlm2">블로그</a>, <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct">카드</a></td>
+</tr>
+<tr>
+<td>비디오 추론에 VRAM 약 1.38GB</td>
+<td>⚠️</td>
+<td>256M 카드가 "1.38GB of GPU RAM for video inference"라고 적습니다. GPU, dtype, 프레임 수, 배치가 없습니다. 카드가 인용하는 논문 Table 1의 256M은 단일 이미지 배치 1에서 0.8GB, 배치 64에서 15.0GB이고, 4절은 1GB 미만이라고 적습니다. 논문의 모델 이름은 SmolVLM이고 이 저장소의 <code>base_model</code>은 SmolVLM-256M-Instruct입니다. 가중치 파일은 F32 1,025,998,224바이트이고, 예제 코드는 bfloat16입니다. <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct">카드</a>, <a href="https://arxiv.org/abs/2504.05299">논문 Table 1</a></td>
+</tr>
+<tr>
+<td>Video-MME 33.7, MLVU 40.6, MVBench 32.7</td>
+<td>✅</td>
+<td>256M 카드의 표와 논문 Table 1의 256M 열이 세 수 모두 같습니다. 자막 유무는 두 표에 없고, 같은 논문 표의 InternVL2-2B는 45.0, 48.2, 60.2입니다. 가족 표에서 256M은 가장 낮은 행입니다. <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct">카드</a>, <a href="https://arxiv.org/abs/2504.05299">논문</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="_12">참고 자료</h2>
+<ul>
+<li>Hugging Face, <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct">HuggingFaceTB/SmolVLM2-256M-Video-Instruct</a>, 리비전 <code>9cda5c16</code>. <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct/blob/main/config.json">config.json</a>, <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-256M-Video-Instruct/blob/main/preprocessor_config.json">preprocessor_config.json</a></li>
+<li>Hugging Face, <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-500M-Video-Instruct">SmolVLM2-500M-Video-Instruct</a> (비디오 추론 1.8GB 문장), <a href="https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct">SmolVLM2-2.2B-Instruct</a> (5.2GB 문장, 파인튜닝 노트북 링크)</li>
+<li>Marafioti 외, <a href="https://huggingface.co/blog/smolvlm2">SmolVLM2: Bringing Video Understanding to Every Device</a>, 2025-02-20</li>
+<li>Marafioti, Zohar, Farré 외, <a href="https://arxiv.org/abs/2504.05299">SmolVLM: Redefining small and efficient multimodal models</a>, arXiv:2504.05299v1, 2025-04-07. <a href="https://arxiv.org/pdf/2504.05299v1">PDF</a></li>
+<li>Qwen, <a href="https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct">Qwen2.5-VL-3B-Instruct</a>. <a href="https://huggingface.co/Qwen/Qwen2.5-VL-3B-Instruct/blob/main/LICENSE">Qwen Research License</a>. Bai 외, <a href="https://arxiv.org/abs/2502.13923">Qwen2.5-VL Technical Report</a>, Table 8</li>
+<li>Google, <a href="https://ai.google.dev/gemma/docs/core/model_card_3">Gemma 3 model card</a>, <a href="https://blog.google/innovation-and-ai/technology/developers-tools/gemma-3/">Gemma 3 블로그</a>, <a href="https://ai.google.dev/gemma/docs/gemma-3n/model_card">Gemma 3n model card</a>, <a href="https://ai.google.dev/gemma/docs/gemma-3n">Gemma 3n 개요</a></li>
+<li>Moondream, <a href="https://moondream.ai/blog/introducing-moondream-0-5b">Introducing Moondream 0.5B</a>, 2024-12-05</li>
+<li>ggml-org, <a href="https://github.com/ggml-org/llama.cpp/pull/13050">llama.cpp PR 13050</a>, <a href="https://huggingface.co/ggml-org/SmolVLM2-256M-Video-Instruct-GGUF">SmolVLM2-256M-Video-Instruct-GGUF</a></li>
+<li>원본 X 포스트: <a href="https://x.com/DeepTechTR/status/2122570278060310959">@DeepTechTR</a></li>
+</ul>
+<p class="back"><a href="../../index.html">← 글 목록</a></p></article></main>
+<footer class="site">© 2026 @BetelY89300 · 정적 HTML로 생성됨</footer>
+</body></html>
