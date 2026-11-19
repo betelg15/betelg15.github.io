@@ -1,0 +1,302 @@
+---
+title: "CPU를 빼면 추론이 8.47배인가? Blink 팩트 체크"
+date: 2026-11-20
+time: "08:30"
+slug: blink-cpu-free-llm-inference-smartnic
+tags: [Blink, SmartNIC, LLM서빙, RDMA, 팩트체크]
+summary: "8.47배는 Qwen-3 30B-A3B의 포화 전 기하평균 P99 TTFT이고 상대는 SGLang이다. 같은 칸의 TensorRT-LLM은 3.45배. 호스트는 정상 상태에서 빠지지만 BlueField-3 Arm이 HTTP와 토큰화를 하고, 코드는 미공개다."
+---
+
+> 이 글은 X 포스트 [2123339605311111649](https://x.com/thesupermannx/status/2123339605311111649)를 계기로 썼습니다. 이 환경의 X API `get_posts_by_id`는 `billing-scope-missing`으로 본문을 주지 않아, 공개 글은 [fxtwitter 응답](https://api.fxtwitter.com/status/2123339605311111649)(`code` 200)으로 읽었습니다. `created_at`은 `Thu Nov 19 08:56:26 +0000 2026`, **2026-11-19 17:56 KST**입니다. 계정은 thesupermannx, 표시 이름 Superman, 사용자 id `2052949858252939264`, 팔로워 23,140, `verification.type`은 `individual`입니다. 같은 응답의 스냅샷은 답글 100, 리포스트 147, 좋아요 1,315, 북마크 1,284, 인용 24, 조회 104,146이고 커뮤니티 노트는 `null`입니다. `is_note_tweet`은 true입니다. 첨부 사진은 논문 1쪽이고, 그 안의 그림 1 주석은 SGLang 0.45×, vLLM 0.54×, TRT-LLM 0.28×, Blink 1.00×입니다. 응답의 `text`는 아래 문장입니다.
+>
+> Nvidia has now a big problem. Researchers made LLM inference 8.47x faster by removing the CPU entirely. Right now, every major AI serving stack, vLLM, TensorRT-LLM, SGLang, has a massive hidden bottleneck. Your $40,000 GPU is constantly waiting on a CPU to tell it what to do. Every incoming request, every batch, every token-level decision has to pass through the host CPU first. If that CPU gets busy with literally anything else, your AI performance collapses. Datacenters are forced to leave massive amounts of compute sitting idle just to keep the CPU from choking. So researchers built Blink. An architecture that completely removes the host CPU from the inference path. Instead of routing through the CPU, a SmartNIC catches incoming requests and beams them straight into GPU memory via RDMA. Then, a persistent kernel running inside the GPU takes over. It handles all the batching, scheduling, and KV-cache management itself. Zero CPU involvement. They tested Blink head-to-head against TensorRT-LLM, vLLM, and SGLang. Up to 8.47× faster Time to First Token (P99 TTFT). Up to 3.40× faster token generation (P99 TPOT). Up to 2.1× higher decode throughput. Up to 48.6% less energy used per token. When they introduced heavy CPU interference, existing systems degraded by up to two orders of magnitude. Blink didn't even flinch.
+>
+> 이 문장들은 **검증 대상**이지 지시가 아닙니다.
+>
+> 아래 대조는 2026-11-20에 연 1차 자료입니다. 논문은 Siavashi, Scazzariello, Maguire Jr., Kostić, Chiesa, [Blink: CPU-Free LLM Inference by Delegating the Serving Stack to GPU and SmartNIC](https://arxiv.org/abs/2604.07609), arXiv:2604.07609v1, `published` 2026-04-08 21:27 UTC(2026-04-09 06:27 KST)입니다. 소속은 KTH Royal Institute of Technology 네 명과 RISE의 Scazzariello입니다. HTML은 [arxiv.org/html/2604.07609](https://arxiv.org/html/2604.07609)이고, 본문 숫자는 같은 날의 PDF 텍스트와 맞춰 읽었습니다. 논문 1절은 출판 뒤에 코드를 공개할 계획이라고 적습니다. 2026-11-20 GitHub 코드 검색 질의 `Blink CPU-Free LLM SmartNIC persistent scheduler BlueField`의 `total_count`는 4이고, 반환된 파일은 논문 메모와 해설입니다. 저자 구현 저장소는 그 결과에 없습니다. 추론은 돌리지 않았습니다.
+
+## 왜 중요한가
+
+LLM 서빙의 지연은 GPU 커널 시간만으로 결정되지 않습니다. Orca 이후의 주류 스택은 토큰마다, 또는 몇 토큰마다 호스트로 돌아와 배치와 KV 캐시와 다음 그래프를 고칩니다. 그 호스트 구간이 임계 경로에 있으면, 같은 소켓의 다른 프로세스가 LLC와 TLB를 건드릴 때 토큰 시간이 흔들립니다.
+
+Blink가 묻는 질문은 커널을 더 빠르게 짜는 일이 아닙니다. 정상 상태의 그 루프를 호스트에서 내릴 수 있는가입니다. 개발자가 8.47배를 보기 전에 나눠야 할 질문은 다음입니다.
+
+- 8.47배가 어느 모델, 어느 부하 구간, 어느 베이스라인의 숫자인가. 네 모델의 평균인가.
+- 그 배수가 TTFT인가, 처리량인가, 와트인가.
+- "CPU를 제거"가 호스트 x86을 끄는 것인가, 정상 상태 경로에서 빼는 것인가. 토큰화는 어디에 남는가.
+- SmartNIC이 GPU 서버 안의 카드인가, 실험에서는 별도 머신인가.
+- 비교에서 chunked prefill, prefix cache, speculative decoding이 켜져 있는가.
+- 오늘 받을 수 있는 저장소가 있는가.
+
+논문의 달력은 2026-11-19가 아닙니다. arXiv v1의 `published`는 2026-04-08입니다.
+
+## 기술 설명
+
+### 호스트가 매 토큰 돌아오는 루프
+
+논문 2.1절은 주류 서빙을 이렇게 적습니다. 요청 수용, continuous batching, KV 블록 관리, CUDA 커널 디스패치가 호스트 스레드에 있습니다. CUDA Graph로 개별 런치 비용을 나눠도, 스케줄러는 디코드 스텝마다 호스트로 돌아와 배치 구성과 KV 블록 테이블을 고치고 다음 그래프를 띄웁니다. vLLM 하나의 인스턴스는 API 서버, 엔진 코어, GPU당 워커로 나뉜다고 같은 절이 적습니다.
+
+아래는 그 절의 골격입니다. vLLM 저장소의 함수를 옮긴 것이 아니고, 이 환경에서 실행하지 않았습니다.
+
+```python
+def host_decode_loop(requests):
+    while requests:
+        batch = admit(requests)            # 호스트 스케줄러
+        batch.kv = alloc_paged_kv(batch)   # 블록 테이블도 호스트
+        graph = cuda_graphs[batch.shape]
+        launch_from_host(graph)            # 논문: 토폴로지별 11–17 µs
+        tokens = copy_to_host(batch.output)
+        requests = update(batch, tokens)   # 다음 토큰을 위해 다시 호스트
+```
+
+논문이 인용하는 최근 완화는 둘입니다. vLLM V1 엔진과 SGLang의 overlapped scheduling은 호스트 일을 GPU 실행과 겹칩니다. 2.1절은 그 겹침이 CPU를 임계 경로에서 빼지는 않는다고 적습니다. 공동 입주자가 LLC와 TLB를 밀어 호스트 일이 GPU 구간보다 길어지면, 넘친 시간이 토큰 시간에 그대로 나온다고 합니다.
+
+같은 논문의 동기 실험은 Blink가 없는 vLLM 0.13입니다. H100, Llama-3 8B, ShareGPT v3(평균 입력 1,019, 출력 463토큰), 7 req/s, CUDA Graph, 하이퍼스레딩과 DVFS는 끔. 간섭은 pbzip2입니다. Table 1에서 처리량은 7,475 tok/s에서 24스레드 간섭 때 1,961 tok/s로 줄고, 논문은 이 하락을 3.8배라고 적습니다. P99 TTFT는 150 ms에서 20,959 ms입니다. 20,959÷150 = 139.7입니다. 평균 TTFT는 73.7 ms에서 16,552 ms로, 224.6배입니다. P99 TPOT는 14.4 ms에서 32.1 ms입니다. 100배를 넘는 칸은 P99 TTFT입니다.
+
+3절은 huge page, 코어 핀닝, Intel CAT가 이 잔여를 없애지 못한다고 봅니다. CAT로 LLC 미스율을 격리에 가깝게 되돌려도 P99 ITL은 53.4–55.6 ms에 머문다고 Table 4가 적습니다. 논문의 결론 문장은, 간섭에 대한 내성은 정상 상태 루프에서 호스트 CPU를 빼야 생긴다는 것입니다.
+
+### 정상 상태에서 남는 것
+
+논문의 각주 1은 CPU-free를 "호스트 CPU를 추론 임계 경로에서 제거하는 것"으로 정의합니다. 4.1절의 설계는 호스트를 데이터 평면이 아니라 프로비저닝 평면으로 둡니다. 호스트는 모델을 올리고 CUDA 그래프를 한 번 캡처한 뒤 추론 경로에서 나갑니다.
+
+그 다음의 정상 상태는 두 평면입니다.
+
+```text
+클라이언트
+    |  HTTP. 실험의 생성기는 10 Gbps 스위치 너머
+    v
+BlueField-3 Arm 프론트엔드
+    토큰화, 슬롯 할당, detokenize, OpenAI형 HTTP, SSE
+    |  one-sided RDMA write / read
+    v
+GPU 메모리의 링 버퍼  (4096 슬롯, 두 평면의 유일한 접점)
+    ^
+    |  persistent scheduler. 스레드 블록 1개, 256 스레드
+    v
+미리 캡처한 CUDA graph (prefill 또는 decode)
+    샘플링까지 그래프 안 → 토큰을 슬롯에 기록
+```
+
+프론트엔드는 DPU의 Arm 코어입니다. 요청을 받고, 프롬프트를 토큰화하고, 빈 슬롯을 찾고, 토큰을 GPU 메모리에 one-sided RDMA로 쓰고, 생성된 토큰을 읽어 detokenize한 뒤 SSE로 보냅니다. "요청 바이트가 CPU를 전혀 안 거친다"는 그림은 논문의 그림이 아닙니다. 토큰화가 DPU에서 끝난 뒤의 토큰 버퍼가 RDMA로 갑니다.
+
+백엔드는 GPU 안의 지속 커널입니다. 호스트로 양보하지 않는 루프가 (1) 링을 훑고 (2) atomic CAS로 슬롯을 잡고 (3) prefill 또는 decode 그래프를 디바이스에서 띄우고 (4) 샘플링이 쓴 출력 버퍼를 폴링하고 (5) 토큰과 상태를 링에 게시합니다.
+
+슬롯 상태는 `empty → prefill_pending → prefill_processing → decode_processing → decode_completed → empty`이고, 선점을 위해 `decode_paused`가 있습니다. 소유권 전이는 CAS입니다. DPU의 슬롯 트래커는 매 제출마다 링 전체를 RDMA로 훑지 않고, 주기적인 bulk read로 갱신하는 로컬 캐시를 둡니다. 토큰 리더는 한 주기에 슬롯 메타 64 KB를 한 번 읽습니다.
+
+실험의 프론트엔드는 GPU 서버에 꽂힌 카드가 아닙니다. 6.1절은 백엔드를 Table 5의 서버에 두고, 프론트엔드를 **별도 BlueField-3 머신**에 두며, 둘을 200 Gbps RDMA(DOCA SDK v3.2.1)로 잇는다고 적습니다.
+
+### 지속 커널과 120회 런치 상한
+
+스케줄러는 스레드 블록 하나, 256스레드입니다. 256스레드가 4096슬롯을 나눠 훑고 CAS로 잡습니다. 논문은 전 슬롯 스캔을 1–5 µs로 적습니다.
+
+디바이스 그래프 런치가 호스트 런치를 대체합니다. 논문은 fire-and-forget을 약 2 µs, 호스트 런치를 토폴로지에 따라 11–17 µs(약 58배), tail launch를 약 5.5 µs(fire-and-forget 대비 2.7배)로 적습니다. 512토큰 생성에서 fire-and-forget이 호스트 런치 대비 4.6–7.7 ms를 아낀다고 같은 절이 적습니다.
+
+CUDA 프로그래밍 가이드 4.2절의 문장은 이렇습니다. 한 그래프의 실행 동안 fire-and-forget 그래프는 합계 120개까지이고, 그 합계는 같은 부모 그래프를 다시 띄우면 리셋됩니다. 논문은 이 상한을, 512출력 토큰이면 요청이 끝나기 전에 예산을 소진하는 제약으로 적습니다. Blink의 회피는 window 기반 tail launch입니다. 카운터가 120에 닿으면 tail launch로 그래프 인스턴스를 새로 띄우고 카운터를 0으로 되돌립니다. 링 포인터, KV 메타, 진행 중 요청은 GPU 메모리에 있어 재인스턴스 뒤에 남습니다. 논문은 121회 중 120회를 fire-and-forget으로 두고, tail launch 한 번의 분할 오버헤드를 디코드 스텝당 0.03 µs 미만으로 적습니다.
+
+아래는 4.2절을 이 글에서 줄인 루프입니다. 논문의 소스 파일이 아니고 실행하지 않았습니다.
+
+```python
+EMPTY, PREFILL_PENDING = 0, 1
+DECODE_PAUSED = 5
+LAUNCH_LIMIT = 120  # CUDA 가이드: fire-and-forget 합계 상한
+
+def scheduler(ring, graphs):
+    launches = 0
+    while True:
+        if launches == LAUNCH_LIMIT:
+            tail_launch(scheduler)   # 상태는 GPU 메모리에 남고 카운터만 리셋
+            launches = 0
+            continue
+        pending = scan_cas(ring)     # 256스레드, 4096슬롯. 논문: 1–5 µs
+        if admit(pending):
+            pause(decode_batch, DECODE_PAUSED)
+            device_launch(graphs.prefill(pending))
+            decode_batch = merge(decode_batch, pending)
+        else:
+            device_launch(graphs.decode(decode_batch))
+        token = poll_device_buffer() # 호스트 완료 콜백 없음
+        publish(ring, token)         # DPU가 RDMA read
+        launches += 1
+```
+
+Continuous batching의 정책은 FCFS입니다. 논문은 TensorRT-LLM, vLLM, SGLang과 같은 정책이라, 6절의 차이가 스케줄 정책이 아니라 호스트 제거에서 오도록 했다고 적습니다. 디코드 그래프가 도는 동안 256스레드가 링을 겹쳐 훑습니다. 대기 prefill이 있고, 배치 슬롯이 있고, fire-and-forget 예산이 prefill과 재개 디코드를 감당하면, 현재 스텝 뒤에 디코드를 잠시 멈추고 prefill 그래프를 돌린 다음 배치를 합칩니다. 이 왕복은 지속 커널 한 번 안에서 끝납니다.
+
+그래프 캐시는 초기화 때 (배치, 시퀀스 길이) 격자로 캡처합니다. 버퍼는 최대 shape용으로 한 벌만 둡니다. 논문은 캡처된 그래프 하나가 2–3 MB라, PyTorch CUDA 그래프의 수백 MB와 자릿수가 다르고, 평가 모델에서 650–1,000개가 2–4 GB에 들어간다고 적습니다. 샘플링은 Top-P와 temperature이고 그래프 안에 있습니다. 모델 가중치를 고치지 않습니다. Dense, MoE, encoder-decoder는 TensorRT 컴파일만 필요하다고 4.3절이 적습니다.
+
+같은 엔진으로 스케줄러 위치만 바꾼 측정이 그림 3입니다. Qwen3-32B, FP16, H100, 배치 16. CPU 쪽은 스텝마다 토큰을 PCIe로 호스트에 복사해 배치를 다시 짭니다. 네 구성에서 CPU 경로의 makespan이 1.16–1.70배이고, 가장 큰 배수는 짧은 출력입니다.
+
+토크나이저는 DPU의 Arm A78에 두고, 64바이트 정렬 해시와 NEON으로 바이트를 나눕니다. 그림 4는 이 구현을 BlueField-3에서, HuggingFace와 llama.cpp를 Xeon에서 잰 비교입니다. 시계가 다른 두 CPU입니다. 논문은 10–2,048토큰 입력에서 HuggingFace 대비 8–19.7배 빠르다고 적습니다.
+
+구현 분량은 5절입니다. GPU 백엔드가 CUDA와 C++ 약 16,000줄이고 대상은 CUDA 13.1과 TensorRT입니다. DPU 평면이 C/C++ 약 17,000줄이고 RDMA는 DOCA 3.2 SDK입니다.
+
+### 8.47배가 나오는 칸
+
+6.1절의 장치와 소프트웨어는 다음입니다.
+
+| 항목 | 논문이 적은 값 |
+| --- | --- |
+| GPU | NVIDIA H100, 96 GB HBM3, 1장 |
+| CPU | 2× Intel Xeon Gold 6336Y, 표기 "96 cores @ 2.40 GHz", DVFS 끔, governor `performance` |
+| 메모리 | 256 GB DDR5 |
+| NIC | ConnectX-6 200 Gbps |
+| DPU | BlueField-3, Arm Cortex-A78 16개, 32 GB. 별도 머신 |
+| OS | Linux 5.15, Ubuntu 22.04 |
+| 모델 | Llama-3 8B, Phi-4 15B(본문 14.7B), Qwen-3 32B, Qwen-3 30B-A3B(30B 중 활성 3B) |
+| 정밀도 | fp16, paged attention. MoE 플러그인은 30B-A3B만 |
+| 부하 | guidellm, ShareGPT v3, 1–32 req/s의 13단계, 단계당 60초 |
+| 베이스라인 | TensorRT-LLM v1.1.0(TensorRT v10.14, Blink와 같은 엔진), vLLM v0.13.0, SGLang v0.5.8 |
+| 끈 기능 | chunked prefill, prefix caching, CPU offloading. Blink에 아직 없어서 |
+| 간섭 | pbzip2가 50 GB를 45스레드로 압축, Ninja가 LLVM을 45잡으로 빌드. 추론에 6코어, 나머지 90코어 |
+
+포화 전 구간은 Blink의 처리량이 선형에서 고원으로 바뀌기 전까지입니다. λ는 제공 req/s입니다. Llama-3 8B는 λ≤12, Phi-4 15B는 λ≤7, Qwen-3 32B는 λ≤2, Qwen-3 30B-A3B는 λ≤4입니다. Table 6의 TTFT와 TPOT는 그 구간의 부하별 평균을 다시 기하평균한 값이고, 단위는 ms입니다. Tput는 Blink 포화 부하에서의 req/s입니다.
+
+| 모델 | 시스템 | 기하 P99 TTFT | 기하 P99 TPOT | 포화 처리량 |
+| --- | --- | ---: | ---: | ---: |
+| Llama-3 8B | Blink | 653.8 | 15.1 | 11.87 |
+| | TRT-LLM | 880.0 | 17.7 | 10.80 |
+| | vLLM | 1309.6 | 24.2 | 9.12 |
+| | SGLang | 1747.1 | 30.7 | 7.88 |
+| Phi-4 15B | Blink | 1109.4 | 25.0 | 6.72 |
+| | TRT-LLM | 1453.8 | 29.8 | 6.42 |
+| | vLLM | 1683.7 | 34.5 | 6.05 |
+| | SGLang | 2874.1 | 47.9 | 5.58 |
+| Qwen-3 32B | Blink | 9481.3 | 113.4 | 2.00 |
+| | TRT-LLM | 9621.4 | 115.2 | 1.97 |
+| | vLLM | 10862.4 | 133.7 | 1.88 |
+| | SGLang | 11413.0 | 123.3 | 1.85 |
+| Qwen-3 30B-A3B | Blink | 1397.5 | 35.5 | 4.85 |
+| | TRT-LLM | 4814.7 | 65.8 | 3.61 |
+| | vLLM | 8919.2 | 90.9 | 2.91 |
+| | SGLang | 11839.8 | 120.8 | 2.62 |
+
+8.47은 이 표의 한 칸입니다. 11,839.8÷1,397.5 = 8.47이고, 모델은 Qwen-3 30B-A3B, 지표는 포화 전 기하평균 P99 TTFT, 상대는 SGLang입니다. 같은 칸에서 TensorRT-LLM은 4,814.7÷1,397.5 = 3.45입니다. vLLM은 6.38입니다. P99 TPOT의 3.40도 같은 모델의 SGLang입니다. 120.8÷35.5 = 3.40. TensorRT-LLM TPOT는 65.8÷35.5 = 1.85입니다.
+
+Qwen-3 32B에서는 그 배수가 사라집니다. TTFT는 TensorRT-LLM 대비 9,621.4÷9,481.3 = 1.01, SGLang 대비 1.20입니다. 논문은 이 모델을 GPU에 묶인 한계 사례로 적고, P99.9에서는 다시 간격이 보인다고 합니다. 포화 부하에서 베이스라인이 Blink보다 TTFT 4–8%, TPOT 15–48% 높다고 그림 5의 본문이 적습니다. 그 퍼센트는 32B의 포화 구간이고, 8.47배와 같은 칸이 아닙니다.
+
+고원 처리량은 Blink가 Llama 11.96, Phi-4 6.86, Qwen-3 32B 2.13, MoE 5.07 req/s입니다. TensorRT-LLM 대비 논문이 적은 고원 이득은 9%, 6%, 8%, 37%입니다. MoE가 큰 이유로 6.2절은 두 가지를 듭니다. 활성 파라미터가 3B라 디코드 스텝의 GPU 시간이 짧은데 호스트 오케스트레이션 비용은 스텝마다 남습니다. MoE 라우팅은 어떤 전문가가 켜지는지는 데이터에 달려 있으나 텐서 shape는 고정이라, TensorRT MoE 플러그인이 한 장의 정적 CUDA 그래프 안에 들어갑니다.
+
+부록 Table B.2는 같은 포화 지점의 토큰 처리량(tok/s)입니다.
+
+| 모델 | 시스템 | 디코드 | prefill |
+| --- | --- | ---: | ---: |
+| Llama-3 8B | Blink | 3880 | 595 |
+| | TRT-LLM | 3535 | 582 |
+| | vLLM | 2930 | 564 |
+| | SGLang | 2638 | 553 |
+| Phi-4 15B | Blink | 2177 | 465 |
+| | TRT-LLM | 2044 | 459 |
+| | vLLM | 1906 | 451 |
+| | SGLang | 1690 | 444 |
+| Qwen-3 32B | Blink | 537 | 236 |
+| | TRT-LLM | 520 | 235 |
+| | vLLM | 487 | 229 |
+| | SGLang | 482 | 229 |
+| Qwen-3 30B-A3B | Blink | 1437 | 374 |
+| | TRT-LLM | 1053 | 318 |
+| | vLLM | 841 | 262 |
+| | SGLang | 730 | 257 |
+
+이 표에서 가장 큰 디코드 비는 1,437÷730 = 1.97이고, 상대는 MoE의 SGLang입니다. 같은 줄의 TensorRT-LLM은 1,437÷1,053 = 1.36입니다. 부록은 이 칸을 "SGLang보다 97% 위"라고 적습니다. 초록과 결론의 "decode throughput up to 2.1×"를 이 표의 칸으로 다시 만들면 2.10이 되는 셀은 없습니다. 1절은 간섭 아래에서 디코드 처리량이 최대 6.46배, 요청 처리량이 최대 4.87배라고 적습니다. Table 7의 포화 지점 요청 처리량에서 가장 큰 비는 MoE의 4.81÷1.01 = 4.76(Blink 대 TensorRT-LLM)입니다. 6.46과 4.87의 원 칸은 본문 표에 숫자로 다시 적혀 있지 않습니다.
+
+아래는 Table 6과 B.2와 Table 1만으로 배수를 다시 계산한 것입니다. 추론을 다시 돌린 값이 아닙니다.
+
+```python
+print(round(11839.8 / 1397.5, 2))   # MoE, SGLang, 기하 P99 TTFT
+print(round(4814.7 / 1397.5, 2))    # 같은 칸, TensorRT-LLM
+print(round(120.8 / 35.5, 2))       # MoE, SGLang, 기하 P99 TPOT
+print(round(1437 / 730, 2))         # MoE, 포화점 디코드 tok/s
+print(round((1180 - 607) / 1180, 3))
+print(round(20959 / 150, 1))        # Table 1, vLLM P99 TTFT
+```
+
+```text
+8.47
+3.45
+3.4
+1.97
+0.486
+139.7
+```
+
+### 간섭과 토큰당 에너지
+
+Table 7은 Table 6과 같은 구간을, 6.1절의 pbzip2와 Ninja를 올린 채로 잰 값입니다. 대괄호는 간섭÷격리입니다.
+
+Blink의 TTFT 배수는 Llama 1.00, Phi-4 0.92, Qwen-3 32B 0.99, MoE 1.14입니다. TPOT는 1.00, 0.98, 1.04, 0.97입니다. 포화 처리량 유지는 1.00, 1.01, 1.02, 0.99입니다. 논문은 이 범위를 실험 분산 안의 안정으로 적습니다. MoE의 P99 TTFT는 1,397.5 ms에서 1,589.7 ms로, 1.14배입니다. 0은 아닙니다.
+
+같은 표에서 베이스라인의 가장 큰 TTFT 배수는 Llama의 TensorRT-LLM 18.84입니다(16,574÷880 = 18.83). Phi-4는 3.82–10.66, 32B는 1.54–1.68, MoE의 TensorRT-LLM은 4.90입니다. 요청 처리량 유지는 Llama 0.38–0.48, MoE의 TensorRT-LLM 0.28(3.61에서 1.01 req/s)입니다. 이 네 시스템 비교의 최대는 18.84배입니다. 10배(한 차수)는 넘고 100배(두 차수)에는 못 미칩니다. 100배를 넘는 숫자는 Table 1의 vLLM 단독 P99 TTFT 139배이고, 그 실험에는 Blink가 없습니다. 그림 1은 MoE 4 req/s 한 점의 처리량 비로, SGLang 0.45, vLLM 0.54, TRT-LLM 0.28, Blink 1.00입니다. 논문은 세 베이스라인이 격리 처리량의 28–54%를 남긴다고 적습니다.
+
+에너지는 6.4절입니다. 서버 PSU를 1분 간격으로 재고, Blink에는 BlueField-3의 온보드 미터(0.5초)를 더합니다. 토큰당 에너지는 평균 벽전력 × 시간 ÷ 성공 토큰입니다. 격리에서 Blink는 363–1,306 mJ/tok이고, 모델마다 가장 효율적인 베이스라인보다 13.7–48.6% 낮다고 적습니다. 이름이 붙은 쌍은 Phi-4의 502 대 vLLM 582, MoE의 607 대 TensorRT-LLM 1,180, Qwen-3 32B의 1,306 대 SGLang 1,580입니다. (1,180−607)÷1,180 = 0.486입니다. 48.6%는 이 MoE 쌍입니다. 363 mJ/tok가 어느 모델인지는 본문이 지명하지 않습니다.
+
+간섭에서 Blink는 423–1,584 mJ/tok, 베이스라인은 1,045–3,597 mJ/tok이고, 최선 베이스라인 대비 41.4–70.7% 낮다고 적습니다. 네 시스템의 벽전력은 1.1–1.4 kW로 비슷합니다. 그래서 토큰당 에너지 차이는 전력 인하의 차이가 아니라 처리량의 차이입니다. 간섭으로 베이스라인의 토큰당 에너지는 69–182% 늘고, Blink의 오버헤드는 최대 21%라고 같은 절이 적습니다.
+
+## 한계
+
+논문 7절이 아직 하지 않은 일과, 6절이 비교에서 뺀 일은 같습니다. Chunked prefill, prefix caching, speculative decoding, prefill/decode 분리, KV 오프로드는 스케줄러에 올릴 수 있는 확장으로 적혀 있고, 평가 빌드에는 없습니다. 베이스라인에서도 그 셋을 껐습니다. SGLang의 RadixAttention이 켜진 운영 설정과의 순위는 이 표에 없습니다.
+
+프로토타입은 GPU 1장입니다. 텐서 병렬과 파이프라인 병렬, MoE all-to-all은 7절이 미래 과제로 남깁니다. 가중치가 GPU 메모리에 들어가지 않아 CPU/DRAM 오프로드가 필요한 경우는 대상이 아닙니다. 그 경우 호스트가 스케줄뿐 아니라 전문가 가중치 이동에도 올라간다고 같은 절이 적습니다.
+
+재현에 필요한 저장소는 2026-11-20 기준으로 공개되어 있지 않습니다. 논문의 문장은 "출판 뒤에 오픈 소스"입니다. 이 PDF는 arXiv v1이고, 학회 판본이라는 표지는 PDF 앞에 없습니다.
+
+하드웨어 문장도 구매 명세로 쓰기에는 공개 사양과 어긋나는 칸이 있습니다.
+
+- Intel의 [Xeon Gold 6336Y 사양](https://www.intel.com/content/www/us/en/products/sku/215280/intel-xeon-gold-6336y-processor-36m-cache-2-40-ghz/specifications.html)은 24코어, 48스레드, 기본 2.40 GHz, 메모리 DDR4-3200입니다. 소켓 둘이면 48코어, 96스레드입니다. 논문 Table 5는 "96 cores"와 "256 GB DDR5"라고 적습니다. 3.2절은 "소켓당 24코어"라고 적습니다. 6.1절은 추론에 6코어를 남기고 나머지 90코어를 간섭에 줍니다. 6+90 = 96입니다. 세 문장이 가리키는 단위가 코어인지 스레드인지, 메모리가 DDR4인지 DDR5인지는 표만으로 닫히지 않습니다.
+- NVIDIA [H100 제품 페이지](https://www.nvidia.com/en-us/data-center/h100/)의 공개 표는 SXM 80 GB HBM3, NVL 94 GB입니다. 96 GB HBM3라는 칸은 그 표에 없습니다. 논문 Table 5는 H100 96 GB HBM3라고 적습니다. 어느 보드인지는 더 적지 않습니다.
+
+## 비즈니스 인사이트
+
+법률 자문이나 구매 견적이 아닙니다. 숫자와 제품 문장은 아래 링크의 페이지에 있는 것만 옮기고, 해석은 (분석) 또는 (의견)으로 표시합니다.
+
+### 비교 표 안의 자리 (분석)
+
+Blink가 격리에서도 가장 크게 벌어지는 자리는 Qwen-3 30B-A3B입니다. 활성 3B라 스텝이 짧은데 호스트 스케줄 비용은 남기 때문이라고 논문이 설명합니다. 같은 엔진을 쓰는 TensorRT-LLM과의 TTFT는 그 모델에서 3.45배이고, 밀도 32B에서는 1.01배입니다. 8.47배를 "서빙 스택 전체의 속도"로 읽으면 32B 칸이 사라집니다.
+
+비교는 fp16이고, chunked prefill과 prefix cache와 CPU 오프로드를 끈 상태입니다. 그 기능을 매출의 이유로 쓰는 vLLM, SGLang 배포의 순위는 이 논문이 측정하지 않았습니다. TensorRT-LLM v1.1.0은 Blink와 엔진을 공유하므로, 그 쌍의 차이는 오케스트레이션 쪽에 가깝다고 6.2절이 적습니다. 엔진 자체의 커널 우승은 그 쌍으로 주장할 수 없습니다.
+
+### 청구서에 올라가는 부품 (분석)
+
+Blink의 정상 경로는 NVIDIA GPU, NVIDIA TensorRT, NVIDIA BlueField-3, NVIDIA DOCA입니다. 논문이 적은 DPU는 Arm Cortex-A78 16개, 메모리 32 GB입니다. NVIDIA BlueField-3 사용자 가이드의 B3240 행은 P-Series 16 Arm 코어, 온보드 DDR5 32 GB, 포트 속도는 InfiniBand NDR 400 Gb/s 또는 이더넷 400 GbE입니다. 데이터시트는 Arm 코어를 "최대 16" Armv8.2+ A78로 적습니다. 논문의 링크는 200 Gbps라, 가이드 표의 최고 속도 행과 같은 숫자는 아닙니다.
+
+NVIDIA [인증 시스템 구성 가이드](https://docs.nvidia.com/certification-technology/certified-systems/configuration-guide)의 추론 서버 표는 CPU 코어를 "GPU당 물리 코어 최소 6개"로 적습니다. 논문 3.2절은 그 지침을 8× H100에 적용하면 48개의 전용 물리 코어가 되고, 자신들의 듀얼 소켓(소켓당 24코어)에서는 코어 전부를 쓴다고 계산합니다. 그 코어가 디코드 사이에 쉬는데도 다른 테넌트에 돌려주면 스케줄 간섭이 돌아온다는 것이 논문의 경제 논거입니다. "수십만 대"라는 문장은 1절에 있으나 인용은 없습니다. 이 글은 그 대수를 사실로 쓰지 않습니다.
+
+HGX H100/H200 구성 문서의 네트워킹 문장은 BlueField-3 SuperNIC으로 최대 400 Gbps를 쓴다고 적습니다. (분석) Blink가 요구하는 DPU는 NVIDIA가 HGX 쪽에서 이미 붙이는 부품입니다. 호스트 스케줄러를 GPU와 DPU로 내리는 설계는 GPU 장비를 대체하는 설계와 다릅니다. 붙는 부품이 늘 수 있는 쪽은 BlueField와 DOCA입니다.
+
+### 토큰당 에너지와 카드 가격 (분석)
+
+48.6%는 MoE에서 TensorRT-LLM 1,180 mJ/tok 대비 Blink 607 mJ/tok이고, DPU 전력이 포함입니다. 벽전력은 1.1–1.4 kW로 네 시스템이 같은 구간에 있습니다. 서버가 절반의 와트를 쓴다는 문장은 6.4절에 없습니다. 처리량이 높아서 토큰당 에너지가 낮아진다는 문장입니다. 간섭 아래에서는 그 차이가 41.4–70.7%까지 벌어지고, Blink 쪽 오버헤드는 최대 21%입니다.
+
+H100 한 장의 달러 가격은 논문에 없습니다. NVIDIA H100 제품 페이지에서 `$40,000`이라는 문자열은 2026-11-20 조회에서 찾지 못했습니다. 그 페이지의 가격 FAQ는 카드 정가가 아니라 SemiAnalysis InferenceX(2026년 4월)를 인용합니다. H100과 vLLM이 GPT-OSS-120B, 사용자당 66 TPS에서 백만 토큰당 약 $0.09이고, B200과 TensorRT-LLM이 같은 모델, 사용자당 55 TPS에서 약 $0.02이며, 후자가 약 4.5배 낮다고 적습니다. 이 쌍은 Blink의 H100 fp16 ShareGPT 실험과 모델, 스택, 지표가 다릅니다. 둘을 한 문장의 원가로 잇지 않습니다.
+
+(의견) 제품에 바로 닿는 문장은 8.47배보다 격리입니다. 호스트에서 압축이나 빌드가 돌 때 기존 스택의 P99 TTFT가 수 배에서 약 19배 벌어지고, Blink의 배수는 0.92–1.14에 머물렀습니다. 그 주장을 자기 서버에서 확인하려면 BlueField-3, 200 Gbps RDMA, CUDA 13.1, TensorRT 10.14, DOCA 3.2가 필요하고, 코드는 아직 받을 수 없습니다. GPU 1장, fp16, prefix cache가 꺼진 비교라는 조건도 남습니다. 밀도 32B를 이미 TensorRT-LLM으로 서빙하고 호스트가 비어 있다면, 이 논문의 격리 P99는 DPU를 살 이유가 거의 되지 않습니다. MoE로 스텝이 짧거나, 같은 박스의 CPU를 다른 일에 쓰려는 운영자에게 논문의 표가 가리키는 자리가 있습니다.
+
+## 팩트 체크
+
+| 주장 | 판정 | 근거 |
+| --- | --- | --- |
+| Nvidia가 큰 문제를 안게 됐다 | ❌ | 논문은 NVIDIA의 문제를 말하지 않습니다. 경로에 남는 부품은 NVIDIA H100, TensorRT, BlueField-3, DOCA입니다. 같은 엔진을 쓰는 TensorRT-LLM과의 격리 P99 TTFT는 MoE에서 3.45배, Qwen-3 32B에서 1.01배입니다. [논문 6.2](https://arxiv.org/html/2604.07609), [H100](https://www.nvidia.com/en-us/data-center/h100/), [BlueField-3 가이드](https://networking-docs.nvidia.com/bf3dpu/) |
+| 연구자들이 CPU를 완전히 빼서 추론을 8.47배 빠르게 만들었다 | ⚠️ | 8.47은 Qwen-3 30B-A3B, λ≤4, 기하평균 P99 TTFT, SGLang 11,839.8÷Blink 1,397.5입니다. TensorRT-LLM은 같은 칸에서 3.45배입니다. Qwen-3 32B의 TensorRT-LLM 대비는 1.01배입니다. 처리량 고원은 TensorRT-LLM 대비 6–37%입니다. [Table 6](https://arxiv.org/html/2604.07609) |
+| vLLM, TensorRT-LLM, SGLang은 요청과 배치와 토큰 결정을 호스트 CPU로 통과시킨다 | ✅ | 2.1절이 세 스택을 포함한 주류 구조를 그렇게 적습니다. vLLM V1과 SGLang overlapped scheduling은 호스트 일을 GPU와 겹칠 뿐 임계 경로에서 빼지는 않는다고 같은 절이 적습니다. GPU에 묶인 32B에서는 그 구간의 지연 비중이 작아 P99 차이가 1.01–1.20배로 줄어듭니다. [2.1절](https://arxiv.org/html/2604.07609) |
+| 4만 달러 GPU가 CPU를 기다린다 | ❌ | 논문의 GPU는 "NVIDIA H100 (96 GB HBM3)"이고 가격은 없습니다. H100 제품 페이지의 공개 메모리는 SXM 80 GB, NVL 94 GB이고, `$40,000`은 그 페이지에서 찾지 못했습니다. 페이지의 금액은 InferenceX의 백만 토큰당 약 $0.09(H100, vLLM)와 약 $0.02(B200, TensorRT-LLM)입니다. [H100 FAQ](https://www.nvidia.com/en-us/data-center/h100/) |
+| CPU가 다른 일을 조금이라도 하면 성능이 무너지고, 데이터센터는 계산을 놀린다 | ⚠️ | Table 1은 pbzip2 12스레드와 24스레드입니다. 24스레드에서 vLLM 처리량은 3.8배 줄고 P99 TTFT는 139배입니다. "아무 프로세스나"의 측정은 없습니다. 유휴 논거는 인증 가이드의 GPU당 물리 코어 6개입니다. 1절의 "수십만 대"에는 인용이 없습니다. [Table 1](https://arxiv.org/html/2604.07609), [인증 가이드](https://docs.nvidia.com/certification-technology/certified-systems/configuration-guide) |
+| SmartNIC이 요청을 받아 RDMA로 GPU 메모리에 넣고, 지속 커널이 배치와 스케줄과 KV를 처리한다 | ✅ | 4.1–4.2절의 구조입니다. DPU가 토큰화한 뒤 one-sided RDMA로 GPU 링에 쓰고, 256스레드 지속 커널이 CAS, 그래프 런치, KV, 샘플링을 합니다. 실험의 DPU는 GPU 서버 안 카드가 아니라 별도 머신이고 링크는 200 Gbps입니다. [4.2절](https://arxiv.org/html/2604.07609), [6.1절](https://arxiv.org/html/2604.07609) |
+| 호스트 CPU가 추론 경로에서 완전히 빠지고 CPU 관여는 0이다 | ⚠️ | 각주 1의 정의는 호스트를 임계 경로에서 빼는 것입니다. 초기화(모델 로드, 그래프 캡처)는 호스트입니다. 정상 상태의 HTTP, 토큰화, detokenize, SSE는 BlueField-3의 Arm 16코어입니다. [4.1절](https://arxiv.org/html/2604.07609), [4.4절](https://arxiv.org/html/2604.07609) |
+| TensorRT-LLM, vLLM, SGLang과 맞대어 쟀다 | ✅ | 버전은 TensorRT-LLM v1.1.0, vLLM v0.13.0, SGLang v0.5.8입니다. CUDA Graph는 켜져 있고 chunked prefill, prefix caching, CPU offloading은 Blink에 없어 껐습니다. 정밀도는 fp16, GPU는 1장, 부하는 ShareGPT v3입니다. [6.1절](https://arxiv.org/html/2604.07609) |
+| P99 TTFT가 최대 8.47배 빠르다 | ✅ | Table 6의 최대 비는 위 8.47입니다. 네 모델과 세 베이스라인 모두의 배수가 아닙니다. TensorRT-LLM과의 최대는 3.45배(같은 MoE TTFT)입니다. [Table 6](https://arxiv.org/html/2604.07609) |
+| P99 TPOT가 최대 3.40배 빠르다 | ✅ | 120.8÷35.5 = 3.40이고 칸은 MoE의 SGLang, 포화 전 기하평균입니다. TensorRT-LLM은 1.85배, vLLM은 2.56배입니다. [Table 6](https://arxiv.org/html/2604.07609) |
+| 디코드 처리량이 최대 2.1배다 | ⚠️ | 초록과 결론은 "up to 2.1×"라고 적습니다. 부록 Table B.2의 포화점 최대 비는 1,437÷730 = 1.97(MoE, SGLang)이고, 부록은 이를 97%라고 적습니다. TensorRT-LLM 대비는 1.36배입니다. 2.10이 되는 칸은 표에 없습니다. [부록 B](https://arxiv.org/html/2604.07609) |
+| 토큰당 에너지가 최대 48.6% 낮다 | ✅ | (1,180−607)÷1,180 = 48.6%이고, MoE에서 TensorRT-LLM 대비입니다. 논문은 모델마다 최선 베이스라인 대비 13.7–48.6%라고 적습니다. DPU 전력이 포함이고, 벽전력은 1.1–1.4 kW로 비슷합니다. 와트가 48.6% 줄었다는 뜻은 아닙니다. [6.4절](https://arxiv.org/html/2604.07609) |
+| 심한 CPU 간섭에서 기존 시스템이 최대 두 차수(100배 규모)로 나빠지고 Blink는 움직이지 않았다 | ⚠️ | 100배를 넘는 칸은 Table 1입니다. vLLM 단독, Blink 없음, P99 TTFT 150→20,959 ms(139배). 처리량은 3.8배입니다. 네 시스템을 같이 본 Table 7의 최대 TTFT 배수는 18.84입니다. Blink의 TTFT 배수는 0.92–1.14, 처리량은 0.99–1.02이고, 간섭 에너지 오버헤드는 최대 21%입니다. [Table 1](https://arxiv.org/html/2604.07609), [Table 7](https://arxiv.org/html/2604.07609) |
+
+## 참고 자료
+
+- Siavashi, Scazzariello, Maguire Jr., Kostić, Chiesa, [Blink: CPU-Free LLM Inference by Delegating the Serving Stack to GPU and SmartNIC](https://arxiv.org/abs/2604.07609), arXiv:2604.07609v1, 2026-04-08. [HTML](https://arxiv.org/html/2604.07609), [PDF](https://arxiv.org/pdf/2604.07609v1)
+- NVIDIA, [CUDA Programming Guide, 4.2 CUDA Graphs](https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/cuda-graphs.html). fire-and-forget 합계 상한 120과, 같은 부모를 다시 띄우면 그 합계가 리셋된다는 문장
+- NVIDIA, [BlueField-3 DPU 데이터시트](https://www.nvidia.com/content/dam/en-zz/Solutions/Data-Center/documents/datasheet-nvidia-bluefield-3-dpu.pdf), [BlueField-3 네트워킹 플랫폼 사용자 가이드](https://networking-docs.nvidia.com/bf3dpu/) (페이지의 Last updated: 2026-11-17)
+- NVIDIA, [H100 제품 페이지](https://www.nvidia.com/en-us/data-center/h100/). SXM 80 GB, NVL 94 GB, InferenceX 토큰당 비용 FAQ
+- NVIDIA, [Certified Systems Configuration Guide](https://docs.nvidia.com/certification-technology/certified-systems/configuration-guide). 추론 서버 CPU 코어 최소 6개/GPU
+- NVIDIA, [HGX H100/H200/B200 구성 요소](https://docs.nvidia.com/enterprise-reference-architectures/hgx-ai-factory-h100-h200-b200/latest/components.html). BlueField-3 SuperNIC, 최대 400 Gbps
+- Intel, [Xeon Gold 6336Y 사양](https://www.intel.com/content/www/us/en/products/sku/215280/intel-xeon-gold-6336y-processor-36m-cache-2-40-ghz/specifications.html). 24코어, 48스레드, DDR4-3200
+- NVIDIA, [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM). 논문이 비교한 v1.1.0
+- vLLM 팀, [vLLM V1](https://blog.vllm.ai/2025/01/27/v1-alpha-release.html). 논문 2.1절이 인용하는 호스트 겹침
+- SGLang 팀, [SGLang v0.4](https://www.lmsys.org/blog/2024-12-04-sglang-v0-4/). 논문 2.1절이 인용하는 overlapped scheduling
+- 원본 X 포스트: [@thesupermannx](https://x.com/thesupermannx/status/2123339605311111649)
